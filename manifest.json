@@ -1,19 +1,55 @@
 {
-  "name": "مدرسة الشهيد حمزة الإعدادية",
-  "short_name": "سجل المعلم",
-  "description": "نظام إدارة الصفوف والدرجات",
-  "start_url": "/grades-project/",
-  "scope": "/grades-project/",
+  "name": "Dalty Grades",
+  "short_name": "Dalty",
+  "description": "نظام إدارة درجات الطلاب والغياب والجداول الدراسية",
+  "start_url": "./index.html",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0a0f1e",
   "theme_color": "#0a0f1e",
   "lang": "ar",
   "dir": "rtl",
+  "scope": "./",
   "icons": [
+    {
+      "src": "icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-384.png",
+      "sizes": "384x384",
       "type": "image/png",
       "purpose": "any maskable"
     },
@@ -23,5 +59,23 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/desktop.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dalty Grades - سطح المكتب"
+    },
+    {
+      "src": "screenshots/mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Dalty Grades - الجوال"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "prefer_related_applications": false
 }
