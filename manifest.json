@@ -1,0 +1,27 @@
+{
+  "name": "مدرسة الشهيد حمزة الإعدادية",
+  "short_name": "سجل المعلم",
+  "description": "نظام إدارة الصفوف والدرجات",
+  "start_url": "/grades-project/",
+  "scope": "/grades-project/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0f1e",
+  "theme_color": "#0a0f1e",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
