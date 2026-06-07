@@ -1,0 +1,321 @@
+/* ══════════════════════════════════════════════════════
+   Dalty Grades — Google Auth System
+   ملف المصادقة بحسابات متعددة عبر Google
+
+   طريقة الإضافة في index.html — أضف هذا بعد firebase-sync.js:
+   <script src="auth.js"></script>
+
+   ══════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════
+   إعدادات Firebase Auth
+   ════════════════════════════════════════ */
+var AUTH_CONFIG = {
+  apiKey:            "AIzaSyBS9rW0XqtFCrX0wjrn9NinsxaRLE4EFxE",
+  authDomain:        "dalty-grades.firebaseapp.com",
+  databaseURL:       "https://dalty-grades-default-rtdb.firebaseio.com",
+  projectId:         "dalty-grades",
+  storageBucket:     "dalty-grades.firebasestorage.app",
+  messagingSenderId: "927174576910",
+  appId:             "1:927174576910:web:70ca8e14568bb194bc655f"
+};
+
+/* مفتاح Firebase لكل مستخدم:  users/{uid}/data */
+var AUTH_DB_PATH = "users";
+
+/* ════════════════════════════════════════
+   المتغيرات الداخلية
+   ════════════════════════════════════════ */
+var _authApp  = null;
+var _authInst = null;
+var _authDB   = null;
+var _currentUser = null;
+var _userRef  = null;
+
+/* ════════════════════════════════════════
+   تحميل Firebase Auth SDK
+   ════════════════════════════════════════ */
+(function loadAuthSDK() {
+  var scripts = [
+    "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js",
+    "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js",
+    "https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"
+  ];
+
+  var loaded = 0;
+  scripts.forEach(function(src) {
+    /* تحقق إذا محمل مسبقاً */
+    var existing = document.querySelector('script[src="' + src + '"]');
+    if (existing) { loaded++; if (loaded === scripts.length) initAuth(); return; }
+
+    var s = document.createElement("script");
+    s.src = src;
+    s.onload = function() { loaded++; if (loaded === scripts.length) initAuth(); };
+    document.head.appendChild(s);
+  });
+})();
+
+/* ════════════════════════════════════════
+   تهيئة Firebase Auth
+   ════════════════════════════════════════ */
+function initAuth() {
+  try {
+    /* إذا كان firebase مُهيَّأ مسبقاً من firebase-sync.js استخدمه */
+    if (firebase.apps && firebase.apps.length > 0) {
+      _authApp = firebase.apps[0];
+    } else {
+      _authApp = firebase.initializeApp(AUTH_CONFIG);
+    }
+
+    _authInst = firebase.auth();
+    _authDB   = firebase.database();
+
+    /* منع التطبيق من الفتح قبل التحقق من الدخول */
+    interceptShowApp();
+
+    /* مراقبة حالة الدخول */
+    _authInst.onAuthStateChanged(function(user) {
+      if (user) {
+        _currentUser = user;
+        _userRef = _authDB.ref(AUTH_DB_PATH + "/" + sanitizeUID(user.uid));
+        onUserLoggedIn(user);
+      } else {
+        _currentUser = null;
+        _userRef = null;
+        showAuthScreen();
+      }
+    });
+
+  } catch(e) {
+    console.error("[Auth] خطأ في التهيئة:", e);
+    /* في حالة الفشل افتح التطبيق عادياً */
+    if (window._origShowApp) window._origShowApp();
+  }
+}
+
+/* ════════════════════════════════════════
+   اعتراض showApp — منع الفتح قبل الدخول
+   ════════════════════════════════════════ */
+function interceptShowApp() {
+  if (typeof window.showApp === "function" && !window.showApp._authIntercepted) {
+    window._origShowApp = window.showApp;
+    window.showApp = function() {
+      /* لا تفعل شيئاً — onAuthStateChanged يتحكم */
+    };
+    window.showApp._authIntercepted = true;
+  }
+
+  /* منع الفتح التلقائي عند التحميل */
+  window.addEventListener("load", function() {
+    /* أخفِ appShell حتى يتم التحقق */
+    var shell = document.getElementById("appShell");
+    if (shell) shell.classList.remove("visible");
+  }, { once: true, capture: true });
+}
+
+/* ════════════════════════════════════════
+   عند تسجيل الدخول بنجاح
+   ════════════════════════════════════════ */
+function onUserLoggedIn(user) {
+  /* حدّث STORE_KEY لكل مستخدم */
+  var uid = sanitizeUID(user.uid);
+  window.STORE_KEY = "grades_v6_" + uid;
+
+  /* أخفِ شاشة الدخول وافتح التطبيق */
+  removeAuthScreen();
+
+  /* تحديث اسم المستخدم في الشريط */
+  var nameEl = document.getElementById("topUserName");
+  if (nameEl) nameEl.textContent = user.displayName || user.email || "";
+
+  /* تحديث Firebase path في firebase-sync.js */
+  if (typeof window.FB_PATH !== "undefined") {
+    window.FB_PATH = AUTH_DB_PATH + "/" + uid + "/grades";
+  }
+
+  /* تشغيل التطبيق */
+  if (window._origShowApp) {
+    window._origShowApp();
+  } else if (typeof initDB === "function") {
+    if (!window._booted) { window._booted = true; initDB(); }
+    if (typeof switchPage === "function") switchPage("home");
+  }
+
+  /* إضافة زر تسجيل الخروج */
+  injectSignOutBtn(user);
+
+  console.log("[Auth] ✅ مرحباً:", user.displayName || user.email);
+}
+
+/* ════════════════════════════════════════
+   شاشة تسجيل الدخول
+   ════════════════════════════════════════ */
+function showAuthScreen() {
+  if (document.getElementById("authOverlay")) return;
+
+  /* أخفِ التطبيق */
+  var shell = document.getElementById("appShell");
+  if (shell) shell.classList.remove("visible");
+
+  var overlay = document.createElement("div");
+  overlay.id = "authOverlay";
+  overlay.style.cssText = [
+    "position:fixed", "inset:0", "z-index:99999",
+    "background:linear-gradient(135deg,#0a0f1e 0%,#0f1e35 60%,#0a0f1e 100%)",
+    "display:flex", "align-items:center", "justify-content:center",
+    "font-family:Cairo,sans-serif", "direction:rtl"
+  ].join(";");
+
+  overlay.innerHTML = [
+    '<div style="background:#0f1e35;border:1px solid #1e3a5f;border-radius:16px;',
+    'padding:36px 32px;text-align:center;max-width:360px;width:90%;',
+    'box-shadow:0 20px 60px rgba(0,0,0,.6);">',
+
+      /* شعار */
+      '<div style="font-size:48px;margin-bottom:8px;">📊</div>',
+      '<div style="font-size:22px;font-weight:900;color:#60a5fa;margin-bottom:4px;">',
+        'Dalty Grades',
+      '</div>',
+      '<div style="font-size:12px;color:#475569;margin-bottom:28px;">',
+        'نظام إدارة درجات الطلاب',
+      '</div>',
+
+      /* زر Google */
+      '<button onclick="signInWithGoogle()" id="googleSignInBtn" style="',
+        'width:100%;background:white;color:#1f2937;border:none;border-radius:10px;',
+        'padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;',
+        'display:flex;align-items:center;justify-content:center;gap:10px;',
+        'font-family:Cairo,sans-serif;margin-bottom:16px;',
+        'box-shadow:0 2px 8px rgba(0,0,0,.3);transition:all .2s;">',
+        /* Google Logo SVG */
+        '<svg width="20" height="20" viewBox="0 0 48 48">',
+          '<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>',
+          '<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>',
+          '<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>',
+          '<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>',
+        '</svg>',
+        'تسجيل الدخول بـ Google',
+      '</button>',
+
+      /* رسالة الخطأ */
+      '<div id="authError" style="color:#fca5a5;font-size:12px;min-height:18px;"></div>',
+
+      /* ملاحظة */
+      '<div style="font-size:10px;color:#334155;margin-top:16px;line-height:1.6;">',
+        'بياناتك محفوظة بشكل منفصل وآمن لكل حساب<br>',
+        'متزامنة تلقائياً بين جميع أجهزتك',
+      '</div>',
+
+    '</div>'
+  ].join("");
+
+  document.body.appendChild(overlay);
+}
+
+function removeAuthScreen() {
+  var overlay = document.getElementById("authOverlay");
+  if (overlay) overlay.remove();
+}
+
+/* ════════════════════════════════════════
+   تسجيل الدخول بـ Google
+   ════════════════════════════════════════ */
+window.signInWithGoogle = function() {
+  var btn = document.getElementById("googleSignInBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ جاري الدخول..."; }
+
+  var provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+
+  _authInst.signInWithPopup(provider)
+    .then(function(result) {
+      console.log("[Auth] دخول ناجح:", result.user.email);
+    })
+    .catch(function(err) {
+      console.error("[Auth] خطأ:", err.message);
+      var errEl = document.getElementById("authError");
+      if (errEl) errEl.textContent = "❌ " + getAuthErrorMsg(err.code);
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> تسجيل الدخول بـ Google';
+      }
+    });
+};
+
+/* ════════════════════════════════════════
+   تسجيل الخروج
+   ════════════════════════════════════════ */
+window.signOut = function() {
+  if (!confirm("تسجيل الخروج؟")) return;
+  _authInst.signOut().then(function() {
+    window._booted = false;
+    window.DB = null;
+    location.reload();
+  });
+};
+
+/* ════════════════════════════════════════
+   زر تسجيل الخروج في الشريط العلوي
+   ════════════════════════════════════════ */
+function injectSignOutBtn(user) {
+  if (document.getElementById("authSignOutBtn")) return;
+
+  var btn = document.createElement("button");
+  btn.id = "authSignOutBtn";
+  btn.title = "تسجيل الخروج - " + (user.displayName || user.email);
+  btn.onclick = window.signOut;
+  btn.style.cssText = [
+    "background:transparent",
+    "border:1px solid #1e3a5f",
+    "border-radius:20px",
+    "padding:2px 10px 2px 4px",
+    "display:inline-flex",
+    "align-items:center",
+    "gap:6px",
+    "cursor:pointer",
+    "font-family:Cairo,sans-serif",
+    "font-size:10px",
+    "color:#94a3b8",
+    "height:26px",
+    "margin-left:6px",
+    "white-space:nowrap",
+    "max-width:140px"
+  ].join(";");
+
+  var avatar = user.photoURL
+    ? '<img src="' + user.photoURL + '" style="width:18px;height:18px;border-radius:50%;object-fit:cover;">'
+    : '<span style="font-size:14px;">👤</span>';
+
+  var name = (user.displayName || user.email || "").split(" ")[0];
+  btn.innerHTML = avatar + '<span style="overflow:hidden;text-overflow:ellipsis;">' + name + '</span>';
+
+  /* أضفه في الشريط العلوي */
+  var waitFor = setInterval(function() {
+    var topbar = document.querySelector(".top-user-area") || document.querySelector(".app-topbar");
+    if (topbar) {
+      topbar.appendChild(btn);
+      clearInterval(waitFor);
+    }
+  }, 300);
+}
+
+/* ════════════════════════════════════════
+   رسائل الخطأ بالعربية
+   ════════════════════════════════════════ */
+function getAuthErrorMsg(code) {
+  var msgs = {
+    "auth/popup-closed-by-user":    "أُغلقت نافذة الدخول",
+    "auth/popup-blocked":           "المتصفح حجب النافذة المنبثقة — اسمح بها",
+    "auth/network-request-failed":  "فشل الاتصال بالإنترنت",
+    "auth/too-many-requests":       "محاولات كثيرة — انتظر قليلاً",
+    "auth/user-disabled":           "هذا الحساب معطّل"
+  };
+  return msgs[code] || "خطأ في تسجيل الدخول";
+}
+
+/* ════════════════════════════════════════
+   تنظيف UID لاستخدامه كـ key في Firebase
+   ════════════════════════════════════════ */
+function sanitizeUID(uid) {
+  return uid.replace(/[.#$\/\[\]]/g, "_");
+}
