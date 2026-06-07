@@ -125,7 +125,7 @@ function listenForRemoteChanges() {
     console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
 
     /* حفظ البيانات الواردة محلياً */
-    var clean = Object.assign({}, remote);
+    var clean = restoreKeys(Object.assign({}, remote));
     delete clean._ts;
     delete clean._device;
 
@@ -191,6 +191,41 @@ function scheduleSyncToFirebase() {
 /* ════════════════════════════════════════
    إرسال البيانات لـ Firebase
    ════════════════════════════════════════ */
+/* تحويل المفاتيح — Firebase لا يقبل . # $ / [ ] */
+function sanitizeKeys(obj) {
+  if (typeof obj !== "object" || obj === null) return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeKeys);
+  var out = {};
+  Object.keys(obj).forEach(function(k) {
+    var safe = k
+      .replace(/\./g,  "__DOT__")
+      .replace(/#/g,   "__HASH__")
+      .replace(/\$/g,  "__DOLLAR__")
+      .replace(/\//g,  "__SLASH__")
+      .replace(/\[/g,  "__LB__")
+      .replace(/\]/g,  "__RB__");
+    out[safe] = sanitizeKeys(obj[k]);
+  });
+  return out;
+}
+
+function restoreKeys(obj) {
+  if (typeof obj !== "object" || obj === null) return obj;
+  if (Array.isArray(obj)) return obj.map(restoreKeys);
+  var out = {};
+  Object.keys(obj).forEach(function(k) {
+    var orig = k
+      .replace(/__DOT__/g,    ".")
+      .replace(/__HASH__/g,   "#")
+      .replace(/__DOLLAR__/g, "$")
+      .replace(/__SLASH__/g,  "/")
+      .replace(/__LB__/g,     "[")
+      .replace(/__RB__/g,     "]");
+    out[orig] = restoreKeys(obj[k]);
+  });
+  return out;
+}
+
 function pushToFirebase() {
   if (!_fbRef) return;
   if (!_isOnline) {
@@ -208,11 +243,9 @@ function pushToFirebase() {
   var ts = Date.now();
   _lastSaveTS = ts;
 
-  /* إضافة بيانات الجهاز والوقت */
-  var payload = Object.assign({}, db, {
-    _ts:     ts,
-    _device: getDeviceId()
-  });
+  var payload = sanitizeKeys(JSON.parse(JSON.stringify(db)));
+  payload._ts     = ts;
+  payload._device = getDeviceId();
 
   _fbRef.set(payload)
     .then(function () {
@@ -397,7 +430,7 @@ function pullFromFirebase() {
         return;
       }
 
-      var clean = Object.assign({}, remote);
+      var clean = restoreKeys(Object.assign({}, remote));
       delete clean._ts;
       delete clean._device;
 
