@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>عرض الدرجات — Dalty Grades</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0f1e;
+    --bg2: #0f1e35;
+    --bg3: #0a1628;
+    --border: #1e3a5f;
+    --blue: #1d4ed8;
+    --blue-light: #3b82f6;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Cairo', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    direction: rtl;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-title { font-size: 16px; font-weight: 900; color: #60a5fa; }
+  .header-sub { font-size: 11px; color: var(--text2); }
+  .sync-badge {
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    color: var(--text2);
+  }
+  .sync-badge.ok { border-color: var(--green); color: #6ee7b7; background: #0a2a1a; }
+  .sync-badge.err { border-color: var(--red); color: #fca5a5; background: #2a0a0a; }
+
+  /* ── Controls ── */
+  .controls {
+    padding: 16px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+  }
+  .search-box {
+    flex: 1;
+    min-width: 200px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    outline: none;
+  }
+  .search-box:focus { border-color: var(--blue-light); }
+  .search-box::placeholder { color: var(--text2); }
+
+  select.cls-sel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    color: var(--text);
+    font-family: 'Cairo', sans-serif;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    min-width: 130px;
+  }
+  select.cls-sel:focus { border-color: var(--blue-light); }
+
+  /* ── Info bar ── */
+  .info-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  .info-chip {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    color: var(--text2);
+  }
+  .info-chip span { color: #60a5fa; font-weight: 700; }
+
+  /* ── Table ── */
+  .table-wrap {
+    overflow-x: auto;
+    padding: 16px 20px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    min-width: 500px;
+  }
+  thead th {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: center;
+    color: #60a5fa;
+    font-weight: 700;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+  }
+  thead th:first-child { text-align: right; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .15s; }
+  tbody tr:hover { background: var(--bg2); }
+  tbody tr.highlight { background: #0a2a4a !important; }
+  tbody td {
+    padding: 8px 10px;
+    border: 1px solid #0f2540;
+    text-align: center;
+    color: var(--text);
+  }
+  tbody td:first-child { text-align: right; font-weight: 600; min-width: 180px; }
+  tbody td:last-child { font-weight: 900; font-size: 14px; }
+
+  .grade-high { color: #6ee7b7; }
+  .grade-mid  { color: #fcd34d; }
+  .grade-low  { color: #fca5a5; }
+  .grade-abs  { color: #94a3b8; font-size: 11px; }
+
+  /* ── Rank badge ── */
+  .rank { font-size: 10px; color: var(--text2); margin-right: 4px; }
+  .rank-1 { color: #fcd34d; }
+  .rank-2 { color: #94a3b8; }
+  .rank-3 { color: #c47c1d; }
+
+  /* ── Empty / Loading ── */
+  .center-msg {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text2);
+    font-size: 14px;
+  }
+  .spinner {
+    display: inline-block;
+    width: 28px; height: 28px;
+    border: 3px solid var(--border);
+    border-top-color: var(--blue-light);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    margin-bottom: 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Stats row ── */
+  .stats-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 20px 0;
+  }
+  .stat-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 18px;
+    text-align: center;
+    min-width: 90px;
+  }
+  .stat-val { font-size: 20px; font-weight: 900; color: #60a5fa; }
+  .stat-lbl { font-size: 10px; color: var(--text2); margin-top: 2px; }
+
+  /* ── Search result highlight ── */
+  .search-found {
+    background: #0a2a4a !important;
+    border-right: 3px solid var(--blue-light) !important;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 11px;
+    color: var(--text2);
+    border-top: 1px solid var(--border);
+    margin-top: 20px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .header { padding: 10px 14px; }
+    .controls { padding: 10px 14px; }
+    .table-wrap { padding: 10px 10px; }
+    table { font-size: 11px; }
+    .stats-row { padding: 10px 14px 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <div class="header-title" id="schoolTitle">📊 Dalty Grades</div>
+    <div class="header-sub" id="schoolSub">جاري التحميل...</div>
+  </div>
+  <div id="syncBadge" class="sync-badge">⏳ جاري الاتصال...</div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <select class="cls-sel" id="clsSel" onchange="onClassChange()">
+    <option value="">— اختر الفصل —</option>
+  </select>
+  <input class="search-box" id="searchBox" type="text"
+    placeholder="🔍 ابحث باسم الطالب..."
+    oninput="onSearch()" />
+  <button onclick="clearSearch()"
+    style="background:var(--bg2);border:1px solid var(--border);color:var(--text2);border-radius:var(--radius);padding:8px 14px;font-family:'Cairo',sans-serif;font-size:12px;cursor:pointer;">
+    مسح
+  </button>
+</div>
+
+<!-- Info bar -->
+<div class="info-bar" id="infoBar" style="display:none;">
+  <div class="info-chip">المادة: <span id="infoSubject">—</span></div>
+  <div class="info-chip">الصف: <span id="infoGrade">—</span></div>
+  <div class="info-chip">العام: <span id="infoYear">—</span></div>
+  <div class="info-chip">المدرس: <span id="infoTeacher">—</span></div>
+</div>
+
+<!-- Stats -->
+<div class="stats-row" id="statsRow" style="display:none;">
+  <div class="stat-card">
+    <div class="stat-val" id="statTotal">—</div>
+    <div class="stat-lbl">عدد الطلاب</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val grade-high" id="statHigh">—</div>
+    <div class="stat-lbl">أعلى درجة</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val grade-mid" id="statAvg">—</div>
+    <div class="stat-lbl">المتوسط</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val grade-low" id="statLow">—</div>
+    <div class="stat-lbl">أدنى درجة</div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="table-wrap" id="tableWrap">
+  <div class="center-msg">
+    <div class="spinner"></div>
+    <div>جاري تحميل البيانات من Firebase...</div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer" id="footerTxt">Dalty Grades — عرض الدرجات للمتابعين</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+/* ══════════════════════════════
+   إعدادات Firebase — لا تعدّل
+   ══════════════════════════════ */
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBS9rW0XqtFCrX0wjrn9NinsxaRLE4EFxE",
+  authDomain:        "dalty-grades.firebaseapp.com",
+  databaseURL:       "https://dalty-grades-default-rtdb.firebaseio.com",
+  projectId:         "dalty-grades",
+  storageBucket:     "dalty-grades.firebasestorage.app",
+  messagingSenderId: "927174576910",
+  appId:             "1:927174576910:web:70ca8e14568bb194bc655f",
+  measurementId:     "G-LFLYSSWJET"
+};
+var FB_PATH = "grades";
+
+/* ══════════════════════════════
+   متغيرات عامة
+   ══════════════════════════════ */
+var DB          = null;
+var currentClass = "";
+var searchTerm   = "";
+
+/* ══════════════════════════════
+   استعادة المفاتيح
+   ══════════════════════════════ */
+function restoreKeys(obj) {
+  if (typeof obj !== "object" || obj === null) return obj;
+  if (Array.isArray(obj)) return obj.map(restoreKeys);
+  var out = {};
+  Object.keys(obj).forEach(function(k) {
+    var orig = k
+      .replace(/__DOT__/g,    ".")
+      .replace(/__HASH__/g,   "#")
+      .replace(/__DOLLAR__/g, "$")
+      .replace(/__SLASH__/g,  "/")
+      .replace(/__LB__/g,     "[")
+      .replace(/__RB__/g,     "]");
+    out[orig] = restoreKeys(obj[k]);
+  });
+  return out;
+}
+
+/* ══════════════════════════════
+   حساب مجموع الطالب
+   ══════════════════════════════ */
+function calcTotal(st) {
+  if (st._totalAbsent) return null;
+  var sum = 0, valid = false;
+  var keys = Object.keys(st).filter(function(k) {
+    return k !== 'id' && k !== 'name' && k !== '_totalAbsent';
+  });
+  keys.forEach(function(k) {
+    var v = st[k];
+    if (v !== undefined && v !== '' && v !== 'غ' && v !== 'ع' && !isNaN(Number(v))) {
+      sum += Number(v);
+      valid = true;
+    }
+  });
+  return valid ? Math.round(sum) : null;
+}
+
+/* ══════════════════════════════
+   لون الدرجة
+   ══════════════════════════════ */
+function gradeClass(val, max) {
+  if (val === null) return 'grade-abs';
+  var pct = max ? (val / max * 100) : val;
+  if (pct >= 75) return 'grade-high';
+  if (pct >= 50) return 'grade-mid';
+  return 'grade-low';
+}
+
+/* ══════════════════════════════
+   تحميل Firebase
+   ══════════════════════════════ */
+firebase.initializeApp(FIREBASE_CONFIG);
+var db  = firebase.database();
+var ref = db.ref(FB_PATH);
+
+ref.on("value", function(snapshot) {
+  var raw = snapshot.val();
+  if (!raw) {
+    setSyncBadge("err", "❌ لا توجد بيانات");
+    showMsg("لا توجد بيانات في قاعدة البيانات بعد.");
+    return;
+  }
+  DB = restoreKeys(raw);
+  delete DB._ts;
+  delete DB._device;
+
+  setSyncBadge("ok", "✅ متزامن");
+  buildUI();
+
+}, function(err) {
+  setSyncBadge("err", "❌ " + err.message);
+  showMsg("فشل الاتصال بـ Firebase: " + err.message);
+});
+
+/* ══════════════════════════════
+   بناء الواجهة بعد تحميل البيانات
+   ══════════════════════════════ */
+function buildUI() {
+  if (!DB) return;
+
+  /* معلومات المدرسة */
+  var m = DB.meta || {};
+  document.getElementById("schoolTitle").textContent = "📊 " + (m.schoolName || "Dalty Grades");
+  document.getElementById("schoolSub").textContent =
+    (m.subject || "") + " | " + (m.grade || "") + " | " + (m.year || "");
+
+  document.getElementById("infoSubject").textContent = m.subject  || "—";
+  document.getElementById("infoGrade").textContent   = m.grade    || "—";
+  document.getElementById("infoYear").textContent    = m.year     || "—";
+  document.getElementById("infoTeacher").textContent = m.teacherName || "—";
+  document.getElementById("infoBar").style.display   = "flex";
+
+  document.getElementById("footerTxt").textContent =
+    (m.schoolName || "Dalty Grades") + " — " + (m.teacherName || "") + " | " + (m.year || "");
+
+  /* ملء قائمة الفصول */
+  var sel = document.getElementById("clsSel");
+  sel.innerHTML = '<option value="">— اختر الفصل —</option>';
+  var classes = DB.classes || Object.keys(DB.data || {});
+  classes.forEach(function(c) {
+    var opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = "فصل " + c;
+    sel.appendChild(opt);
+  });
+
+  /* لو فيه فصل واحد بس — اختره تلقائياً */
+  if (classes.length === 1) {
+    sel.value = classes[0];
+    currentClass = classes[0];
+  }
+
+  renderTable();
+}
+
+/* ══════════════════════════════
+   تغيير الفصل
+   ══════════════════════════════ */
+function onClassChange() {
+  currentClass = document.getElementById("clsSel").value;
+  searchTerm = "";
+  document.getElementById("searchBox").value = "";
+  renderTable();
+}
+
+/* ══════════════════════════════
+   البحث
+   ══════════════════════════════ */
+function onSearch() {
+  searchTerm = document.getElementById("searchBox").value.trim();
+  renderTable();
+}
+
+function clearSearch() {
+  searchTerm = "";
+  document.getElementById("searchBox").value = "";
+  renderTable();
+}
+
+/* ══════════════════════════════
+   رسم الجدول
+   ══════════════════════════════ */
+function renderTable() {
+  var wrap = document.getElementById("tableWrap");
+
+  if (!DB) { showMsg("جاري التحميل..."); return; }
+
+  if (!currentClass) {
+    wrap.innerHTML = '<div class="center-msg">👆 اختر الفصل من القائمة أعلاه</div>';
+    document.getElementById("statsRow").style.display = "none";
+    return;
+  }
+
+  var students = (DB.data && DB.data[currentClass]) ? DB.data[currentClass] : [];
+  if (!students.length) {
+    wrap.innerHTML = '<div class="center-msg">لا توجد بيانات لهذا الفصل بعد.</div>';
+    document.getElementById("statsRow").style.display = "none";
+    return;
+  }
+
+  /* حساب المجاميع */
+  var withTotals = students.map(function(st) {
+    return { st: st, total: calcTotal(st) };
+  });
+
+  /* ترتيب حسب المجموع */
+  var ranked = withTotals.slice().sort(function(a, b) {
+    if (a.total === null) return 1;
+    if (b.total === null) return -1;
+    return b.total - a.total;
+  });
+  var rankMap = {};
+  ranked.forEach(function(r, i) {
+    if (r.total !== null) rankMap[r.st.id] = i + 1;
+  });
+
+  /* إحصاءات */
+  var totals = withTotals.filter(function(x) { return x.total !== null; }).map(function(x) { return x.total; });
+  var maxTotal = totals.length ? Math.max.apply(null, totals) : 0;
+  var minTotal = totals.length ? Math.min.apply(null, totals) : 0;
+  var avgTotal = totals.length ? Math.round(totals.reduce(function(a, b) { return a + b; }, 0) / totals.length) : 0;
+
+  document.getElementById("statTotal").textContent = students.length;
+  document.getElementById("statHigh").textContent  = maxTotal;
+  document.getElementById("statAvg").textContent   = avgTotal;
+  document.getElementById("statLow").textContent   = minTotal;
+  document.getElementById("statsRow").style.display = "flex";
+
+  /* تصفية البحث */
+  var filtered = withTotals;
+  if (searchTerm) {
+    var q = searchTerm.toLowerCase();
+    filtered = withTotals.filter(function(x) {
+      return x.st.name && x.st.name.toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  if (!filtered.length) {
+    wrap.innerHTML = '<div class="center-msg">🔍 لم يُعثر على طالب بهذا الاسم.</div>';
+    return;
+  }
+
+  /* أعمدة الدرجات (بدون id, name, _totalAbsent) */
+  var cols = [];
+  if (students[0]) {
+    cols = Object.keys(students[0]).filter(function(k) {
+      return k !== 'id' && k !== 'name' && k !== '_totalAbsent';
+    });
+  }
+
+  /* رسم الجدول */
+  var html = '<table><thead><tr>';
+  html += '<th>#</th><th style="text-align:right">اسم الطالب</th>';
+  cols.forEach(function(c) { html += '<th>' + c + '</th>'; });
+  html += '<th>المجموع</th></tr></thead><tbody>';
+
+  filtered.forEach(function(item, idx) {
+    var st    = item.st;
+    var total = item.total;
+    var rank  = rankMap[st.id];
+    var isFound = searchTerm && st.name && st.name.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1;
+    var rowClass = isFound ? ' class="search-found"' : '';
+
+    html += '<tr' + rowClass + '>';
+    html += '<td><span class="rank ' +
+      (rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '') + '">' +
+      (rank || '—') + '</span></td>';
+    html += '<td>' + (st.name || '—') + '</td>';
+
+    cols.forEach(function(c) {
+      var v = st[c];
+      if (v === undefined || v === '') v = '—';
+      var cls = (v === 'غ' || v === 'ع') ? 'grade-abs' : '';
+      html += '<td class="' + cls + '">' + v + '</td>';
+    });
+
+    var totalCls = gradeClass(total, maxTotal);
+    var totalTxt = st._totalAbsent ? '<span class="grade-abs">غائب كلياً</span>' :
+                   total !== null ? '<span class="' + totalCls + '">' + total + '</span>' : '—';
+    html += '<td>' + totalTxt + '</td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+
+  /* لو بحث — أضف ملاحظة */
+  if (searchTerm && filtered.length) {
+    html += '<div style="padding:8px 4px;font-size:11px;color:var(--text2);">تم العثور على ' + filtered.length + ' طالب</div>';
+  }
+
+  wrap.innerHTML = html;
+
+  /* scroll للنتيجة المُظللة */
+  if (searchTerm) {
+    var found = wrap.querySelector(".search-found");
+    if (found) found.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+/* ══════════════════════════════
+   مساعدات
+   ══════════════════════════════ */
+function showMsg(msg) {
+  document.getElementById("tableWrap").innerHTML =
+    '<div class="center-msg">' + msg + '</div>';
+}
+
+function setSyncBadge(type, msg) {
+  var el = document.getElementById("syncBadge");
+  el.textContent = msg;
+  el.className = "sync-badge " + (type === "ok" ? "ok" : type === "err" ? "err" : "");
+}
+</script>
+</body>
+</html>
