@@ -26,6 +26,27 @@
   .controls { padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--bg3); border-bottom: 1px solid var(--border); }
   .search-box { flex: 1; min-width: 200px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; color: var(--text); font-family: 'Cairo', sans-serif; font-size: 13px; outline: none; }
   .search-box:focus { border-color: var(--blue-light); }
+
+  /* زر نسخ رابط الطالب */
+  .link-btn { background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text2); font-size: 11px; padding: 2px 7px; cursor: pointer; font-family: 'Cairo', sans-serif; white-space: nowrap; transition: all .2s; }
+  .link-btn:hover { border-color: var(--blue-light); color: var(--blue-light); }
+  .link-btn.copied { border-color: var(--green); color: #6ee7b7; }
+
+  /* بطاقة الطالب الفردية */
+  .student-card { max-width: 700px; margin: 30px auto; background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .student-card-header { background: linear-gradient(135deg,#0f2a50,#1d4ed8); padding: 24px 28px; }
+  .student-card-name { font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 4px; }
+  .student-card-meta { font-size: 12px; color: #93c5fd; }
+  .student-card-body { padding: 20px 28px; }
+  .scard-stat { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .scard-stat-item { text-align: center; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; flex: 1; min-width: 100px; }
+  .scard-stat-val { font-size: 22px; font-weight: 900; }
+  .scard-stat-lbl { font-size: 11px; color: var(--text2); margin-top: 3px; }
+  .scard-weeks { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .scard-weeks th { background: var(--bg3); border: 1px solid var(--border); padding: 8px 10px; color: var(--text2); font-weight: 600; text-align: center; }
+  .scard-weeks td { border: 1px solid var(--border); padding: 8px 10px; text-align: center; }
+  .back-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius); padding: 8px 16px; font-family: 'Cairo', sans-serif; font-size: 13px; cursor: pointer; margin: 16px 20px; text-decoration: none; }
+  .back-btn:hover { border-color: var(--blue-light); color: var(--blue-light); }
   .search-box::placeholder { color: var(--text2); }
   select.cls-sel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; color: var(--text); font-family: 'Cairo', sans-serif; font-size: 13px; outline: none; cursor: pointer; min-width: 130px; }
 
@@ -150,7 +171,11 @@ var FIREBASE_CONFIG = {
   messagingSenderId: "927174576910",
   appId:             "1:927174576910:web:70ca8e14568bb194bc655f"
 };
-var FB_PATH = "dalty_grades/main";
+var _urlParams = new URLSearchParams(location.search);
+var _uidParam  = _urlParams.get('uid');
+var FB_PATH = _uidParam
+  ? "dalty_grades/users/" + _uidParam + "/data"
+  : "dalty_grades/main"; /* fallback للروابط القديمة */
 var DB = null, currentClass = "", searchTerm = "";
 
 function restoreKeys(obj) {
@@ -300,6 +325,7 @@ function renderTable() {
   /* صف المجموعات */
   h += '<tr class="group-row">';
   h += '<th rowspan="2" style="min-width:160px;text-align:right;">اسم الطالب</th>';
+  h += '<th rowspan="2" style="min-width:80px;text-align:center;">رابط</th>';
   for (var w = 1; w <= W; w++) {
     h += '<th colspan="3" class="week-head">أسبوع ' + w + '</th>';
   }
@@ -331,6 +357,8 @@ function renderTable() {
     else if (rank === 2) badge = '<span class="rank-badge rank-2">2</span>';
     else if (rank === 3) badge = '<span class="rank-badge rank-3">3</span>';
     h += '<td>' + badge + (st.name||'—') + '</td>';
+    var studentUrl = location.href.split('?')[0] + '?student=' + encodeURIComponent(st.name||'');
+    h += '<td style="text-align:center;"><button class="link-btn" onclick="copyStudentLink(this,\'' + (st.name||'').replace(/'/g,"\\'") + '\')" title="نسخ رابط الطالب">🔗 نسخ</button></td>';
 
     /* أعمدة كل أسبوع */
     for (var w = 0; w < W; w++) {
@@ -386,6 +414,118 @@ function setSyncBadge(type, msg) {
   var el = document.getElementById("syncBadge");
   el.textContent = msg;
   el.className = "sync-badge " + (type==="ok"?"ok":type==="err"?"err":"");
+}
+
+/* ═══════════════════════════════════
+   نسخ رابط الطالب
+   ═══════════════════════════════════ */
+function copyStudentLink(btn, name) {
+  var base = location.href.split('?')[0];
+  var uid  = _uidParam || '';
+  var url  = base + '?uid=' + encodeURIComponent(uid) + '&student=' + encodeURIComponent(name);
+  navigator.clipboard.writeText(url).then(function() {
+    btn.textContent = '✅ تم النسخ';
+    btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = '🔗 نسخ'; btn.classList.remove('copied'); }, 2000);
+  }).catch(function() {
+    prompt('انسخ الرابط:', url);
+  });
+}
+
+/* ═══════════════════════════════════
+   وضع عرض طالب واحد عبر URL
+   ═══════════════════════════════════ */
+var STUDENT_MODE = (function() {
+  var p = new URLSearchParams(location.search);
+  return p.get('student') || null;
+})();
+
+function renderStudentCard(name) {
+  /* ابحث عن الطالب في كل الفصول */
+  var found = null, foundClass = null;
+  var allClasses = DB.classes || Object.keys(DB.data || {});
+  allClasses.forEach(function(cls) {
+    var students = (DB.data && DB.data[cls]) ? DB.data[cls] : [];
+    if (!Array.isArray(students)) students = Object.values(students);
+    students.forEach(function(st) {
+      if (st.name && st.name === name) { found = st; foundClass = cls; }
+    });
+  });
+
+  if (!found) {
+    document.getElementById("tableWrap").innerHTML = '<div class="center-msg">❌ لم يُعثر على الطالب: ' + name + '</div>';
+    return;
+  }
+
+  /* إخفاء عناصر الجدول */
+  document.getElementById("controls") && (document.getElementById("controls").style.display = "none");
+  var ctrl = document.querySelector(".controls");
+  if (ctrl) ctrl.style.display = "none";
+
+  var m = DB.meta || {};
+  var W = parseInt(m.activeWeeks) || 0;
+  var weeks = [];
+  for (var w = 1; w <= W; w++) {
+    weeks.push({ w: w, a: safeNum(found["a"+w]), h: safeNum(found["h"+w]), bw: safeNum(found["bw"+w]) });
+  }
+  var ex1 = safeNum(found.ex1), ex2 = safeNum(found.ex2);
+  var avgA  = avg(weeks.map(function(x){return x.a;}));
+  var avgH  = avg(weeks.map(function(x){return x.h;}));
+  var avgBW = avg(weeks.map(function(x){return x.bw;}));
+  var avgEx = avg([ex1, ex2]);
+  var parts = [avgA, avgH, avgBW, avgEx].filter(function(x){return x!==null;});
+  var total = parts.length ? Math.round(parts.reduce(function(a,b){return a+b;},0)) : null;
+
+  var totalColor = total === null ? '' : total >= 80 ? 'grade-high' : total >= 60 ? 'grade-mid' : 'grade-low';
+
+  var h = '<a class="back-btn" href="' + location.href.split('?')[0] + '">← عودة للجدول الكامل</a>';
+  h += '<div class="student-card">';
+  h += '<div class="student-card-header">';
+  h += '<div class="student-card-name">👤 ' + (found.name||'—') + '</div>';
+  h += '<div class="student-card-meta">' + (m.subject||'') + ' | فصل ' + foundClass + ' | ' + (m.year||'') + ' | ' + (m.teacherName||'') + '</div>';
+  h += '</div>';
+  h += '<div class="student-card-body">';
+
+  /* إحصاءات سريعة */
+  h += '<div class="scard-stat">';
+  h += '<div class="scard-stat-item"><div class="scard-stat-val ' + totalColor + '">' + (found._totalAbsent ? '<span class="grade-abs">غائب</span>' : (total !== null ? total : '—')) + '</div><div class="scard-stat-lbl">المجموع الكلي</div></div>';
+  h += '<div class="scard-stat-item"><div class="scard-stat-val">' + (avgA !== null ? avgA.toFixed(1) : '—') + '</div><div class="scard-stat-lbl">متوسط التقييم</div></div>';
+  h += '<div class="scard-stat-item"><div class="scard-stat-val">' + (avgH !== null ? avgH.toFixed(1) : '—') + '</div><div class="scard-stat-lbl">متوسط الواجب</div></div>';
+  h += '<div class="scard-stat-item"><div class="scard-stat-val">' + (avgEx !== null ? avgEx.toFixed(1) : '—') + '</div><div class="scard-stat-lbl">متوسط الاختبارات</div></div>';
+  h += '</div>';
+
+  /* جدول الأسابيع */
+  if (W > 0) {
+    h += '<table class="scard-weeks"><thead><tr>';
+    h += '<th>الأسبوع</th><th>تقييم</th><th>واجب</th><th>سلوك</th>';
+    h += '</tr></thead><tbody>';
+    weeks.forEach(function(wk) {
+      h += '<tr><td>أسبوع ' + wk.w + '</td>';
+      h += '<td>' + (wk.a !== null ? wk.a : '—') + '</td>';
+      h += '<td>' + (wk.h !== null ? wk.h : '—') + '</td>';
+      h += '<td>' + (wk.bw !== null ? wk.bw : '—') + '</td>';
+      h += '</tr>';
+    });
+    /* الاختبارات */
+    h += '<tr style="background:var(--bg3);font-weight:700;"><td>اختبار 1</td><td colspan="3">' + (ex1 !== null ? ex1 : '—') + '</td></tr>';
+    h += '<tr style="background:var(--bg3);font-weight:700;"><td>اختبار 2</td><td colspan="3">' + (ex2 !== null ? ex2 : '—') + '</td></tr>';
+    h += '</tbody></table>';
+  }
+
+  h += '</div></div>';
+  document.getElementById("tableWrap").innerHTML = h;
+  document.getElementById("statsRow").style.display = "none";
+  document.getElementById("infoBar").style.display = "none";
+  document.title = "درجات " + (found.name||'') + " — Dalty Grades";
+}
+
+/* تفعيل وضع الطالب الفردي بعد تحميل البيانات */
+var _origBuildUI = buildUI;
+if (STUDENT_MODE) {
+  buildUI = function() {
+    _origBuildUI();
+    renderStudentCard(STUDENT_MODE);
+  };
 }
 </script>
 </body>

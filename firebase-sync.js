@@ -28,7 +28,7 @@ var FIREBASE_CONFIG = {
 };
 
 /* مفتاح البيانات في Firebase */
-var FB_PATH = "dalty_grades/main";
+var FB_PATH = "dalty_grades/main"; /* مسار افتراضي — يُستبدل بعد تسجيل الدخول */
 
 /* تأخير الحفظ (مللي ثانية) — لتجنب الحفظ عند كل ضغطة */
 var SYNC_DEBOUNCE = 2000;
@@ -63,20 +63,19 @@ function initFirebaseSync() {
     _fbRef = _fbDB.ref(FB_PATH);
 
     console.log("[Dalty Sync] Firebase متصل ✅");
-    showSyncStatus("ok", "☁️ Firebase متصل");
+    showSyncStatus("ok", "☁️ Firebase متصل — في انتظار تسجيل الدخول");
 
     /* مراقبة حالة الإنترنت */
     window.addEventListener("online",  function () { _isOnline = true;  onComeOnline(); });
     window.addEventListener("offline", function () { _isOnline = false; showSyncStatus("warn", "📴 غير متصل — البيانات محلية"); });
-
-    /* الاستماع للتغييرات من الأجهزة الأخرى */
-    listenForRemoteChanges();
 
     /* تعديل saveDB لترسل لـ Firebase أيضاً */
     hookSaveDB();
 
     /* عرض مؤشر التزامن في الشريط العلوي */
     injectSyncUI();
+
+    /* ملاحظة: listenForRemoteChanges تُستدعى من setFirebaseUserPath بعد تسجيل الدخول */
 
   } catch (e) {
     console.error("[Dalty Sync] خطأ في التهيئة:", e);
@@ -86,8 +85,32 @@ function initFirebaseSync() {
 
 
 /* ════════════════════════════════════════
-   الاستماع للتغييرات من الأجهزة الأخرى
+   تعيين مسار المستخدم بعد تسجيل الدخول
+   يُستدعى من auth.js عند معرفة الـ UID
    ════════════════════════════════════════ */
+function setFirebaseUserPath(uid) {
+  if (!uid || !_fbDB) return;
+  var newPath = "dalty_grades/users/" + uid + "/data";
+  if (FB_PATH === newPath) return; /* لا تغيير */
+
+  FB_PATH = newPath;
+
+  /* إلغاء الاستماع القديم */
+  if (_fbRef) _fbRef.off();
+
+  /* مسار جديد خاص بهذا المستخدم */
+  _fbRef = _fbDB.ref(FB_PATH);
+  console.log("[Dalty Sync] 🔑 مسار المستخدم:", FB_PATH);
+  showSyncStatus("syncing", "⏳ جاري تحميل بياناتك...");
+
+  /* ابدأ الاستماع من جديد */
+  listenForRemoteChanges();
+}
+
+/* تصدير للاستخدام من auth.js */
+window.setFirebaseUserPath = setFirebaseUserPath;
+
+
 function listenForRemoteChanges() {
   _fbRef.on("value", function (snapshot) {
     var remote = snapshot.val();

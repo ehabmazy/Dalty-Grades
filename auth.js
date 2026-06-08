@@ -115,9 +115,9 @@ function onUserLoggedIn(user) {
   var nameEl = document.getElementById("topUserName");
   if (nameEl) nameEl.textContent = user.displayName || user.email || "";
 
-  /* تحديث Firebase path في firebase-sync.js */
-  if (typeof window.FB_PATH !== "undefined") {
-    window.FB_PATH = AUTH_DB_PATH + "/" + uid + "/grades";
+  /* تحديث Firebase path في firebase-sync.js — مسار خاص بكل معلم */
+  if (typeof window.setFirebaseUserPath === "function") {
+    window.setFirebaseUserPath(user.uid);
   }
 
   /* تشغيل التطبيق */
@@ -423,3 +423,26 @@ function getAuthErrorMsg(code) {
 function sanitizeUID(uid) {
   return uid.replace(/[.#$\/\[\]]/g, "_");
 }
+
+
+/* ════════════════════════════════════════
+   توليد رابط مشاركة grades-viewer للمعلم
+   ════════════════════════════════════════ */
+function getViewerLink() {
+  if (!_currentUser) { alert("يجب تسجيل الدخول أولاً"); return null; }
+  var base = location.href.replace(/\/[^\/]*$/, '/grades-viewer.html');
+  return base + '?uid=' + encodeURIComponent(_currentUser.uid);
+}
+
+function copyViewerLink() {
+  var url = getViewerLink();
+  if (!url) return;
+  navigator.clipboard.writeText(url).then(function() {
+    alert("✅ تم نسخ رابط المشاركة!\n\n" + url);
+  }).catch(function() {
+    prompt("انسخ الرابط:", url);
+  });
+}
+
+window.getViewerLink  = getViewerLink;
+window.copyViewerLink = copyViewerLink;
