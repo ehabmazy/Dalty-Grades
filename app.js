@@ -13791,4 +13791,5 @@ function saveDictSettings(){
   closeDictSettings();
   if(typeof renderDict==="function")renderDict();
 }
-document.getElementById("dictSettingsModal").addEventListener("click",function(e){if(e.target===this)closeDictSettings();});
+var _dsModal=document.getElementById("dictSettingsModal");
+if(_dsModal)_dsModal.addEventListener("click",function(e){if(e.target===this)closeDictSettings();});
