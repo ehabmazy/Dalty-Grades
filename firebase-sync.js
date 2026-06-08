@@ -292,17 +292,17 @@ function getDeviceId() {
    واجهة مؤشر التزامن في الشريط العلوي
    ════════════════════════════════════════ */
 function injectSyncUI() {
-  /* إنشاء الزر */
+  /* زر مدمج: صورة المستخدم + اسمه + حالة المزامنة */
   var btn = document.createElement("button");
   btn.id = "fbSyncBtn";
-  btn.title = "حالة التزامن مع Firebase";
+  btn.title = "حالة التزامن";
   btn.onclick = function () { openSyncPanel(); };
   btn.style.cssText = [
     "background:#0a1e45",
     "border:1px solid #1e3a5f",
     "color:#60a5fa",
-    "border-radius:8px",
-    "padding:2px 10px",
+    "border-radius:20px",
+    "padding:2px 10px 2px 4px",
     "font-size:10px",
     "font-weight:700",
     "cursor:pointer",
@@ -312,7 +312,7 @@ function injectSyncUI() {
     "height:26px",
     "display:inline-flex",
     "align-items:center",
-    "gap:4px"
+    "gap:6px"
   ].join(";");
   btn.innerHTML = "☁️ جاري الاتصال...";
 
@@ -322,14 +322,43 @@ function injectSyncUI() {
     if (topbar) {
       topbar.appendChild(btn);
       clearInterval(waitForTopbar);
+      /* لو المستخدم مسجل دخول، حدّث الزر بصورته واسمه */
+      _updateMergedBtn();
     }
   }, 300);
 }
 
+/* تحديث الزر المدمج بمعلومات المستخدم */
+function _updateMergedBtn() {
+  var btn = document.getElementById("fbSyncBtn");
+  if (!btn) return;
+  var user = window._currentAuthUser;
+  if (!user) return;
+
+  var avatar = user.photoURL
+    ? '<img src="' + user.photoURL + '" style="width:18px;height:18px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
+    : '<span style="font-size:13px;">👤</span>';
+  var name = (user.displayName || user.email || "").split(" ")[0];
+
+  btn.dataset.userHtml = avatar + '<span style="color:#94a3b8;max-width:70px;overflow:hidden;text-overflow:ellipsis;">' + name + '</span>';
+  btn.dataset.hasUser = "1";
+  /* أضف تسجيل خروج بالضغط المطول */
+  btn.title = name + " — اضغط لمزامنة | اضغط مطولاً لتسجيل الخروج";
+  btn.oncontextmenu = function(e) { e.preventDefault(); if(typeof window.signOut==="function") window.signOut(); };
+}
+
+/* تصدير للاستخدام من auth.js */
+window._updateMergedBtn = _updateMergedBtn;
+
 function showSyncStatus(type, msg) {
   var btn = document.getElementById("fbSyncBtn");
   if (!btn) return;
-  btn.innerHTML = msg;
+  /* لو في مستخدم، اعرض صورته + اسمه + حالة المزامنة */
+  if (btn.dataset.hasUser) {
+    btn.innerHTML = btn.dataset.userHtml + '<span style="border-right:1px solid #1e3a5f;height:14px;margin:0 2px;"></span>' + msg;
+  } else {
+    btn.innerHTML = msg;
+  }
   btn.style.background = {
     ok:      "#0a2a1a",
     syncing: "#0a1e45",
