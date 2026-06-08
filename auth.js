@@ -148,8 +148,15 @@ function onUserLoggedIn(user) {
     if (typeof switchPage === "function") switchPage("home");
   }
 
-  /* إضافة زر تسجيل الخروج */
-  injectSignOutBtn(user);
+  /* حدّث الزر المدمج بمعلومات المستخدم */
+  window._currentAuthUser = user;
+  if (typeof window._updateMergedBtn === "function") window._updateMergedBtn();
+  /* اضبط دالة تسجيل الخروج لاستخدامها من الزر المدمج */
+  var btn = document.getElementById("fbSyncBtn");
+  if (btn) {
+    btn.dataset.userName = (user.displayName || user.email || "").split(" ")[0];
+    btn.oncontextmenu = function(e) { e.preventDefault(); if(typeof window.signOut==="function") window.signOut(); };
+  }
 
   console.log("[Auth] ✅ مرحباً:", user.displayName || user.email);
 }
@@ -409,50 +416,7 @@ window.signOut = function() {
   });
 };
 
-/* ════════════════════════════════════════
-   زر تسجيل الخروج في الشريط العلوي
-   ════════════════════════════════════════ */
-function injectSignOutBtn(user) {
-  if (document.getElementById("authSignOutBtn")) return;
-
-  var btn = document.createElement("button");
-  btn.id = "authSignOutBtn";
-  btn.title = "تسجيل الخروج - " + (user.displayName || user.email);
-  btn.onclick = window.signOut;
-  btn.style.cssText = [
-    "background:transparent",
-    "border:1px solid #1e3a5f",
-    "border-radius:20px",
-    "padding:2px 10px 2px 4px",
-    "display:inline-flex",
-    "align-items:center",
-    "gap:6px",
-    "cursor:pointer",
-    "font-family:Cairo,sans-serif",
-    "font-size:10px",
-    "color:#94a3b8",
-    "height:26px",
-    "margin-left:6px",
-    "white-space:nowrap",
-    "max-width:140px"
-  ].join(";");
-
-  var avatar = user.photoURL
-    ? '<img src="' + user.photoURL + '" style="width:18px;height:18px;border-radius:50%;object-fit:cover;">'
-    : '<span style="font-size:14px;">👤</span>';
-
-  var name = (user.displayName || user.email || "").split(" ")[0];
-  btn.innerHTML = avatar + '<span style="overflow:hidden;text-overflow:ellipsis;">' + name + '</span>';
-
-  /* أضفه في الشريط العلوي */
-  var waitFor = setInterval(function() {
-    var topbar = document.querySelector(".top-user-area") || document.querySelector(".app-topbar");
-    if (topbar) {
-      topbar.appendChild(btn);
-      clearInterval(waitFor);
-    }
-  }, 300);
-}
+/* زر تسجيل الخروج مدمج الآن في fbSyncBtn — firebase-sync.js */
 
 /* ════════════════════════════════════════
    رسائل الخطأ بالعربية

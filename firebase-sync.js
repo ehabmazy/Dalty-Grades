@@ -79,7 +79,9 @@ var _pendingSave = false;
    ════════════════════════════════════════ */
 function initFirebaseSync() {
   try {
-    _fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+    _fbApp = (firebase.apps && firebase.apps.length > 0)
+               ? firebase.apps[0]
+               : firebase.initializeApp(FIREBASE_CONFIG);
     _fbDB  = firebase.database();
     _fbRef = _fbDB.ref(FB_PATH);
 
