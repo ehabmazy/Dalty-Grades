@@ -302,17 +302,18 @@ function injectSyncUI() {
     "border:1px solid #1e3a5f",
     "color:#60a5fa",
     "border-radius:20px",
-    "padding:2px 10px 2px 4px",
-    "font-size:10px",
+    "padding:2px 8px 2px 4px",
+    "font-size:9.5px",
     "font-weight:700",
     "cursor:pointer",
     "font-family:inherit",
     "white-space:nowrap",
-    "margin-left:6px",
     "height:26px",
     "display:inline-flex",
     "align-items:center",
-    "gap:6px"
+    "gap:5px",
+    "max-width:150px",
+    "overflow:hidden"
   ].join(";");
   btn.innerHTML = "☁️ جاري الاتصال...";
 
@@ -355,7 +356,11 @@ function showSyncStatus(type, msg) {
   if (!btn) return;
   /* لو في مستخدم، اعرض صورته + اسمه + حالة المزامنة */
   if (btn.dataset.hasUser) {
-    btn.innerHTML = btn.dataset.userHtml + '<span style="border-right:1px solid #1e3a5f;height:14px;margin:0 2px;"></span>' + msg;
+    /* على الموبايل: صورة + أيقونة المزامنة فقط */
+    var avatar = btn.dataset.userHtml;
+    var icon = msg.split(' ')[0]; /* أخذ الأيقونة فقط */
+    btn.innerHTML = avatar + '<span style="border-right:1px solid #1e3a5f;height:14px;margin:0 2px;"></span>' + '<span>' + icon + '</span>';
+    btn.title = (btn.dataset.userName || '') + ' — ' + msg;
   } else {
     btn.innerHTML = msg;
   }
