@@ -13759,7 +13759,8 @@ function _csRefreshActive(){
     absContainer.appendChild(_mkAbsBtn(col.label, function(){WKS.cardAbsCol=ai;renderWeekly();_csRefreshActive();}, isAct, true));
   });
 }
-document.getElementById('cardsSettingsModal').addEventListener('click',function(e){if(e.target===this)closeCardsSettings();});
+var _csModal=document.getElementById('cardsSettingsModal');
+if(_csModal)_csModal.addEventListener('click',function(e){if(e.target===this)closeCardsSettings();});
 
 
 // ══════════════════════════════
