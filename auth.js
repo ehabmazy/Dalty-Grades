@@ -32,28 +32,8 @@ var _authDB   = null;
 var _currentUser = null;
 var _userRef  = null;
 
-/* ════════════════════════════════════════
-   تحميل Firebase Auth SDK
-   ════════════════════════════════════════ */
-(function loadAuthSDK() {
-  var scripts = [
-    "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js",
-    "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js",
-    "https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"
-  ];
-
-  var loaded = 0;
-  scripts.forEach(function(src) {
-    /* تحقق إذا محمل مسبقاً */
-    var existing = document.querySelector('script[src="' + src + '"]');
-    if (existing) { loaded++; if (loaded === scripts.length) initAuth(); return; }
-
-    var s = document.createElement("script");
-    s.src = src;
-    s.onload = function() { loaded++; if (loaded === scripts.length) initAuth(); };
-    document.head.appendChild(s);
-  });
-})();
+/* Firebase SDK محمّل مباشرة من index.html */
+window.addEventListener("load", function () { initAuth(); });
 
 /* ════════════════════════════════════════
    تهيئة Firebase Auth

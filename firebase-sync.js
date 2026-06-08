@@ -34,31 +34,8 @@ var FB_PATH = "dalty_grades/main";
 var SYNC_DEBOUNCE = 2000;
 
 
-/* ════════════════════════════════════════
-   تحميل مكتبة Firebase تلقائياً
-   ════════════════════════════════════════ */
-(function loadFirebaseSDK() {
-  var scripts = [
-    "https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js",
-    "https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"
-  ];
-
-  var loaded = 0;
-  scripts.forEach(function (src) {
-    var s = document.createElement("script");
-    s.src = src;
-    s.onload = function () {
-      loaded++;
-      if (loaded === scripts.length) {
-        initFirebaseSync();
-      }
-    };
-    s.onerror = function () {
-      showSyncStatus("error", "⚠️ فشل تحميل Firebase — تأكد من الاتصال بالإنترنت");
-    };
-    document.head.appendChild(s);
-  });
-})();
+/* Firebase SDK محمّل مباشرة من index.html */
+window.addEventListener("load", function () { initFirebaseSync(); });
 
 
 /* ════════════════════════════════════════
