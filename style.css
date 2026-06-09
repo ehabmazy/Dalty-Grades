@@ -1752,3 +1752,316 @@ tr.hl-abs td{background:#fff7ed!important;}
   .p-tab{padding:6px 8px;font-size:11px;}
   .p-tab .pt-lbl{display:none;}
 }
+
+/* ══════════════════════════════════════════
+   Numpad Mode — لوحة المفاتيح
+   ══════════════════════════════════════════ */
+
+.np-wrap {
+  display: flex;
+  gap: 0;
+  height: calc(100vh - 120px);
+  overflow: hidden;
+  background: var(--bg1);
+}
+
+/* ── قائمة الطلاب ── */
+.np-list-panel {
+  width: 52%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.np-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.np-search-inp {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text1);
+  font-family: 'Cairo', sans-serif;
+  font-size: 13px;
+  padding: 7px 12px;
+  outline: none;
+  direction: rtl;
+}
+.np-search-inp:focus { border-color: var(--blue-light); }
+
+.np-clear-search {
+  background: none;
+  border: none;
+  color: #f87171;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.np-students {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.np-student-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  transition: background .15s;
+}
+.np-student-row:hover  { background: var(--bg2); }
+.np-student-row.np-selected { background: rgba(29,78,216,.18); border-right: 3px solid var(--blue-light); }
+
+.np-snum {
+  font-size: 10px;
+  color: var(--text3);
+  min-width: 20px;
+  text-align: center;
+}
+
+.np-sphoto {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.np-sphoto-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg3);
+  font-size: 16px;
+}
+
+.np-sname {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.np-sgrades {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.np-g-pill {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--bg3);
+  color: var(--text3);
+  border: 1px solid var(--border);
+}
+.np-g-pill.np-g-ok  { background: rgba(16,185,129,.15); color: #6ee7b7; border-color: #065f46; }
+.np-g-pill.np-g-abs { background: rgba(239,68,68,.15);  color: #fca5a5; border-color: #7f1d1d; }
+
+.np-abs-mini {
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text3);
+  cursor: pointer;
+  font-family: 'Cairo', sans-serif;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+.np-abs-mini.np-abs-on   { background: rgba(239,68,68,.3);  color: #f87171; border-color: #dc2626; }
+.np-abs-mini.np-abs-sick { background: rgba(245,158,11,.3); color: #fcd34d; border-color: #d97706; }
+
+.np-no-results {
+  text-align: center;
+  padding: 30px;
+  color: var(--text3);
+  font-size: 12px;
+}
+
+/* ── لوحة الإدخال ── */
+.np-input-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 10px;
+  gap: 10px;
+  overflow-y: auto;
+  background: var(--bg2);
+}
+
+.np-no-selection {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  font-size: 13px;
+  margin-top: 40px;
+}
+
+/* صورة + اسم الطالب */
+.np-student-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.np-big-photo {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--blue-light);
+  box-shadow: 0 0 12px rgba(96,165,250,.3);
+}
+.np-big-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg3);
+  font-size: 32px;
+  border: 2px solid var(--border);
+}
+
+.np-big-name {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text1);
+  text-align: center;
+}
+
+/* تبويبات الحقل */
+.np-field-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg3);
+  border-radius: 8px;
+  padding: 3px;
+  width: 100%;
+}
+.np-ftab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-family: 'Cairo', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.np-ftab.np-ftab-on {
+  background: var(--blue-light);
+  color: #fff;
+}
+
+/* شاشة الإدخال */
+.np-screen {
+  width: 100%;
+  background: var(--bg3);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  min-height: 54px;
+}
+.np-screen-val {
+  font-size: 30px;
+  font-weight: 900;
+  color: #60a5fa;
+  line-height: 1;
+}
+.np-screen-val.np-screen-abs { color: #f87171; }
+.np-screen-max {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+/* أزرار غياب الفترتين */
+.np-abs-btns {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.np-abs-btn {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-family: 'Cairo', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 9px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.np-abs-btn.np-abs-btn-on {
+  background: rgba(239,68,68,.25);
+  border-color: #dc2626;
+  color: #f87171;
+}
+.np-abs-btn:hover { border-color: var(--blue-light); }
+
+/* لوحة المفاتيح */
+.np-keyboard {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
+  margin-top: auto;
+}
+.np-key {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text1);
+  font-family: 'Cairo', sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  padding: 14px 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all .1s;
+  user-select: none;
+}
+.np-key:active { transform: scale(.94); background: var(--blue-dark); }
+.np-key-zero { grid-column: span 1; }
+.np-key-del  { background: rgba(245,158,11,.15); border-color: #d97706; color: #fcd34d; }
+.np-key-clr  { background: rgba(239,68,68,.15);  border-color: #dc2626; color: #f87171; }
+.np-key-del:active { background: rgba(245,158,11,.35); }
+.np-key-clr:active { background: rgba(239,68,68,.35); }
+
+/* موبايل */
+@media(max-width: 600px) {
+  .np-wrap { flex-direction: column; height: auto; }
+  .np-list-panel { width: 100%; max-height: 45vh; border-left: none; border-bottom: 1px solid var(--border); }
+  .np-key { font-size: 18px; padding: 12px 0; }
+}
+
