@@ -13830,7 +13830,7 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '</div>';
   /* صف الإدخال: textarea + مايك + تأكيد */
   h += '<div class="np2-input-row">';
-  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="2"';
+  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
   h += ' placeholder="اكتب اسم الطالب أو رقمه والدرجة&#10;مثال: محمد 15  أو  5 15"';
   h += ' inputmode="none"';
   h += ' oninput="WKS.npTextInput=this.value;">';
