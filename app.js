@@ -14062,6 +14062,7 @@ function _npOpenKeyboard() {
 }
 
 
+function _initNumpadEvents() {
   /* التركيز على البحث */
   setTimeout(function(){
     var inp=document.getElementById('npSearch');
