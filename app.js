@@ -6055,7 +6055,7 @@ function renderViewBar(){
   h+='<button class="view-bar-tab'+(mode==='table'?' active':'')+'" onclick="WKS.viewMode=\'table\';renderWeekly();renderViewBar();">🗂 جدول</button>';
   h+='<button class="view-bar-tab'+(mode==='grid'?' active':'')+'" onclick="WKS.viewMode=\'grid\';renderWeekly();renderViewBar();">&#8862; شبكي</button>';
   h+='<button class="view-bar-tab'+(mode==='cards'?' active':'')+'" onclick="WKS.viewMode=\'cards\';renderWeekly();renderViewBar();">🃏 كروت</button>';
-  h+='<button class="view-bar-tab'+(mode===\'numpad\'?' active':'')+'" onclick="WKS.viewMode=\'numpad\';WKS.numpadStudent=null;WKS.numpadInput=\'\';renderWeekly();renderViewBar();">⌨️ لوحة</button>';
+  h+='<button class="view-bar-tab'+(mode==='numpad'?' active':'')+'" onclick="WKS.viewMode=\'numpad\';WKS.numpadStudent=null;WKS.numpadInput=\'\';renderWeekly();renderViewBar();">&#9000; لوحة</button>';
   bar.innerHTML=h;
 }
 
