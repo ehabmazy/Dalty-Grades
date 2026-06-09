@@ -73,7 +73,7 @@ body{font-family:var(--app-font-family);background:#0f172a;color:#1e293b;font-si
 .login-err.show{display:block;}
 
 /* ══ APP SHELL ══ */
-#appShell{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+#appShell{display:none;flex-direction:column;height:100vh;overflow:hidden;}
 #appShell.visible{display:flex;}
 
 /* ── TOP BAR ── */
