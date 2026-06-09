@@ -192,13 +192,36 @@ function restoreKeys(obj) {
 firebase.initializeApp(FIREBASE_CONFIG);
 var ref = firebase.database().ref(FB_PATH);
 
+var _firstLoad = true;
+
 ref.on("value", function(snap) {
   var raw = snap.val();
   if (!raw) { setSyncBadge("err","❌ لا توجد بيانات"); showMsg("لا توجد بيانات بعد."); return; }
-  DB = restoreKeys(raw);
-  delete DB._ts; delete DB._device;
-  setSyncBadge("ok","✅ متزامن");
-  buildUI();
+
+  var incoming = restoreKeys(raw);
+  delete incoming._ts; delete incoming._device;
+
+  if (_firstLoad) {
+    /* أول تحميل — ابنِ الواجهة كاملاً */
+    _firstLoad = false;
+    DB = incoming;
+    setSyncBadge("ok","✅ متزامن");
+    buildUI();
+    if (STUDENT_MODE) renderStudentCard(STUDENT_MODE);
+  } else {
+    /* تحديث لاحق — حدّث البيانات فقط وأعِد رسم الجدول بدون إعادة بناء كل شيء */
+    DB = incoming;
+    setSyncBadge("ok", "🔄 تم التحديث");
+    setTimeout(function() { setSyncBadge("ok","✅ متزامن"); }, 2000);
+
+    if (STUDENT_MODE) {
+      /* وضع طالب واحد — حدّث بطاقته */
+      renderStudentCard(STUDENT_MODE);
+    } else {
+      /* وضع الجدول الكامل — حدّث الجدول مع الحفاظ على الفصل المختار */
+      renderTable();
+    }
+  }
 }, function(e) {
   setSyncBadge("err","❌ " + e.message);
   showMsg("فشل الاتصال: " + e.message);
@@ -519,14 +542,6 @@ function renderStudentCard(name) {
   document.title = "درجات " + (found.name||'') + " — Dalty Grades";
 }
 
-/* تفعيل وضع الطالب الفردي بعد تحميل البيانات */
-var _origBuildUI = buildUI;
-if (STUDENT_MODE) {
-  buildUI = function() {
-    _origBuildUI();
-    renderStudentCard(STUDENT_MODE);
-  };
-}
 </script>
 </body>
 </html>
