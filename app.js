@@ -3952,8 +3952,8 @@ function renderWeekly(){
     });
   }
 
-  // ── Statistics bar — hidden in cards mode ──
-  if(WKS.viewMode!=='cards'){
+  // ── Statistics bar — hidden in cards/numpad mode ──
+  if(WKS.viewMode!=='cards' && WKS.viewMode!=='numpad'){
     var totalCells=students.length*(absCols.length+2);
     var recordedCells=0,absentCount=0,assessRecorded=0,hwRecorded=0;
     students.forEach(function(s){
@@ -13819,24 +13819,33 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
 
   var h = '<div class="np2-wrap">';
 
-  /* ══ منطقة الإدخال — الأعلى (مثل الإملاء) ══ */
+  /* ══ منطقة الإدخال — الأعلى ══ */
   h += '<div class="np2-top">';
   h += '<div class="np2-dictbar">';
-  /* تبويبات الحقل فوق منطقة الإدخال */
+  /* تبويبات الحقل */
   h += '<div class="np2-ftabs np2-ftabs-top">';
   h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" onclick="WKS.numpadField=\'assess\';_npRefreshDisplay();">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
   h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" onclick="WKS.numpadField=\'hw\';_npRefreshDisplay();">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
   h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" onclick="WKS.numpadField=\'beh\';_npRefreshDisplay();">سلوك<span class="np2-ftab-max">/10</span></button>';
   h += '</div>';
-  /* منطقة الإدخال النصي */
+  /* صف الإدخال: textarea + مايك + تأكيد */
   h += '<div class="np2-input-row">';
-  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="2" placeholder="اكتب اسم الطالب والدرجة ثم ✓&#10;مثال: محمد 15" inputmode="none">'+esc(WKS.npTextInput||'')+'</textarea>';
+  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="2"';
+  h += ' placeholder="اكتب اسم الطالب أو رقمه والدرجة&#10;مثال: محمد 15  أو  5 15"';
+  h += ' inputmode="none"';
+  h += ' oninput="WKS.npTextInput=this.value;">';
+  h += esc(WKS.npTextInput||'');
+  h += '</textarea>';
+  h += '<div class="np2-input-btns">';
+  h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي">🎤</button>';
   h += '<button class="np2-enter-btn" onclick="_npSubmit()" title="إدخال">✓</button>';
   h += '</div>';
-  /* صندوق الحالة */
-  h += '<div id="npStatusBox" class="np2-status-box" style="display:'+(WKS.npStatus?'flex':'none')+';">';
-  if(WKS.npStatus) h += '<span>'+esc(WKS.npStatus)+'</span>';
   h += '</div>';
+  /* صندوق الحالة */
+  if(WKS.npStatus) {
+    var stCls = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
+    h += '<div class="np2-status-box '+stCls+'"><span>'+esc(WKS.npStatus)+'</span></div>';
+  }
   h += '</div>';
   h += '</div>'; /* np2-top */
 
@@ -14029,7 +14038,41 @@ function _getNpMax(type, week) {
   return type==='assess'?assessMax:hwMax;
 }
 
-/* ── موزّع ضغطات اللوحة ── */
+/* ── المايك الصوتي للإدخال ── */
+var _npMicRec = null;
+function _npMicToggle() {
+  var btn = document.getElementById('npMicBtn');
+  if(_npMicRec && _npMicRec.state === 'recording') {
+    _npMicRec.stop();
+    return;
+  }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) { showSnack('⚠️ المتصفح لا يدعم التعرف على الصوت'); return; }
+  _npMicRec = new SR();
+  _npMicRec.lang = 'ar-EG';
+  _npMicRec.interimResults = false;
+  _npMicRec.continuous = false;
+  _npMicRec.onstart = function() {
+    if(btn) { btn.textContent='🔴'; btn.style.background='rgba(239,68,68,.3)'; btn.style.borderColor='#dc2626'; }
+  };
+  _npMicRec.onresult = function(e) {
+    var txt = e.results[0][0].transcript || '';
+    var ta = document.getElementById('npDictInput');
+    if(ta) { ta.value = txt; WKS.npTextInput = txt; }
+    /* أرسل مباشرة */
+    setTimeout(_npSubmit, 100);
+  };
+  _npMicRec.onerror = function(e) {
+    showSnack('❌ خطأ في المايك: ' + (e.error||''));
+  };
+  _npMicRec.onend = function() {
+    _npMicRec = null;
+    if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
+  };
+  _npMicRec.start();
+}
+
+
 function _npKeyPress(ch) {
   if(WKS._npDirectMode && WKS.numpadStudent) {
     var cls=WKS.activeClass, week=WKS.activeWeek, fld=WKS.numpadField||'assess';
@@ -14098,17 +14141,16 @@ function _npSubmit() {
   var raw = ta ? ta.value.trim() : (WKS.npTextInput||'').trim();
   if(!raw) return;
 
-  var cls  = WKS.activeClass;
-  var week = WKS.activeWeek;
-  var fld  = WKS.numpadField || 'assess';
-  var aF   = 'a'+week, hF = 'h'+week, bF = 'bw'+week;
+  var cls     = WKS.activeClass;
+  var week    = WKS.activeWeek;
+  var fld     = WKS.numpadField || 'assess';
+  var aF='a'+week, hF='h'+week, bF='bw'+week;
   var curField = fld==='assess'?aF : fld==='hw'?hF : bF;
   var maxVal   = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : 10;
-
   var students = DB.data[cls] || [];
 
-  /* فصل الاسم عن الدرجة: آخر كلمة/رقم إذا كانت رقماً هي الدرجة */
-  var parts = raw.trim().split(/\s+/);
+  /* فصل الاسم/الرقم عن الدرجة */
+  var parts    = raw.trim().split(/\s+/);
   var gradeStr = null;
   var nameStr  = raw.trim();
   if(parts.length >= 2) {
@@ -14119,57 +14161,108 @@ function _npSubmit() {
     }
   }
 
-  /* بحث عن الطالب بالاسم (مطابقة جزئية) */
-  var query = nameStr.trim().toLowerCase();
-  var matched = students.filter(function(s){
-    return s.name.toLowerCase().indexOf(query) !== -1;
+  /* بحث: رقم الطالب أو الاسم */
+  var query   = nameStr.trim();
+  var queryNum = parseInt(query, 10);
+  var matched = students.filter(function(s, si) {
+    /* بحث بالرقم */
+    if(!isNaN(queryNum) && queryNum > 0 && (si+1) === queryNum) return true;
+    /* بحث بالاسم */
+    return s.name && s.name.indexOf(query) >= 0;
   });
 
-  var box = document.getElementById('npStatusBox');
-
-  if(matched.length === 0) {
-    WKS.npStatus = '❌ لم يُعثر على: ' + nameStr;
-    if(box) { box.style.display='flex'; box.className='np2-status-box np2-status-err'; box.innerHTML='<span>'+esc(WKS.npStatus)+'</span>'; }
-    return;
+  function _applyGradeToStudent(st, stuIdx) {
+    WKS.numpadStudent    = st;
+    WKS.numpadStudentIdx = stuIdx;
+    WKS._npCandidates    = null;
+    if(gradeStr !== null) {
+      var val = clamp(Number(gradeStr), 0, maxVal);
+      gradesSetField(stuIdx, curField, val);
+      WKS.npStatus     = '✅ ' + st.name + ' — ' + val + '/' + maxVal;
+      WKS.npStatusType = 'ok';
+      if(ta) ta.value = '';
+      WKS.npTextInput = '';
+      WKS._npDirectMode = false;
+      WKS.numpadInput   = '';
+    } else {
+      WKS.npStatus     = '👤 ' + st.name + ' — أدخل الدرجة بلوحة الأرقام';
+      WKS.npStatusType = 'info';
+      if(ta) ta.value = '';
+      WKS.npTextInput  = '';
+      WKS._npDirectMode = true;
+      WKS.numpadInput   = '';
+    }
+    renderWeekly();
   }
 
-  if(matched.length > 1) {
-    /* عدة نتائج — أظهر قائمة اختيار */
-    WKS.npStatus = '⚠️ ' + matched.length + ' نتائج — حدد أكثر';
-    if(box) { box.style.display='flex'; box.className='np2-status-box np2-status-warn'; box.innerHTML='<span>'+esc(WKS.npStatus)+'</span>'; }
-    /* اعرض الطلاب المطابقين في البطاقة */
-    WKS._npCandidates = matched;
+  if(matched.length === 0) {
+    WKS.npStatus     = '❌ لم يُعثر على: ' + nameStr;
+    WKS.npStatusType = 'err';
     renderWeekly();
     return;
   }
 
-  /* مطابقة واحدة */
-  var st = matched[0];
-  var stuIdx = students.indexOf(st);
-  WKS.numpadStudent = st;
-  WKS.numpadStudentIdx = stuIdx;
-  WKS._npCandidates = null;
-
-  if(gradeStr !== null) {
-    var val = clamp(Number(gradeStr), 0, maxVal);
-    gradesSetField(stuIdx, curField, val);
-    WKS.npStatus = '✅ ' + st.name + ' — ' + val + '/' + maxVal;
-    if(box) { box.style.display='flex'; box.className='np2-status-box np2-status-ok'; box.innerHTML='<span>'+esc(WKS.npStatus)+'</span>'; }
-    /* مسح الإدخال بعد النجاح */
-    if(ta) ta.value = '';
-    WKS.npTextInput = '';
-  } else {
-    /* اسم فقط — أظهر البطاقة للإدخال بلوحة الأرقام */
-    WKS.npStatus = '👤 ' + st.name + ' — أدخل الدرجة';
-    if(box) { box.style.display='flex'; box.className='np2-status-box np2-status-info'; box.innerHTML='<span>'+esc(WKS.npStatus)+'</span>'; }
-    if(ta) ta.value = '';
-    WKS.npTextInput = '';
-    /* لوحة الأرقام تكتب مباشرة على حقل الطالب الآن */
-    WKS._npDirectMode = true;
+  if(matched.length === 1) {
+    _applyGradeToStudent(matched[0], students.indexOf(matched[0]));
+    return;
   }
 
-  renderWeekly();
+  /* عدة نتائج — قائمة منبثقة */
+  _npShowPopup(matched, students, function(st) {
+    _applyGradeToStudent(st, students.indexOf(st));
+  });
 }
+
+function _npShowPopup(candidates, allStudents, onPick) {
+  /* احذف أي popup قديم */
+  var old = document.getElementById('npPopup');
+  if(old) old.parentNode.removeChild(old);
+
+  var ta = document.getElementById('npDictInput');
+  var wrap = ta ? ta.closest('.np2-wrap') : null;
+
+  var pop = document.createElement('div');
+  pop.id = 'npPopup';
+  pop.className = 'np2-popup';
+
+  var inner = '<div class="np2-popup-hdr">';
+  inner += '<span>🔍 اختر الطالب</span>';
+  inner += '<button onclick="document.getElementById(\'npPopup\').remove()" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;line-height:1;">✕</button>';
+  inner += '</div>';
+  inner += '<div class="np2-popup-list">';
+  candidates.forEach(function(st) {
+    var idx = allStudents.indexOf(st);
+    var photo = st.photo || '';
+    inner += '<div class="np2-popup-row" onclick="_npPopupPick(\''+esc(st.id)+'\')">';
+    inner += '<span class="np2-rnum">'+(idx+1)+'</span>';
+    if(photo) inner += '<img class="np2-rphoto" src="'+photo+'">';
+    else inner += '<div class="np2-rphoto np2-rphoto-ph">'+(idx+1)+'</div>';
+    inner += '<span class="np2-rname">'+esc(st.name)+'</span>';
+    inner += '</div>';
+  });
+  inner += '</div>';
+  pop.innerHTML = inner;
+
+  /* حفظ المرشحين ودالة الاختيار للوصول من npPopupPick */
+  window._npPopupCandidates = candidates;
+  window._npPopupOnPick     = onPick;
+
+  /* أضفه داخل np2-wrap ليكون فوق كل شيء */
+  if(wrap) wrap.appendChild(pop);
+  else document.body.appendChild(pop);
+}
+
+function _npPopupPick(id) {
+  var pop = document.getElementById('npPopup');
+  if(pop) pop.remove();
+  var cls = WKS.activeClass;
+  var st = (window._npPopupCandidates||[]).find(function(s){ return String(s.id)===String(id); });
+  if(!st) st = (DB.data[cls]||[]).find(function(s){ return String(s.id)===String(id); });
+  if(!st) return;
+  if(window._npPopupOnPick) window._npPopupOnPick(st);
+}
+
+
 
 /* ── عند تحديد طالب مباشرة والضغط على رقم — يكتب على حقله ── */
 function _npPress(n) {

@@ -1998,15 +1998,18 @@ tr.hl-abs td{background:#fff7ed!important;}
   flex-direction: column;
   gap: 6px;
 }
-
-.np2-ftabs-top {
-  margin-bottom: 0;
-}
+.np2-ftabs-top { margin-bottom: 0; }
 
 .np2-input-row {
   display: flex;
   gap: 8px;
   align-items: stretch;
+}
+.np2-input-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
 .np2-dict-inp {
@@ -2032,14 +2035,29 @@ tr.hl-abs td{background:#fff7ed!important;}
   color: white;
   font-size: 20px;
   font-weight: 900;
-  padding: 0 18px;
+  padding: 0 14px;
   border-radius: 10px;
   cursor: pointer;
-  flex-shrink: 0;
+  flex: 1;
   transition: background .15s;
   font-family: 'Cairo', sans-serif;
+  min-height: 40px;
 }
 .np2-enter-btn:active { background: #1e40af; }
+
+.np2-mic-btn {
+  background: rgba(99,102,241,.15);
+  border: 1.5px solid #4f46e5;
+  color: #a5b4fc;
+  font-size: 15px;
+  padding: 0 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  flex: 1;
+  transition: background .15s;
+  min-height: 38px;
+}
+.np2-mic-btn:active { background: rgba(99,102,241,.4); }
 
 .np2-status-box {
   display: flex;
@@ -2056,13 +2074,50 @@ tr.hl-abs td{background:#fff7ed!important;}
 .np2-status-warn { background: rgba(245,158,11,.15); border: 1px solid #d97706; color: #fcd34d; }
 .np2-status-info { background: rgba(59,130,246,.15); border: 1px solid #2563eb; color: #93c5fd; }
 
-.np2-results-full {
-  width: 100%;
-  max-height: unset;
-  flex: 1;
-  overflow-y: auto;
+/* القائمة المنبثقة عند تعدد النتائج */
+.np2-popup {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  background: var(--bg1);
+  border-bottom: 2px solid #3b82f6;
+  z-index: 99;
+  border-radius: 0 0 14px 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6);
+  max-height: 56%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: npPopIn .15s ease;
 }
+@keyframes npPopIn {
+  from { opacity:0; transform:translateY(-8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+.np2-popup-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 900;
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+.np2-popup-list { overflow-y: auto; flex: 1; }
+.np2-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  transition: background .1s;
+}
+.np2-popup-row:active { background: rgba(59,130,246,.25); }
 
+.np2-results-full { width:100%; max-height:unset; flex:1; overflow-y:auto; }
 
 
 /* الدرجات الثلاث الظاهرة */
