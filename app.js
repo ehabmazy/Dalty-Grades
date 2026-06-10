@@ -13819,30 +13819,19 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
 
   var h = '<div class="np2-wrap">';
 
-  /* ══ منطقة الإدخال — الأعلى ══ */
+  /* ══ منطقة الإدخال — الأعلى (textarea + mic + تأكيد فقط) ══ */
   h += '<div class="np2-top">';
   h += '<div class="np2-dictbar">';
-  /* تبويبات الحقل */
-  h += '<div class="np2-ftabs np2-ftabs-top">';
-  h += '<div class="np2-ftabs np2-ftabs-top" id="npFtabs">';
-  h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" id="npTabHw" onclick="_npSetField(\'hw\')">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
-  h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" id="npTabAssess" onclick="_npSetField(\'assess\')">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
-  h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" id="npTabBeh" onclick="_npSetField(\'beh\')">سلوك<span class="np2-ftab-max">/10</span></button>';
-  h += '</div>';
-  /* صف الإدخال: textarea + مايك + تأكيد */
   h += '<div class="np2-input-row">';
-  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="2"';
-  h += ' placeholder="اكتب اسم الطالب أو رقمه والدرجة&#10;مثال: محمد 15  أو  5 15"';
+  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
+  h += ' placeholder="اسم الطالب أو رقمه + الدرجة — مثال: محمد 15  أو  5 15"';
   h += ' inputmode="none"';
   h += ' oninput="WKS.npTextInput=this.value;">';
   h += esc(WKS.npTextInput||'');
   h += '</textarea>';
-  h += '<div class="np2-input-btns">';
-  h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي">🎤</button>';
-  h += '<button class="np2-enter-btn" onclick="_npSubmit()" title="إدخال">✓</button>';
+  h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
+  h += '<button class="np2-enter-btn" onclick="_npSubmit()" title="إدخال" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">✓</button>';
   h += '</div>';
-  h += '</div>';
-  /* صندوق الحالة */
   if(WKS.npStatus) {
     var stCls = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
     h += '<div class="np2-status-box '+stCls+'"><span>'+esc(WKS.npStatus)+'</span></div>';
@@ -13850,11 +13839,11 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '</div>';
   h += '</div>'; /* np2-top */
 
-  /* ══ بطاقة الطالب — المنتصف ══ */
+  /* ══ المنتصف: بطاقة الطالب + أزرار الحقل ══ */
   h += '<div class="np2-middle">';
 
-  /* قائمة المرشحين عند تعدد النتائج */
   if(WKS._npCandidates && WKS._npCandidates.length) {
+    /* قائمة المرشحين */
     h += '<div class="np2-results np2-results-full">';
     WKS._npCandidates.forEach(function(st) {
       var stuIdx = (DB.data[cls]||[]).indexOf(st);
@@ -13869,33 +13858,42 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
       h += '</div>';
     });
     h += '</div>';
-  } else if(s) {
-    var photo = s.photo || '';
-    var abs0 = getAbsenceState(cls, s.id, week, 0);
-    var abs1 = getAbsenceState(cls, s.id, week, 1);
-    var assessVal = s[aF]!==undefined&&s[aF]!==''?s[aF]:'—';
-    var hwVal     = s[hF]!==undefined&&s[hF]!==''?s[hF]:'—';
-    var behVal    = s['bw'+week]!==undefined&&s['bw'+week]!==''?s['bw'+week]:'—';
-
-    h += '<div class="np2-card">';
-    if(photo) h += '<img class="np2-card-photo" src="'+photo+'">';
-    else       h += '<div class="np2-card-photo np2-card-photo-ph">'+(WKS.numpadStudentIdx+1)+'</div>';
-    h += '<div class="np2-card-body">';
-    h += '<div class="np2-card-name">'+esc(s.name)+'</div>';
-    /* الدرجات الثلاثة */
-    h += '<div class="np2-all-grades">';
-    h += '<div class="np2-grade-cell'+(fld==='assess'?' active':'')+'"><span class="np2-grade-lbl">تقييم</span><span class="np2-grade-val" id="npGradeAssess">'+esc(String(assessVal))+'</span><span class="np2-grade-max">/'+assessMax+'</span></div>';
-    h += '<div class="np2-grade-cell'+(fld==='hw'?' active':'')+'"><span class="np2-grade-lbl">واجب</span><span class="np2-grade-val" id="npGradeHw">'+esc(String(hwVal))+'</span><span class="np2-grade-max">/'+hwMax+'</span></div>';
-    h += '<div class="np2-grade-cell'+(fld==='beh'?' active':'')+'"><span class="np2-grade-lbl">سلوك</span><span class="np2-grade-val" id="npGradeBeh">'+esc(String(behVal))+'</span><span class="np2-grade-max">/10</span></div>';
-    h += '</div>';
-    /* أزرار الغياب */
-    h += '<div class="np2-abs-row">';
-    if(absCols.length>0) h += '<button class="np2-abs-btn'+(abs0==='abs'?' on':abs0==='sick'?' sick':'')+'" onclick="_npToggleAbs(0)">'+(abs0==='abs'?'✓ غياب ف1':abs0==='sick'?'✓ مريض ف1':'غياب ف1')+'</button>';
-    if(absCols.length>1) h += '<button class="np2-abs-btn'+(abs1==='abs'?' on':abs1==='sick'?' sick':'')+'" onclick="_npToggleAbs(1)">'+(abs1==='abs'?'✓ غياب ف2':abs1==='sick'?'✓ مريض ف2':'غياب ف2')+'</button>';
-    h += '</div>';
-    h += '</div></div>'; /* np2-card-body, np2-card */
   } else {
-    h += '<div class="np2-empty">✍️ أدخل اسم الطالب أعلاه</div>';
+    /* بطاقة الطالب */
+    h += '<div class="np2-middle-content">';
+    if(s) {
+      var photo = s.photo || '';
+      var abs0 = getAbsenceState(cls, s.id, week, 0);
+      var abs1 = getAbsenceState(cls, s.id, week, 1);
+      var assessVal = s[aF]!==undefined&&s[aF]!==''?s[aF]:'—';
+      var hwVal     = s[hF]!==undefined&&s[hF]!==''?s[hF]:'—';
+      var behVal    = s['bw'+week]!==undefined&&s['bw'+week]!==''?s['bw'+week]:'—';
+
+      h += '<div class="np2-card">';
+      if(photo) h += '<img class="np2-card-photo" src="'+photo+'">';
+      else       h += '<div class="np2-card-photo np2-card-photo-ph">'+(WKS.numpadStudentIdx+1)+'</div>';
+      h += '<div class="np2-card-body">';
+      h += '<div class="np2-card-name">'+esc(s.name)+'</div>';
+      h += '<div class="np2-all-grades">';
+      h += '<div class="np2-grade-cell'+(fld==='hw'?' active':'')+'"><span class="np2-grade-lbl">واجب</span><span class="np2-grade-val" id="npGradeHw">'+esc(String(hwVal))+'</span><span class="np2-grade-max">/'+hwMax+'</span></div>';
+      h += '<div class="np2-grade-cell'+(fld==='assess'?' active':'')+'"><span class="np2-grade-lbl">تقييم</span><span class="np2-grade-val" id="npGradeAssess">'+esc(String(assessVal))+'</span><span class="np2-grade-max">/'+assessMax+'</span></div>';
+      h += '<div class="np2-grade-cell'+(fld==='beh'?' active':'')+'"><span class="np2-grade-lbl">سلوك</span><span class="np2-grade-val" id="npGradeBeh">'+esc(String(behVal))+'</span><span class="np2-grade-max">/10</span></div>';
+      h += '</div>';
+      h += '<div class="np2-abs-row">';
+      if(absCols.length>0) h += '<button class="np2-abs-btn'+(abs0==='abs'?' on':abs0==='sick'?' sick':'')+'" onclick="_npToggleAbs(0)" style="touch-action:manipulation;">'+(abs0==='abs'?'✓ غياب ف1':abs0==='sick'?'✓ مريض ف1':'غياب ف1')+'</button>';
+      if(absCols.length>1) h += '<button class="np2-abs-btn'+(abs1==='abs'?' on':abs1==='sick'?' sick':'')+'" onclick="_npToggleAbs(1)" style="touch-action:manipulation;">'+(abs1==='abs'?'✓ غياب ف2':abs1==='sick'?'✓ مريض ف2':'غياب ف2')+'</button>';
+      h += '</div>';
+      h += '</div></div>'; /* np2-card-body, np2-card */
+    } else {
+      h += '<div class="np2-empty">✍️ أدخل اسم الطالب أعلاه</div>';
+    }
+    /* ══ أزرار الحقل: واجب | تقييم | سلوك — تحت البطاقة ══ */
+    h += '<div class="np2-ftabs np2-field-tabs" id="npFtabs">';
+    h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" id="npTabHw" onclick="_npSetField(\'hw\')" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
+    h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" id="npTabAssess" onclick="_npSetField(\'assess\')" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
+    h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" id="npTabBeh" onclick="_npSetField(\'beh\')" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">سلوك<span class="np2-ftab-max">/10</span></button>';
+    h += '</div>';
+    h += '</div>'; /* np2-middle-content */
   }
   h += '</div>'; /* np2-middle */
 
@@ -14007,24 +14005,22 @@ function _npToggleAbs(colIndex) {
   renderWeekly();
 }
 
-/* تبديل الحقل مع تحديث فوري للـ UI بدون re-render */
+/* تبديل الحقل — تحديث فوري للـ UI بدون re-render كامل */
 function _npSetField(fld) {
   WKS.numpadField = fld;
-  /* تحديث active class فوراً */
-  var tabs = ['hw','assess','beh'];
-  tabs.forEach(function(t) {
-    var btn = document.getElementById('npTab' + t.charAt(0).toUpperCase() + t.slice(1));
-    if(btn) {
-      btn.className = 'np2-ftab' + (fld === t ? ' on' : '');
-    }
+  /* active على أزرار التبويب */
+  ['hw','assess','beh'].forEach(function(t) {
+    var id = 'npTab' + t.charAt(0).toUpperCase() + t.slice(1);
+    var btn = document.getElementById(id);
+    if(btn) btn.className = 'np2-ftab' + (fld===t?' on':'');
   });
-  /* تحديث active على خلايا الدرجات */
-  var cells = {assess:'npGradeAssess', hw:'npGradeHw', beh:'npGradeBeh'};
-  Object.keys(cells).forEach(function(k) {
-    var el = document.getElementById(cells[k]);
+  /* active على خلايا الدرجات */
+  var map = {assess:'npGradeAssess', hw:'npGradeHw', beh:'npGradeBeh'};
+  Object.keys(map).forEach(function(k) {
+    var el = document.getElementById(map[k]);
     if(el) {
       var cell = el.closest ? el.closest('.np2-grade-cell') : null;
-      if(cell) cell.className = 'np2-grade-cell' + (fld === k ? ' active' : '');
+      if(cell) cell.className = 'np2-grade-cell' + (fld===k?' active':'');
     }
   });
   _npRefreshDisplay();

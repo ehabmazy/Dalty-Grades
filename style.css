@@ -1761,19 +1761,16 @@ tr.hl-abs td{background:#fff7ed!important;}
   display: flex;
   flex-direction: column;
   height: calc(100vh - 130px);
-  background: #0a1628 !important;
-  background-image: radial-gradient(ellipse at 20% 0%, rgba(30,58,95,.6) 0%, transparent 60%),
-                    radial-gradient(ellipse at 80% 100%, rgba(15,40,70,.5) 0%, transparent 55%) !important;
+  background: #0b1829 !important;
   position: relative;
   overflow: hidden;
-  isolation: isolate;
 }
 
 /* ── الأعلى: بحث + نتائج ── */
 .np2-top {
   flex-shrink: 0;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
+  background: #0d1e38;
+  border-bottom: 1px solid rgba(59,130,246,.2);
   z-index: 2;
 }
 
@@ -1837,10 +1834,20 @@ tr.hl-abs td{background:#fff7ed!important;}
 .np2-middle {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   overflow: hidden;
+  padding: 0;
+}
+.np2-middle-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   padding: 10px 14px;
+  width: 100%;
+  max-width: 480px;
 }
 
 .np2-empty {
@@ -1899,22 +1906,34 @@ tr.hl-abs td{background:#fff7ed!important;}
   border-radius: 8px;
   padding: 3px;
 }
+.np2-field-tabs {
+  width: 100%;
+  max-width: 480px;
+  background: rgba(15,30,56,.8);
+  border: 1px solid rgba(59,130,246,.2);
+  border-radius: 10px;
+  padding: 4px;
+}
 .np2-ftab {
   flex: 1;
   background: none;
   border: none;
   color: #94a3b8;
   font-family: 'Cairo', sans-serif;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
-  padding: 5px 4px;
-  border-radius: 6px;
+  padding: 10px 6px;
+  border-radius: 7px;
   cursor: pointer;
-  transition: all .15s;
+  transition: background .15s, color .15s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 3px;
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 .np2-ftab.on { background: #3b82f6; color: #fff; }
 .np2-ftab-max { font-size: 9px; opacity: .8; }
@@ -1955,12 +1974,12 @@ tr.hl-abs td{background:#fff7ed!important;}
 /* ── الأسفل: لوحة المفاتيح مثبتة ── */
 .np2-keyboard {
   flex-shrink: 0;
-  background: var(--bg2);
-  border-top: 1px solid var(--border);
-  padding: 8px 12px;
+  background: #0d1e38 !important;
+  border-top: 1px solid rgba(59,130,246,.25) !important;
+  padding: 7px 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .np2-kb-row {
@@ -1996,23 +2015,17 @@ tr.hl-abs td{background:#fff7ed!important;}
 
 /* منطقة الإدخال النصي (مثل الإملاء) */
 .np2-dictbar {
-  padding: 8px 12px;
+  padding: 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .np2-ftabs-top { margin-bottom: 0; }
 
 .np2-input-row {
   display: flex;
-  gap: 8px;
-  align-items: stretch;
-}
-.np2-input-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  flex-shrink: 0;
+  gap: 6px;
+  align-items: center;
 }
 
 .np2-dict-inp {
@@ -2036,15 +2049,18 @@ tr.hl-abs td{background:#fff7ed!important;}
   background: #1d4ed8;
   border: none;
   color: white;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 900;
   padding: 0 14px;
   border-radius: 10px;
   cursor: pointer;
-  flex: 1;
+  flex-shrink: 0;
   transition: background .15s;
   font-family: 'Cairo', sans-serif;
   min-height: 40px;
+  min-width: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .np2-enter-btn:active { background: #1e40af; }
 
@@ -2052,13 +2068,16 @@ tr.hl-abs td{background:#fff7ed!important;}
   background: rgba(99,102,241,.15);
   border: 1.5px solid #4f46e5;
   color: #a5b4fc;
-  font-size: 15px;
-  padding: 0 12px;
+  font-size: 18px;
+  padding: 0 10px;
   border-radius: 10px;
   cursor: pointer;
-  flex: 1;
+  flex-shrink: 0;
   transition: background .15s;
-  min-height: 38px;
+  min-height: 40px;
+  min-width: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .np2-mic-btn:active { background: rgba(99,102,241,.4); }
 
@@ -2152,26 +2171,3 @@ tr.hl-abs td{background:#fff7ed!important;}
 
 
 
-
-/* ══ numpad mode: ضمان خلفية صلبة ══ */
-.weekly-page .np2-wrap {
-  background: #0a1628 !important;
-  min-height: 100%;
-}
-.np2-keyboard {
-  background: #0d1e38 !important;
-  border-top: 1px solid rgba(59,130,246,.25) !important;
-}
-.np2-top {
-  background: #0d1e38 !important;
-  border-bottom: 1px solid rgba(59,130,246,.2) !important;
-}
-
-/* ══ تحسين استجابة اللمس ══ */
-.np2-ftab { touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; }
-.np2-key  { touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; }
-.np2-abs-btn, .np2-enter-btn, .np2-mic-btn {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
