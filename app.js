@@ -5403,6 +5403,46 @@ function renderSettings(){
   html+='</div>';
   html+='</div></div></div>';
 
+  // ── إملاء بدون نت ──
+  html+='<div class="settings-section">';
+  html+='<div class="settings-section-hdr" style="background:#0f3d2e;display:flex;align-items:center;justify-content:space-between;">🎤 نموذج الإملاء المحلي (بدون نت)<span style="font-size:9px;font-weight:400;opacity:.75;">~40MB — يُحمَّل مرة واحدة فقط</span></div>';
+  html+='<div class="settings-section-body">';
+  html+='<div class="settings-row" style="flex-direction:column;gap:12px;">';
+  /* حالة النموذج */
+  html+='<div id="whisperSettingsStatus" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
+  var wStatus = (typeof _npWhisperReady !== "undefined" && _npWhisperReady)
+    ? '<span style="background:#14532d;color:#86efac;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;">✅ محمّل وجاهز</span>'
+    : (typeof _npWhisperLoading !== "undefined" && _npWhisperLoading)
+      ? '<span style="background:#1e3a5f;color:#93c5fd;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;">⏳ جارٍ التحميل...</span>'
+      : '<span style="background:#3b1f1f;color:#fca5a5;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;">⬇ غير محمّل</span>';
+  html += wStatus;
+  html+='</div>';
+  /* شريط التقدم */
+  html+='<div id="whisperProgressWrap" style="display:none;flex-direction:column;gap:6px;">';
+  html+='<div style="display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;">';
+  html+='<span id="whisperProgressLabel">جارٍ التحميل...</span>';
+  html+='<span id="whisperProgressPct">0%</span>';
+  html+='</div>';
+  html+='<div style="background:#1e293b;border-radius:8px;height:10px;overflow:hidden;">';
+  html+='<div id="whisperProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#059669,#34d399);border-radius:8px;transition:width .3s ease;"></div>';
+  html+='</div>';
+  html+='</div>';
+  /* وصف */
+  html+='<div style="font-size:9px;color:#64748b;line-height:1.7;">';
+  html+='بعد التحميل، يعمل الإملاء الصوتي <b>بالكامل بدون إنترنت</b> باستخدام نموذج Whisper المحلي.<br>';
+  html+='النموذج يُخزَّن في المتصفح ولا يُعاد تحميله في كل مرة.';
+  html+='</div>';
+  /* زر التحميل */
+  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">';
+  html+='<button id="whisperDownloadBtn" class="btn btn-sm" ';
+  html+='style="background:#059669;color:white;font-weight:700;padding:7px 18px;border-radius:8px;border:none;cursor:pointer;font-size:10px;" ';
+  html+='onclick="settingsDownloadWhisper()">⬇ تحميل النموذج الآن</button>';
+  html+='<button class="btn btn-sm" ';
+  html+='style="background:#1e293b;color:#94a3b8;padding:7px 14px;border-radius:8px;border:1px solid #334155;cursor:pointer;font-size:10px;" ';
+  html+='onclick="settingsCheckWhisperCache()">🔍 فحص الكاش</button>';
+  html+='</div>';
+  html+='</div></div></div>';
+
   // ── بيانات ──
   html+='<div class="settings-section">';
   html+='<div class="settings-section-hdr" style="background:#5c1a1a;">⚠️ إدارة البيانات</div>';
@@ -6529,6 +6569,152 @@ function customToneDelete(id){
 
 function customTonePreview(id){
   _playNotifSound(id);
+}
+
+/* ══════════════════════════════════════════
+   دوال تحميل نموذج Whisper من صفحة الإعدادات
+   ══════════════════════════════════════════ */
+
+function _whisperSettingsUI(state, pct, label) {
+  /* تحديث حالة الزر وشريط التقدم */
+  var btn  = document.getElementById('whisperDownloadBtn');
+  var wrap = document.getElementById('whisperProgressWrap');
+  var bar  = document.getElementById('whisperProgressBar');
+  var pctEl= document.getElementById('whisperProgressPct');
+  var lblEl= document.getElementById('whisperProgressLabel');
+  var sts  = document.getElementById('whisperSettingsStatus');
+
+  if(state === 'loading') {
+    if(wrap)  { wrap.style.display = 'flex'; }
+    if(bar)   { bar.style.width = (pct||0) + '%'; }
+    if(pctEl) { pctEl.textContent = (pct||0) + '%'; }
+    if(lblEl) { lblEl.textContent = label || 'جارٍ التحميل...'; }
+    if(btn)   { btn.disabled = true; btn.textContent = '⏳ جارٍ التحميل...'; btn.style.background = '#1e3a5f'; }
+    if(sts)   { sts.innerHTML = '<span style="background:#1e3a5f;color:#93c5fd;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;">⏳ جارٍ التحميل...</span>'; }
+  } else if(state === 'ready') {
+    if(wrap)  { wrap.style.display = 'none'; }
+    if(btn)   { btn.disabled = true; btn.textContent = '✅ محمّل بالفعل'; btn.style.background = '#14532d'; }
+    if(sts)   { sts.innerHTML = '<span style="background:#14532d;color:#86efac;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;">✅ محمّل وجاهز</span>'; }
+  } else if(state === 'error') {
+    if(wrap)  { wrap.style.display = 'none'; }
+    if(btn)   { btn.disabled = false; btn.textContent = '↺ إعادة المحاولة'; btn.style.background = '#7f1d1d'; }
+    if(sts)   { sts.innerHTML = '<span style="background:#7f1d1d;color:#fca5a5;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;">❌ فشل التحميل</span>'; }
+  } else {
+    if(wrap)  { wrap.style.display = 'none'; }
+    if(btn)   { btn.disabled = false; btn.textContent = '⬇ تحميل النموذج الآن'; btn.style.background = '#059669'; }
+  }
+}
+
+async function settingsDownloadWhisper() {
+  /* لو محمّل مسبقاً */
+  if(typeof _npWhisperReady !== 'undefined' && _npWhisperReady) {
+    _whisperSettingsUI('ready');
+    showSnack('✅ النموذج محمّل بالفعل وجاهز للاستخدام');
+    return;
+  }
+
+  /* لو مفيش نت */
+  if(!navigator.onLine) {
+    showSnack('📶 شغّل النت لتحميل النموذج (مرة واحدة فقط ~40MB)');
+    _whisperSettingsUI('error');
+    return;
+  }
+
+  _whisperSettingsUI('loading', 0, 'تحميل مكتبة الذكاء الاصطناعي...');
+
+  try {
+    /* الخطوة 1: تحميل transformers.js */
+    if(!window._transformersReady) {
+      await new Promise(function(resolve, reject) {
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.textContent = [
+          'import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";',
+          'env.allowLocalModels = false;',
+          'env.useBrowserCache = true;',
+          'window._transformersPipeline = pipeline;',
+          'window._transformersReady = true;',
+          'window.dispatchEvent(new Event("transformers-ready"));'
+        ].join('\n');
+        document.head.appendChild(s);
+        var t = setTimeout(function(){ reject(new Error('timeout')); }, 20000);
+        window.addEventListener('transformers-ready', function() {
+          clearTimeout(t); resolve();
+        }, { once: true });
+      });
+    }
+
+    _whisperSettingsUI('loading', 5, 'تحميل نموذج Whisper (~40MB)...');
+
+    /* الخطوة 2: تحميل النموذج مع تتبع التقدم */
+    _npWhisperPipe = await window._transformersPipeline(
+      'automatic-speech-recognition',
+      'Xenova/whisper-small',
+      {
+        progress_callback: function(p) {
+          if(p.status === 'progress' && p.total) {
+            var pct = Math.round((p.loaded / p.total) * 100);
+            _whisperSettingsUI('loading', pct, 'تحميل النموذج: ' + pct + '%');
+            /* تحديث WKS.npStatus لو الصفحة الأسبوعي مفتوحة */
+            if(typeof WKS !== 'undefined') {
+              WKS.npStatus = 'تحميل النموذج: ' + pct + '%';
+              WKS.npStatusType = 'info';
+              if(typeof _npRenderStatus === 'function') _npRenderStatus();
+            }
+          } else if(p.status === 'done') {
+            _whisperSettingsUI('loading', 100, 'اكتمل التحميل ✅');
+          }
+        }
+      }
+    );
+
+    /* نجح التحميل */
+    if(typeof _npWhisperReady !== 'undefined') _npWhisperReady = true;
+    if(typeof _npWhisperLoading !== 'undefined') _npWhisperLoading = false;
+    _whisperSettingsUI('ready');
+    showSnack('✅ تم تحميل نموذج الإملاء! يعمل الآن بدون إنترنت');
+
+    if(typeof WKS !== 'undefined') {
+      WKS.npStatus = '✅ النموذج جاهز — اضغط 🎤 للإملاء';
+      WKS.npStatusType = 'ok';
+      if(typeof _npRenderStatus === 'function') _npRenderStatus();
+    }
+
+  } catch(err) {
+    if(typeof _npWhisperLoading !== 'undefined') _npWhisperLoading = false;
+    _whisperSettingsUI('error');
+    var msg = !navigator.onLine ? '📶 انقطع النت أثناء التحميل' : ('❌ فشل: ' + (err.message||''));
+    showSnack(msg);
+  }
+}
+
+async function settingsCheckWhisperCache() {
+  /* فحص هل النموذج موجود في الكاش */
+  if(typeof _npWhisperReady !== 'undefined' && _npWhisperReady) {
+    showSnack('✅ النموذج محمّل في الذاكرة وجاهز');
+    _whisperSettingsUI('ready');
+    return;
+  }
+  try {
+    var found = false;
+    var keys = await caches.keys();
+    for(var k of keys) {
+      var c = await caches.open(k);
+      var reqs = await c.keys();
+      if(reqs.some(function(r){ return r.url && r.url.indexOf('whisper') >= 0; })) {
+        found = true; break;
+      }
+    }
+    if(found) {
+      showSnack('📦 النموذج موجود في كاش المتصفح — سيعمل بدون نت');
+      var sts = document.getElementById('whisperSettingsStatus');
+      if(sts) sts.innerHTML = '<span style="background:#1a3a6e;color:#93c5fd;padding:3px 12px;border-radius:20px;font-size:10px;font-weight:700;">📦 في الكاش (يحتاج تهيئة)</span>';
+    } else {
+      showSnack('⬇ النموذج غير موجود — اضغط "تحميل" لتحميله');
+    }
+  } catch(e) {
+    showSnack('⚠️ تعذّر فحص الكاش: ' + (e.message||''));
+  }
 }
 
 function customToneSetDefault(id){
