@@ -14074,17 +14074,43 @@ var _npAudioChunks   = [];
 /* ── تحميل Whisper (مرة واحدة فقط، يُخزَّن في Cache API) ── */
 async function _npLoadWhisper() {
   if(_npWhisperReady || _npWhisperLoading) return;
-  _npWhisperLoading = true;
 
   var btn = document.getElementById('npMicBtn');
+
+  /* ── فحص: هل النموذج محمّل مسبقاً في الكاش؟ ── */
+  var cachedOk = false;
+  try {
+    var cacheKeys = await caches.keys();
+    for(var ck of cacheKeys) {
+      var c = await caches.open(ck);
+      var reqs = await c.keys();
+      if(reqs.some(function(r){ return r.url && r.url.indexOf('whisper') >= 0; })) {
+        cachedOk = true; break;
+      }
+    }
+  } catch(e) { /* Cache API غير متاحة — نكمل */ }
+
+  /* ── لو مفيش نت ومش محمّل في الكاش → رسالة واضحة بدل الفشل ── */
+  if(!navigator.onLine && !cachedOk && !window._transformersReady) {
+    WKS.npStatus = '📶 النموذج المحلي يحتاج نت للتحميل أول مرة (~40MB) — شغّل النت ثم اضغط 🎤 مجدداً';
+    WKS.npStatusType = 'warn';
+    _npRenderStatus();
+    if(btn) { btn.textContent = '🎤'; btn.title = 'إملاء صوتي'; }
+    showSnack('📶 شغّل النت لتحميل نموذج الإملاء المحلي (مرة واحدة فقط)');
+    return;
+  }
+
+  _npWhisperLoading = true;
   if(btn) { btn.textContent = '⏳'; btn.title = 'جارٍ تحميل نموذج الإملاء...'; }
-  WKS.npStatus = 'جارٍ تحميل نموذج الإملاء المحلي (~40MB)...';
+  WKS.npStatus = cachedOk
+    ? 'جارٍ تهيئة النموذج من الكاش...'
+    : 'جارٍ تحميل نموذج الإملاء المحلي (~40MB)...';
   WKS.npStatusType = 'info';
   _npRenderStatus();
 
   try {
     /* تحميل transformers.js من CDN (يُخزَّن تلقائياً في Cache) */
-    if(!window._transformers) {
+    if(!window._transformersReady) {
       await new Promise(function(resolve, reject) {
         var s = document.createElement('script');
         s.type = 'module';
@@ -14097,7 +14123,7 @@ async function _npLoadWhisper() {
           'window.dispatchEvent(new Event("transformers-ready"));'
         ].join('\n');
         document.head.appendChild(s);
-        var t = setTimeout(function(){ reject(new Error('timeout')); }, 10000);
+        var t = setTimeout(function(){ reject(new Error('timeout — تحقق من اتصال النت')); }, 15000);
         window.addEventListener('transformers-ready', function() {
           clearTimeout(t); resolve();
         }, { once: true });
@@ -14132,8 +14158,14 @@ async function _npLoadWhisper() {
 
   } catch(err) {
     _npWhisperLoading = false;
-    WKS.npStatus = '❌ فشل تحميل النموذج: ' + (err.message||'');
-    WKS.npStatusType = 'err';
+    var errMsg = err.message || '';
+    if(!navigator.onLine || errMsg.indexOf('timeout') >= 0 || errMsg.indexOf('fetch') >= 0) {
+      WKS.npStatus = '📶 فشل التحميل — النموذج يحتاج نت أول مرة. شغّل النت ثم اضغط 🎤';
+      WKS.npStatusType = 'warn';
+    } else {
+      WKS.npStatus = '❌ فشل تحميل النموذج: ' + errMsg;
+      WKS.npStatusType = 'err';
+    }
     _npRenderStatus();
     if(btn) { btn.textContent = '🎤'; btn.title = 'إملاء صوتي'; }
   }
@@ -14285,10 +14317,12 @@ function _npMicToggle() {
 
   } else {
     /* ══ وضع Offline: Whisper محلي ══ */
-    if(!_npWhisperReady) {
-      _npLoadWhisper();   /* تحميل النموذج — عند الانتهاء يظهر رسالة "اضغط مجدداً" */
-    } else {
+    if(_npWhisperReady) {
       _npWhisperRecord(); /* النموذج جاهز — سجّل مباشرة */
+    } else if(_npWhisperLoading) {
+      showSnack('⏳ النموذج لا يزال يُحمَّل، انتظر قليلاً...');
+    } else {
+      _npLoadWhisper();   /* سيفحص الكاش والنت ويعطي رسالة مناسبة */
     }
   }
 }
