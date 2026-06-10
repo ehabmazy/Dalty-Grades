@@ -13824,13 +13824,14 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '<div class="np2-dictbar">';
   /* تبويبات الحقل */
   h += '<div class="np2-ftabs np2-ftabs-top">';
-  h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" onclick="WKS.numpadField=\'assess\';_npRefreshDisplay();">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
-  h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" onclick="WKS.numpadField=\'hw\';_npRefreshDisplay();">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
-  h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" onclick="WKS.numpadField=\'beh\';_npRefreshDisplay();">سلوك<span class="np2-ftab-max">/10</span></button>';
+  h += '<div class="np2-ftabs np2-ftabs-top" id="npFtabs">';
+  h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" id="npTabHw" onclick="_npSetField(\'hw\')">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
+  h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" id="npTabAssess" onclick="_npSetField(\'assess\')">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
+  h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" id="npTabBeh" onclick="_npSetField(\'beh\')">سلوك<span class="np2-ftab-max">/10</span></button>';
   h += '</div>';
   /* صف الإدخال: textarea + مايك + تأكيد */
   h += '<div class="np2-input-row">';
-  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
+  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="2"';
   h += ' placeholder="اكتب اسم الطالب أو رقمه والدرجة&#10;مثال: محمد 15  أو  5 15"';
   h += ' inputmode="none"';
   h += ' oninput="WKS.npTextInput=this.value;">';
@@ -14004,6 +14005,29 @@ function _npToggleAbs(colIndex) {
   var st=(DB.data[cls]||[]).find(function(s){return s.id==WKS.numpadStudent.id;});
   if(st){ WKS.numpadStudent=st; WKS.numpadStudentIdx=(DB.data[cls]||[]).indexOf(st); }
   renderWeekly();
+}
+
+/* تبديل الحقل مع تحديث فوري للـ UI بدون re-render */
+function _npSetField(fld) {
+  WKS.numpadField = fld;
+  /* تحديث active class فوراً */
+  var tabs = ['hw','assess','beh'];
+  tabs.forEach(function(t) {
+    var btn = document.getElementById('npTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if(btn) {
+      btn.className = 'np2-ftab' + (fld === t ? ' on' : '');
+    }
+  });
+  /* تحديث active على خلايا الدرجات */
+  var cells = {assess:'npGradeAssess', hw:'npGradeHw', beh:'npGradeBeh'};
+  Object.keys(cells).forEach(function(k) {
+    var el = document.getElementById(cells[k]);
+    if(el) {
+      var cell = el.closest ? el.closest('.np2-grade-cell') : null;
+      if(cell) cell.className = 'np2-grade-cell' + (fld === k ? ' active' : '');
+    }
+  });
+  _npRefreshDisplay();
 }
 
 function _npRefreshDisplay() {
