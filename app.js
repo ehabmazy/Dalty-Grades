@@ -6622,8 +6622,17 @@ async function settingsDownloadWhisper() {
 
   _whisperSettingsUI('loading', 0, 'تحميل مكتبة الذكاء الاصطناعي...');
 
+  /* ── منع إطفاء الشاشة أثناء التحميل (Android) ── */
+  var _wakeLock = null;
   try {
-    /* الخطوة 1: تحميل transformers.js */
+    if(navigator.wakeLock) _wakeLock = await navigator.wakeLock.request('screen');
+  } catch(e) { /* غير مدعوم */ }
+  var _releaseWakeLock = function() {
+    if(_wakeLock) { try { _wakeLock.release(); } catch(e){} _wakeLock = null; }
+  };
+
+  try {
+    /* الخطوة 1: تحميل transformers.js — timeout مطوّل للموبايل */
     if(!window._transformersReady) {
       await new Promise(function(resolve, reject) {
         var s = document.createElement('script');
@@ -6637,25 +6646,30 @@ async function settingsDownloadWhisper() {
           'window.dispatchEvent(new Event("transformers-ready"));'
         ].join('\n');
         document.head.appendChild(s);
-        var t = setTimeout(function(){ reject(new Error('timeout')); }, 20000);
+        /* 90 ثانية للموبايل بدل 20 */
+        var t = setTimeout(function(){ reject(new Error('timeout — النت بطيء، حاول على واي فاي')); }, 90000);
         window.addEventListener('transformers-ready', function() {
           clearTimeout(t); resolve();
         }, { once: true });
       });
     }
 
-    _whisperSettingsUI('loading', 5, 'تحميل نموذج Whisper (~40MB)...');
+    /* ── اختيار النموذج حسب الجهاز ── */
+    var isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    /* tiny ~39MB أسرع على الموبايل، small ~244MB أدق على الكمبيوتر */
+    var modelId    = isMobile ? 'Xenova/whisper-tiny' : 'Xenova/whisper-small';
+    var modelLabel = isMobile ? '~39MB (موبايل)' : '~244MB (كمبيوتر)';
+    _whisperSettingsUI('loading', 3, 'تحميل نموذج Whisper ' + modelLabel + '...');
 
     /* الخطوة 2: تحميل النموذج مع تتبع التقدم */
     _npWhisperPipe = await window._transformersPipeline(
       'automatic-speech-recognition',
-      'Xenova/whisper-small',
+      modelId,
       {
         progress_callback: function(p) {
           if(p.status === 'progress' && p.total) {
             var pct = Math.round((p.loaded / p.total) * 100);
             _whisperSettingsUI('loading', pct, 'تحميل النموذج: ' + pct + '%');
-            /* تحديث WKS.npStatus لو الصفحة الأسبوعي مفتوحة */
             if(typeof WKS !== 'undefined') {
               WKS.npStatus = 'تحميل النموذج: ' + pct + '%';
               WKS.npStatusType = 'info';
@@ -6669,6 +6683,7 @@ async function settingsDownloadWhisper() {
     );
 
     /* نجح التحميل */
+    _releaseWakeLock();
     if(typeof _npWhisperReady !== 'undefined') _npWhisperReady = true;
     if(typeof _npWhisperLoading !== 'undefined') _npWhisperLoading = false;
     _whisperSettingsUI('ready');
@@ -6681,10 +6696,21 @@ async function settingsDownloadWhisper() {
     }
 
   } catch(err) {
+    _releaseWakeLock();
     if(typeof _npWhisperLoading !== 'undefined') _npWhisperLoading = false;
     _whisperSettingsUI('error');
-    var msg = !navigator.onLine ? '📶 انقطع النت أثناء التحميل' : ('❌ فشل: ' + (err.message||''));
-    showSnack(msg);
+    var errMsg = err.message || '';
+    var msg;
+    if(!navigator.onLine) {
+      msg = '📶 انقطع النت — أعد المحاولة';
+    } else if(errMsg.indexOf('timeout') >= 0) {
+      msg = '⏱ انتهت المهلة — جرّب على واي فاي أو أعد المحاولة';
+    } else if(errMsg.indexOf('memory') >= 0 || errMsg.indexOf('OOM') >= 0) {
+      msg = '💾 ذاكرة الجهاز غير كافية — أغلق تطبيقات وأعد المحاولة';
+    } else {
+      msg = '❌ فشل: ' + errMsg;
+    }
+    showSnack(msg, 5000);
   }
 }
 
