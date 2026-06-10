@@ -7030,7 +7030,9 @@ function _renderNotifPanelList(){
 document.addEventListener('click',function(e){
   var p=document.getElementById('notifPanel');
   var b=document.getElementById('notifBell');
-  if(p&&p.classList.contains('open')&&!p.contains(e.target)&&e.target!==b&&!b.contains(e.target)){
+  var b2=document.getElementById('subNotifBell');
+  var clickedBell=(b&&(e.target===b||b.contains(e.target)))||(b2&&(e.target===b2||b2.contains(e.target)));
+  if(p&&p.classList.contains('open')&&!p.contains(e.target)&&!clickedBell){
     p.classList.remove('open');
   }
 });
@@ -12632,8 +12634,8 @@ document.head.appendChild(st);
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
     setTimeout(function(){
-      navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(function(reg){ console.log('SW registered', reg.scope); })
+      navigator.serviceWorker.register('/grades-project/sw.js')
+        .then(function(reg){ console.log('SW registered'); })
         .catch(function(err){ console.log('SW error', err); });
     }, 1000);
   });
