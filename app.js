@@ -14059,37 +14059,239 @@ function _getNpMax(type, week) {
 }
 
 /* ── المايك الصوتي للإدخال ── */
-var _npMicRec = null;
-function _npMicToggle() {
+/* ══════════════════════════════════════════════════════
+   نظام الإملاء الصوتي — Online + Offline (Whisper.js)
+   ══════════════════════════════════════════════════════ */
+
+var _npMicRec        = null;
+var _npWhisperReady  = false;   /* هل النموذج محمّل؟ */
+var _npWhisperLoading = false;  /* هل التحميل جارٍ؟ */
+var _npWhisperPipe   = null;    /* pipeline instance */
+var _npMediaStream   = null;    /* MediaStream للمايك */
+var _npMediaRecorder = null;    /* MediaRecorder للـ offline */
+var _npAudioChunks   = [];
+
+/* ── تحميل Whisper (مرة واحدة فقط، يُخزَّن في Cache API) ── */
+async function _npLoadWhisper() {
+  if(_npWhisperReady || _npWhisperLoading) return;
+  _npWhisperLoading = true;
+
   var btn = document.getElementById('npMicBtn');
-  if(_npMicRec && _npMicRec.state === 'recording') {
-    _npMicRec.stop();
+  if(btn) { btn.textContent = '⏳'; btn.title = 'جارٍ تحميل نموذج الإملاء...'; }
+  WKS.npStatus = 'جارٍ تحميل نموذج الإملاء المحلي (~40MB)...';
+  WKS.npStatusType = 'info';
+  _npRenderStatus();
+
+  try {
+    /* تحميل transformers.js من CDN (يُخزَّن تلقائياً في Cache) */
+    if(!window._transformers) {
+      await new Promise(function(resolve, reject) {
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.textContent = [
+          'import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";',
+          'env.allowLocalModels = false;',
+          'env.useBrowserCache = true;',
+          'window._transformersPipeline = pipeline;',
+          'window._transformersReady = true;',
+          'window.dispatchEvent(new Event("transformers-ready"));'
+        ].join('
+');
+        document.head.appendChild(s);
+        var t = setTimeout(function(){ reject(new Error('timeout')); }, 10000);
+        window.addEventListener('transformers-ready', function() {
+          clearTimeout(t); resolve();
+        }, { once: true });
+      });
+    }
+
+    WKS.npStatus = 'تحميل النموذج (قد يستغرق دقيقة أول مرة)...';
+    WKS.npStatusType = 'info';
+    _npRenderStatus();
+
+    _npWhisperPipe = await window._transformersPipeline(
+      'automatic-speech-recognition',
+      'Xenova/whisper-small',
+      {
+        progress_callback: function(p) {
+          if(p.status === 'progress' && p.total) {
+            var pct = Math.round((p.loaded / p.total) * 100);
+            WKS.npStatus = 'تحميل النموذج: ' + pct + '%';
+            WKS.npStatusType = 'info';
+            _npRenderStatus();
+          }
+        }
+      }
+    );
+
+    _npWhisperReady  = true;
+    _npWhisperLoading = false;
+    WKS.npStatus = '✅ النموذج جاهز — اضغط 🎤 مجدداً للإملاء';
+    WKS.npStatusType = 'ok';
+    _npRenderStatus();
+    if(btn) { btn.textContent = '🎤'; btn.title = 'إملاء صوتي (محلي)'; }
+
+  } catch(err) {
+    _npWhisperLoading = false;
+    WKS.npStatus = '❌ فشل تحميل النموذج: ' + (err.message||'');
+    WKS.npStatusType = 'err';
+    _npRenderStatus();
+    if(btn) { btn.textContent = '🎤'; btn.title = 'إملاء صوتي'; }
+  }
+}
+
+/* ── تحديث صندوق الحالة بدون re-render كامل ── */
+function _npRenderStatus() {
+  /* نبحث عن صندوق الحالة الموجود ونحدّثه، أو نضيفه */
+  var top = document.querySelector('.np2-top .np2-dictbar');
+  if(!top) return;
+  var existing = top.querySelector('.np2-status-box');
+  if(WKS.npStatus) {
+    var stCls = WKS.npStatusType==='ok'?'np2-status-ok'
+               :WKS.npStatusType==='warn'?'np2-status-warn'
+               :WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
+    if(existing) {
+      existing.className = 'np2-status-box ' + stCls;
+      existing.innerHTML = '<span>' + WKS.npStatus + '</span>';
+    } else {
+      var d = document.createElement('div');
+      d.className = 'np2-status-box ' + stCls;
+      d.innerHTML = '<span>' + WKS.npStatus + '</span>';
+      top.appendChild(d);
+    }
+  } else if(existing) {
+    existing.remove();
+  }
+}
+
+/* ── تسجيل صوتي عبر MediaRecorder ثم إرساله لـ Whisper ── */
+async function _npWhisperRecord() {
+  var btn = document.getElementById('npMicBtn');
+
+  /* إيقاف لو كان يسجّل */
+  if(_npMediaRecorder && _npMediaRecorder.state === 'recording') {
+    _npMediaRecorder.stop();
     return;
   }
+
+  try {
+    _npMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _npAudioChunks = [];
+    _npMediaRecorder = new MediaRecorder(_npMediaStream);
+
+    _npMediaRecorder.ondataavailable = function(e) {
+      if(e.data.size > 0) _npAudioChunks.push(e.data);
+    };
+
+    _npMediaRecorder.onstop = async function() {
+      /* أوقف المايك */
+      _npMediaStream.getTracks().forEach(function(t){ t.stop(); });
+      if(btn) { btn.textContent='⚙️'; btn.style.background='rgba(99,102,241,.3)'; }
+      WKS.npStatus = 'جارٍ التعرف على الكلام...';
+      WKS.npStatusType = 'info';
+      _npRenderStatus();
+
+      try {
+        var blob = new Blob(_npAudioChunks, { type: 'audio/webm' });
+        var arrayBuffer = await blob.arrayBuffer();
+        /* Whisper يحتاج Float32Array */
+        var audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        var decoded = await audioCtx.decodeAudioData(arrayBuffer);
+        var float32 = decoded.getChannelData(0);
+
+        var result = await _npWhisperPipe(float32, {
+          language: 'arabic',
+          task: 'transcribe',
+          chunk_length_s: 30,
+        });
+
+        var txt = (result.text || '').trim();
+        if(txt) {
+          var ta = document.getElementById('npDictInput');
+          if(ta) { ta.value = txt; WKS.npTextInput = txt; }
+          WKS.npStatus = '✅ ' + txt;
+          WKS.npStatusType = 'ok';
+          _npRenderStatus();
+          setTimeout(_npSubmit, 300);
+        } else {
+          WKS.npStatus = '⚠️ لم يُتعرَّف على كلام واضح';
+          WKS.npStatusType = 'warn';
+          _npRenderStatus();
+        }
+      } catch(err) {
+        WKS.npStatus = '❌ خطأ في التعرف: ' + (err.message||'');
+        WKS.npStatusType = 'err';
+        _npRenderStatus();
+      }
+
+      if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
+      _npMediaRecorder = null;
+    };
+
+    _npMediaRecorder.start();
+    if(btn) { btn.textContent='🔴'; btn.style.background='rgba(239,68,68,.3)'; btn.style.borderColor='#dc2626'; btn.title='اضغط لإيقاف التسجيل'; }
+    WKS.npStatus = '🔴 جارٍ التسجيل... اضغط 🔴 للإيقاف';
+    WKS.npStatusType = 'info';
+    _npRenderStatus();
+
+  } catch(err) {
+    WKS.npStatus = '❌ لا يمكن الوصول للمايك: ' + (err.message||'');
+    WKS.npStatusType = 'err';
+    _npRenderStatus();
+  }
+}
+
+/* ── الدالة الرئيسية: تختار Online أو Offline تلقائياً ── */
+function _npMicToggle() {
+  var btn = document.getElementById('npMicBtn');
+
+  /* إيقاف السجلات الجارية */
+  if(_npMicRec && _npMicRec.state === 'recording') { _npMicRec.stop(); return; }
+  if(_npMediaRecorder && _npMediaRecorder.state === 'recording') { _npMediaRecorder.stop(); return; }
+
+  var isOnline = navigator.onLine;
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR) { showSnack('⚠️ المتصفح لا يدعم التعرف على الصوت'); return; }
-  _npMicRec = new SR();
-  _npMicRec.lang = 'ar-EG';
-  _npMicRec.interimResults = false;
-  _npMicRec.continuous = false;
-  _npMicRec.onstart = function() {
-    if(btn) { btn.textContent='🔴'; btn.style.background='rgba(239,68,68,.3)'; btn.style.borderColor='#dc2626'; }
-  };
-  _npMicRec.onresult = function(e) {
-    var txt = e.results[0][0].transcript || '';
-    var ta = document.getElementById('npDictInput');
-    if(ta) { ta.value = txt; WKS.npTextInput = txt; }
-    /* أرسل مباشرة */
-    setTimeout(_npSubmit, 100);
-  };
-  _npMicRec.onerror = function(e) {
-    showSnack('❌ خطأ في المايك: ' + (e.error||''));
-  };
-  _npMicRec.onend = function() {
-    _npMicRec = null;
-    if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
-  };
-  _npMicRec.start();
+
+  if(isOnline && SR) {
+    /* ══ وضع Online: SpeechRecognition العادية ══ */
+    _npMicRec = new SR();
+    _npMicRec.lang = 'ar-EG';
+    _npMicRec.interimResults = false;
+    _npMicRec.continuous = false;
+    _npMicRec.onstart = function() {
+      if(btn) { btn.textContent='🔴'; btn.style.background='rgba(239,68,68,.3)'; btn.style.borderColor='#dc2626'; }
+    };
+    _npMicRec.onresult = function(e) {
+      var txt = e.results[0][0].transcript || '';
+      var ta = document.getElementById('npDictInput');
+      if(ta) { ta.value = txt; WKS.npTextInput = txt; }
+      setTimeout(_npSubmit, 100);
+    };
+    _npMicRec.onerror = function(e) {
+      /* لو انقطع النت أثناء التسجيل — انتقل لـ Whisper */
+      if(e.error === 'network' || e.error === 'service-not-allowed') {
+        showSnack('📶 انقطع النت — جارٍ التبديل للنموذج المحلي...');
+        _npMicRec = null;
+        if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
+        _npWhisperReady ? _npWhisperRecord() : _npLoadWhisper();
+      } else {
+        showSnack('❌ خطأ في المايك: ' + (e.error||''));
+      }
+    };
+    _npMicRec.onend = function() {
+      _npMicRec = null;
+      if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
+    };
+    _npMicRec.start();
+
+  } else {
+    /* ══ وضع Offline: Whisper محلي ══ */
+    if(!_npWhisperReady) {
+      _npLoadWhisper();   /* تحميل النموذج — عند الانتهاء يظهر رسالة "اضغط مجدداً" */
+    } else {
+      _npWhisperRecord(); /* النموذج جاهز — سجّل مباشرة */
+    }
+  }
 }
 
 

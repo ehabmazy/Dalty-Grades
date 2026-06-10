@@ -3,9 +3,9 @@
    النسخة: 1.0.0
    ══════════════════════════════════════════ */
 
-const CACHE_NAME = 'dalty-grades-v1';
-const STATIC_CACHE = 'dalty-static-v1';
-const DYNAMIC_CACHE = 'dalty-dynamic-v1';
+const CACHE_NAME = 'dalty-grades-v26';
+const STATIC_CACHE = 'dalty-static-v26';
+const DYNAMIC_CACHE = 'dalty-dynamic-v26';
 
 /* ── الملفات المخزنة مسبقاً عند التثبيت ── */
 const PRE_CACHE = [
@@ -26,6 +26,14 @@ const PRE_CACHE = [
 const EXTERNAL_CACHE = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap',
+];
+
+/* ── نطاقات Whisper/Transformers — تُخزَّن ديناميكياً عند أول استخدام ── */
+const WHISPER_HOSTS = [
+  'cdn.jsdelivr.net',
+  'huggingface.co',
+  'cdn-lfs.huggingface.co',
+  'cdn-lfs-us-1.huggingface.co',
 ];
 
 /* ════════════════════════════════
@@ -115,6 +123,11 @@ async function handleFetch(request) {
 
   /* ── مكتبات CDN: Cache First ── */
   if (url.hostname.includes('cdnjs.cloudflare.com')) {
+    return cacheFirst(request, DYNAMIC_CACHE);
+  }
+
+  /* ── Whisper / Transformers.js / HuggingFace models: Cache First ── */
+  if (WHISPER_HOSTS.some(h => url.hostname.includes(h))) {
     return cacheFirst(request, DYNAMIC_CACHE);
   }
 
