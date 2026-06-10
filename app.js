@@ -14061,7 +14061,6 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '</textarea>';
   h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
   h += '<button class="np2-kbd-btn" onclick="_npShowMobileKeyboard()" title="لوحة المفاتيح" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⌨️</button>';
-  h += '<button class="np2-enter-btn" onclick="_npSubmit()" title="إدخال" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">✓</button>';
   h += '</div>';
   if(WKS.npStatus) {
     var stCls = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
@@ -14132,7 +14131,7 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '<div class="np2-keyboard">';
   /* صف 1 (أعلى): مسطرة + إدخال + تراجع + مسح */
   h += '<div class="np2-kb-row np2-kb-row4">';
-  h += '<button class="np2-key np2-ruler" onclick="_npKeyPress(\'━\')" title="مسطرة">━</button>';
+  h += '<button class="np2-key np2-ruler" onclick="_npKeyPress(\' \')" title="مسافة">⎵</button>';
   h += '<button class="np2-key np2-enter" onclick="_npSubmit()" title="إدخال">↵</button>';
   h += '<button class="np2-key np2-del" onclick="_npKeyBackspace()">⌫</button>';
   h += '<button class="np2-key np2-clr" onclick="_npKeyReset()">✕</button>';
