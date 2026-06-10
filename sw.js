@@ -44,10 +44,16 @@ self.addEventListener('install', event => {
 
   event.waitUntil(
     Promise.all([
-      /* تخزين الملفات المحلية */
-      caches.open(STATIC_CACHE).then(cache => {
+      /* تخزين الملفات المحلية — بتجاهل أي ملف غير موجود */
+      caches.open(STATIC_CACHE).then(async cache => {
         console.log('[SW] Caching static assets');
-        return cache.addAll(PRE_CACHE);
+        for (const url of PRE_CACHE) {
+          try {
+            await cache.add(url);
+          } catch (e) {
+            console.warn('[SW] Skipping missing asset:', url);
+          }
+        }
       }),
 
       /* تخزين الموارد الخارجية (بتجاهل الأخطاء) */
