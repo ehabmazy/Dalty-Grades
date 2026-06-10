@@ -14095,8 +14095,7 @@ async function _npLoadWhisper() {
           'window._transformersPipeline = pipeline;',
           'window._transformersReady = true;',
           'window.dispatchEvent(new Event("transformers-ready"));'
-        ].join('
-');
+        ].join('\n');
         document.head.appendChild(s);
         var t = setTimeout(function(){ reject(new Error('timeout')); }, 10000);
         window.addEventListener('transformers-ready', function() {
