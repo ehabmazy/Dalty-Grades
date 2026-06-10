@@ -7968,20 +7968,19 @@ function _alarmNextUpcoming(){
 var _homeTimer=null;
 
 function bnSetActive(page){
-  ['home','grades','sched'].forEach(function(p){
+  // أزل النشاط من كل أزرار الدوك
+  var allDockIds = ['home','grades','sched','weekly','cards','notifs','absence','stats',
+    'curric','report','tafrigh','sick','dict','witness','backup','settings'];
+  allDockIds.forEach(function(p){
     var b=document.getElementById('bni_'+p);
     if(b){
       b.classList.remove('hbn-active');
-      if(p==='home'){
-        b.classList.remove('hbn-center');
-        b.style.cssText='';
-      }
+      b.classList.remove('dock-btn--active');
     }
   });
   var active=document.getElementById('bni_'+page);
   if(active){
     active.classList.add('hbn-active');
-    if(page==='home') active.classList.add('hbn-center');
   }
   // also sync sidebar nav
   _ALL_PAGES.forEach(function(x){
@@ -14056,11 +14055,12 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '<div class="np2-input-row">';
   h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
   h += ' placeholder="اسم الطالب أو رقمه + الدرجة — مثال: محمد 15  أو  5 15"';
-  h += ' inputmode="none"';
+  h += ' inputmode="none" id="npDictInput"';
   h += ' oninput="WKS.npTextInput=this.value;">';
   h += esc(WKS.npTextInput||'');
   h += '</textarea>';
   h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
+  h += '<button class="np2-kbd-btn" onclick="_npShowMobileKeyboard()" title="لوحة المفاتيح" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⌨️</button>';
   h += '<button class="np2-enter-btn" onclick="_npSubmit()" title="إدخال" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">✓</button>';
   h += '</div>';
   if(WKS.npStatus) {
@@ -14130,20 +14130,20 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
 
   /* ══ لوحة المفاتيح — الأسفل مثبتة ══ */
   h += '<div class="np2-keyboard">';
-  /* صف 1: 1-2-3-4-5 */
+  /* صف 1 (أعلى): مسطرة + إدخال + تراجع + مسح */
+  h += '<div class="np2-kb-row np2-kb-row4">';
+  h += '<button class="np2-key np2-ruler" onclick="_npKeyPress(\'━\')" title="مسطرة">━</button>';
+  h += '<button class="np2-key np2-enter" onclick="_npSubmit()" title="إدخال">↵</button>';
+  h += '<button class="np2-key np2-del" onclick="_npKeyBackspace()">⌫</button>';
+  h += '<button class="np2-key np2-clr" onclick="_npKeyReset()">✕</button>';
+  h += '</div>';
+  /* صف 2: 1-2-3-4-5 */
   h += '<div class="np2-kb-row np2-kb-row5">';
   [1,2,3,4,5].forEach(function(n){ h += '<button class="np2-key" onclick="_npKeyPress(\''+n+'\')">'+n+'</button>'; });
   h += '</div>';
-  /* صف 2: 6-7-8-9-0 */
+  /* صف 3: 6-7-8-9-0 */
   h += '<div class="np2-kb-row np2-kb-row5">';
   [6,7,8,9,0].forEach(function(n){ h += '<button class="np2-key" onclick="_npKeyPress(\''+n+'\')">'+n+'</button>'; });
-  h += '</div>';
-  /* صف 3: شطرة مائلة + مسطرة + تراجع + مسح */
-  h += '<div class="np2-kb-row np2-kb-row4">';
-  h += '<button class="np2-key np2-slash" onclick="_npKeyPress(\'/\')">/</button>';
-  h += '<button class="np2-key np2-under" onclick="_npKeyPress(\'_\')">_</button>';
-  h += '<button class="np2-key np2-del" onclick="_npKeyBackspace()">⌫</button>';
-  h += '<button class="np2-key np2-clr" onclick="_npKeyReset()">✕</button>';
   h += '</div>';
   h += '</div>'; /* np2-keyboard */
 
@@ -14627,6 +14627,18 @@ function _npClearInput() {
   WKS.npStatus = '';
   var box = document.getElementById('npStatusBox');
   if(box) { box.style.display='none'; box.innerHTML=''; }
+}
+
+function _npShowMobileKeyboard() {
+  var ta = document.getElementById('npDictInput');
+  if(!ta) return;
+  ta.removeAttribute('inputmode');
+  ta.focus();
+  /* إعادة inputmode=none بعد إغلاق لوحة المفاتيح */
+  ta.addEventListener('blur', function onBlur() {
+    ta.setAttribute('inputmode','none');
+    ta.removeEventListener('blur', onBlur);
+  });
 }
 
 function _npSubmit() {
