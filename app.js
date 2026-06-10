@@ -9,7 +9,7 @@ function showApp(){
   document.getElementById("loginScreen").style.display="none";
   var shell=document.getElementById("appShell");
   shell.classList.add("visible");
-  document.getElementById("topUserName").textContent="";
+  var _un=document.getElementById("topUserName"); if(_un) _un.textContent="";
   if(!window._booted){window._booted=true;initDB();initNotifications();}
   if(window.innerWidth<=700){closeSidebar();}else{openSidebar();}
   switchPage("home");
