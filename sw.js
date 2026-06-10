@@ -3,9 +3,9 @@
    النسخة: 1.0.0
    ══════════════════════════════════════════ */
 
-const CACHE_NAME = 'dalty-grades-v26';
-const STATIC_CACHE = 'dalty-static-v26';
-const DYNAMIC_CACHE = 'dalty-dynamic-v26';
+const CACHE_NAME = 'dalty-grades-v27';
+const STATIC_CACHE = 'dalty-static-v27';
+const DYNAMIC_CACHE = 'dalty-dynamic-v27';
 
 /* ── الملفات المخزنة مسبقاً عند التثبيت ── */
 const PRE_CACHE = [
@@ -26,6 +26,9 @@ const PRE_CACHE = [
 const EXTERNAL_CACHE = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap',
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
 ];
 
 /* ── نطاقات Whisper/Transformers — تُخزَّن ديناميكياً عند أول استخدام ── */
@@ -120,6 +123,11 @@ async function handleFetch(request) {
   /* ── ملف index.html: Network First (للحصول على أحدث نسخة) ── */
   if (url.pathname.endsWith('index.html') || url.pathname === '/' || url.pathname.endsWith('/')) {
     return networkFirst(request);
+  }
+
+  /* ── Firebase SDK من gstatic: Cache First ── */
+  if (url.hostname.includes('gstatic.com')) {
+    return cacheFirst(request, DYNAMIC_CACHE);
   }
 
   /* ── الخطوط من Google: Cache First ── */
