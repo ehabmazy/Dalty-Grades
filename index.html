@@ -130,9 +130,8 @@
     </div>
     <div style="flex:1;"></div>
     <div class="top-user-area">
-      <button id="cardsViewBtn" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='cards';renderWeekly();},80);" title="عرض الكروت" style="display:none;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">🃏</button>
-      <button id="notifBell" onclick="toggleNotifPanel()" title="الإشعارات" style="display:none;">🔔<span id="notifBadge"></span></button>
-      <button id="topAccountBtn" onclick="openAboutModal()" title="الحساب" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">👤</button>
+
+
     </div>
   </div>
   <!-- SUB BAR: مخفي الآن — الكروت والإشعارات انتقلا للقاعدة -->
@@ -377,151 +376,6 @@
   // Load on startup
   loadSavedFontSettings();
   </script>
-  <!-- CARD FONT SETTINGS MODAL -->
-  <div id="cardFontModal">
-    <div class="cf-card">
-      <div class="cf-header">
-        <h3>🃏 إعدادات خط كروت الأسبوعي</h3>
-        <button class="fs-close" onclick="closeCardFontSettings()">✕</button>
-      </div>
-      <div class="cf-body">
-        <div class="cf-row">
-          <div class="cf-label">نوع الخط <span id="cfFamilyLbl"></span></div>
-          <select class="cf-select" id="cfFamily" onchange="previewCardFont()">
-            <option value="inherit">موروث من الإعدادات العامة</option>
-            <option value="'Cairo',sans-serif">Cairo</option>
-            <option value="'Tajawal',sans-serif">Tajawal</option>
-            <option value="'Amiri',serif">Amiri</option>
-            <option value="Tahoma,Arial,sans-serif">Tahoma</option>
-            <option value="Arial,sans-serif">Arial</option>
-          </select>
-        </div>
-        <div class="cf-row">
-          <div class="cf-label">حجم اسم الطالب <span id="cfNameSizeVal">17px</span></div>
-          <input type="range" class="cf-range" id="cfNameSize" min="11" max="28" step="1" value="17" oninput="document.getElementById('cfNameSizeVal').textContent=this.value+'px';previewCardFont()">
-        </div>
-        <div class="cf-row">
-          <div class="cf-label">حجم الأرقام (تقييم/واجب/سلوك) <span id="cfNumSizeVal">20px</span></div>
-          <input type="range" class="cf-range" id="cfNumSize" min="12" max="32" step="1" value="20" oninput="document.getElementById('cfNumSizeVal').textContent=this.value+'px';previewCardFont()">
-        </div>
-        <div class="cf-row">
-          <div class="cf-label">حجم التسميات (تقييم / واجب / سلوك) <span id="cfLabelSizeVal">9px</span></div>
-          <input type="range" class="cf-range" id="cfLabelSize" min="6" max="14" step="1" value="9" oninput="document.getElementById('cfLabelSizeVal').textContent=this.value+'px';previewCardFont()">
-        </div>
-        <div class="cf-row">
-          <div class="cf-label">سُمك الخط</div>
-          <select class="cf-select" id="cfWeight" onchange="previewCardFont()">
-            <option value="400">عادي (400)</option>
-            <option value="600">شبه عريض (600)</option>
-            <option value="700">عريض (700)</option>
-            <option value="900" selected>أسود (900)</option>
-          </select>
-        </div>
-        <div class="cf-row">
-          <div class="cf-label">معاينة</div>
-          <div class="cf-preview" id="cfPreview">
-            <div style="text-align:center;">
-              <div id="cfPrevName" style="font-size:17px;font-weight:900;color:#f8fafc;text-shadow:0 2px 10px rgba(0,0,0,1);">أحمد محمد علي</div>
-            </div>
-            <div style="text-align:center;">
-              <div id="cfPrevLabel" style="font-size:9px;color:rgba(255,255,255,0.6);font-weight:700;">تقييم</div>
-              <div id="cfPrevNum" style="font-size:20px;font-weight:900;color:#6ee7b7;background:rgba(0,0,0,0.55);border-radius:10px;padding:4px 12px;border:1.5px solid rgba(110,231,183,0.35);">18</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="cf-footer">
-        <button class="fs-btn fs-btn-reset" onclick="resetCardFont()">↺ إعادة تعيين</button>
-        <button class="fs-btn fs-btn-ghost" onclick="closeCardFontSettings()">إلغاء</button>
-        <button class="fs-btn fs-btn-primary" onclick="applyCardFont()">✓ تطبيق وحفظ</button>
-      </div>
-    </div>
-  </div>
-  <script>
-  var CF_KEY='wks_card_font_v1';
-  var CF_GOOGLE=['Cairo','Tajawal','Amiri'];
-
-  function openCardFontSettings(){
-    var cf=WKS.cardFont||{};
-    var fam=cf.family||'inherit';
-    var ns=cf.nameSize||17;
-    var nums=cf.numSize||20;
-    var ls=cf.labelSize||9;
-    var fw=cf.weight||900;
-
-    var sel=document.getElementById('cfFamily');
-    for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===fam){sel.selectedIndex=i;break;}}
-    document.getElementById('cfNameSize').value=ns;
-    document.getElementById('cfNameSizeVal').textContent=ns+'px';
-    document.getElementById('cfNumSize').value=nums;
-    document.getElementById('cfNumSizeVal').textContent=nums+'px';
-    document.getElementById('cfLabelSize').value=ls;
-    document.getElementById('cfLabelSizeVal').textContent=ls+'px';
-    var fw_sel=document.getElementById('cfWeight');
-    for(var j=0;j<fw_sel.options.length;j++){if(fw_sel.options[j].value==fw){fw_sel.selectedIndex=j;break;}}
-    previewCardFont();
-    document.getElementById('cardFontModal').classList.add('open');
-  }
-
-  function closeCardFontSettings(){
-    document.getElementById('cardFontModal').classList.remove('open');
-  }
-
-  function previewCardFont(){
-    var fam=document.getElementById('cfFamily').value;
-    var ns=document.getElementById('cfNameSize').value;
-    var nums=document.getElementById('cfNumSize').value;
-    var ls=document.getElementById('cfLabelSize').value;
-    var fw=document.getElementById('cfWeight').value;
-    var fontStyle=(fam&&fam!=='inherit')?fam:'';
-    if(fontStyle){
-      var m=fontStyle.match(/'([^']+)'/);
-      var fn=m?m[1]:fontStyle.split(',')[0].replace(/'/g,'').trim();
-      if(CF_GOOGLE.indexOf(fn)!==-1&&!document.getElementById('gf-cf-'+fn.toLowerCase())){
-        var lk=document.createElement('link');lk.id='gf-cf-'+fn.toLowerCase();lk.rel='stylesheet';
-        lk.href='https://fonts.googleapis.com/css2?family='+encodeURIComponent(fn)+':wght@400;600;700;900&display=swap';
-        document.head.appendChild(lk);
-      }
-    }
-    var pn=document.getElementById('cfPrevName');
-    var pl=document.getElementById('cfPrevLabel');
-    var pnum=document.getElementById('cfPrevNum');
-    if(fontStyle)pn.style.fontFamily=fontStyle;else pn.style.fontFamily='';
-    pn.style.fontSize=ns+'px';
-    pn.style.fontWeight=fw;
-    if(fontStyle)pl.style.fontFamily=fontStyle;else pl.style.fontFamily='';
-    pl.style.fontSize=ls+'px';
-    if(fontStyle)pnum.style.fontFamily=fontStyle;else pnum.style.fontFamily='';
-    pnum.style.fontSize=nums+'px';
-    pnum.style.fontWeight=fw;
-  }
-
-  function applyCardFont(){
-    var s={
-      family:document.getElementById('cfFamily').value,
-      nameSize:Number(document.getElementById('cfNameSize').value),
-      numSize:Number(document.getElementById('cfNumSize').value),
-      labelSize:Number(document.getElementById('cfLabelSize').value),
-      weight:Number(document.getElementById('cfWeight').value)
-    };
-    WKS.cardFont=s;
-    localStorage.setItem(CF_KEY,JSON.stringify(s));
-    closeCardFontSettings();
-    if(typeof renderWeekly==='function')renderWeekly();
-    if(typeof showSnack==='function')showSnack('✓ تم تطبيق إعدادات خط الكروت','ok');
-  }
-
-  function resetCardFont(){
-    var def={family:'inherit',nameSize:17,numSize:20,labelSize:9,weight:900};
-    WKS.cardFont=def;
-    localStorage.removeItem(CF_KEY);
-    closeCardFontSettings();
-    if(typeof renderWeekly==='function')renderWeekly();
-    if(typeof showSnack==='function')showSnack('↺ تمت إعادة تعيين خط الكروت','warn');
-  }
-
-  document.getElementById('cardFontModal').addEventListener('click',function(e){if(e.target===this)closeCardFontSettings();});
-  </script>
   <!-- TAFRIGH FONT SETTINGS MODAL -->
   <div id="tfrFontModal">
     <div class="cf-card">
@@ -762,6 +616,46 @@
             <span class="sb-icon">🔔</span><span class="sb-label">الإشعارات <span id="sbNotifBadge" style="display:none;background:#ef4444;color:#fff;font-size:7px;font-weight:700;border-radius:8px;padding:0 4px;"></span></span>
           </button>
         </nav>
+          <!-- ── قسم المساعد ── -->
+          <div style="border-top:1px solid #1e3a5f;margin:6px 0 2px;padding:6px 0 2px;">
+            <div style="font-size:8px;color:#334155;font-weight:700;padding:4px 16px 6px;text-transform:uppercase;letter-spacing:.5px;">🛠 المساعد</div>
+            <!-- زر لفتح/إغلاق قائمة المساعدة -->
+            <button class="sb-btn" id="sbHelpToggle" onclick="sbHelpToggle()" title="مساعدة الصفحات">
+              <span class="sb-icon">❓</span><span class="sb-label">المساعدة</span><span id="sbHelpArrow" style="font-size:9px;color:#475569;margin-right:auto;">▼</span>
+            </button>
+            <!-- قائمة صفحات المساعدة — مخفية افتراضياً -->
+            <div id="sbHelpList" style="display:none;padding:2px 0;">
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('home');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">🏠</span><span class="sb-label">الرئيسية</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('grades');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">📝</span><span class="sb-label">الدرجات</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('weekly');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">📅</span><span class="sb-label">الأسبوعي</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('sched');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">🗓</span><span class="sb-label">الجدول</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('absence');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">📋</span><span class="sb-label">الغياب</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('sick');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">🤒</span><span class="sb-label">المرضى</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('dict');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">🎤</span><span class="sb-label">الإملاء</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('stats');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">📊</span><span class="sb-label">الإحصائيات</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('curric');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">📖</span><span class="sb-label">توزيع المنهج</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('settings');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">⚙️</span><span class="sb-label">الإعدادات</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('backup');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">💾</span><span class="sb-label">النسخ الاحتياطي</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('notifs');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">🔔</span><span class="sb-label">الإشعارات</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('sig');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">✍️</span><span class="sb-label">توقيع المتابع</span></button>
+              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('kashef');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">📄</span><span class="sb-label">كشف الدرجات</span></button>
+            </div>
+          </div>
+          <script>
+            function sbHelpToggle(){
+              var list=document.getElementById('sbHelpList');
+              var arrow=document.getElementById('sbHelpArrow');
+              var open=list.style.display==='block';
+              list.style.display=open?'none':'block';
+              if(arrow)arrow.textContent=open?'▼':'▲';
+            }
+            function _showHelpFor(page){
+              if(typeof HELP!=='undefined' && typeof _showHelpModal!=='undefined'){
+                var data=HELP[page]||HELP['home'];
+                _showHelpModal(data);
+              }
+            }
+          </script>
         <div class="sidebar-footer">
           <button onclick="copyViewerLink()" style="width:100%;background:#0f2a50;border:1px solid #1d4ed8;color:#60a5fa;border-radius:8px;padding:8px;font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:8px;">🔗 مشاركة الدرجات مع الطلاب</button>
           v2.0 — نظام المعلمين
@@ -823,8 +717,8 @@
     <div id="dockExpanded" style="max-height:0;overflow:hidden;transition:max-height .35s cubic-bezier(.4,0,.2,1);">
       <div style="height:6px;"></div>
       <div class="dock-grid">
-        <button class="dock-btn" id="bni_cards" onclick="switchPage('weekly');setTimeout(function(){if(typeof WKS!=='undefined'){WKS.viewMode='cards';renderWeekly();}},80);bnSetActive('weekly')">
-          <div class="dock-icon">🃏</div><div class="dock-lbl">الكروت</div>
+        <button class="dock-btn" id="bni_rasid" onclick="switchPage('weekly');setTimeout(function(){if(typeof WKS!=='undefined'){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();}},80);bnSetActive('weekly')">
+          <div class="dock-icon">🎯</div><div class="dock-lbl">الراصد</div>
         </button>
         <button class="dock-btn" id="bni_notifs" onclick="toggleNotifPanel()" style="position:relative;">
           <div class="dock-icon">🔔<span id="dockNotifBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:#ef4444;color:#fff;font-size:8px;font-weight:900;border-radius:8px;padding:0 4px;min-width:14px;text-align:center;"></span></div>
@@ -920,7 +814,6 @@
   /* فراغ للـ snackbar يكون فوق الدوك */
   #snackContainer { bottom: 96px !important; }
   /* زر المساعدة فوق الدوك */
-  #globalHelpBtn { bottom: 96px !important; }
   </style>
 
   <!-- سكريبت السحب لأعلى -->
@@ -1007,28 +900,8 @@
 <!-- ══ HELP SYSTEM JS ══ -->
 
 
-<!-- ══ زر المساعدة العائم ══ -->
-<button id="globalHelpBtn" onclick="showPageHelp()" title="مساعدة" style="
-  position:fixed;
-  bottom:22px;
-  left:18px;
-  width:46px;
-  height:46px;
-  border-radius:50%;
-  background:linear-gradient(135deg,#1d4ed8,#3b82f6);
-  border:2px solid rgba(255,255,255,.25);
-  color:white;
-  font-size:20px;
-  font-weight:900;
-  cursor:pointer;
-  z-index:1200;
-  box-shadow:0 4px 16px rgba(59,130,246,.5);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-family:Cairo,sans-serif;
-  transition:transform .15s;
-" onmouseover="this.style.transform='scale(1.12)'" onmouseout="this.style.transform='scale(1)'">؟</button>
+<!-- زر المساعدة — انتقل للقائمة الجانبية -->
+<button id="globalHelpBtn" onclick="showPageHelp()" style="display:none;">؟</button>
 
 
 
@@ -1097,46 +970,6 @@
 
 
 
-
-<!-- ══ CARDS SETTINGS MODAL ══ -->
-<div id="cardsSettingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;align-items:center;justify-content:center;padding:16px;direction:rtl;">
-  <div style="background:#0f1e35;border:1.5px solid #1e3a5f;border-radius:18px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,.7);overflow:hidden;font-family:inherit;">
-    <div style="background:#0a1628;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e3a5f;">
-      <span style="color:#60a5fa;font-size:15px;font-weight:900;">&#9881; تخصيص عرض الكروت</span>
-      <button onclick="closeCardsSettings();" style="background:#1e293b;border:1.5px solid #334155;color:#94a3b8;border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer;">&#10005;</button>
-    </div>
-    <div style="padding:18px;display:flex;flex-direction:column;gap:18px;max-height:70vh;overflow-y:auto;">
-      <div>
-        <div style="font-size:13px;color:#94a3b8;font-weight:700;margin-bottom:10px;">&#128208; التخطيط</div>
-        <div style="display:flex;gap:10px;">
-          <button id="csLayoutSingle" onclick="WKS.cardLayout='single';renderWeekly();_csRefreshActive();" style="flex:1;padding:11px 0;border-radius:10px;border:2px solid #1e3a5f;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">&#9776; عمودي</button>
-          <button id="csLayoutGrid"   onclick="WKS.cardLayout='grid';renderWeekly();_csRefreshActive();"   style="flex:1;padding:11px 0;border-radius:10px;border:2px solid #1e3a5f;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">&#8855; شبكي</button>
-        </div>
-      </div>
-      <div>
-        <div style="font-size:13px;color:#94a3b8;font-weight:700;margin-bottom:10px;">&#128444; الصورة</div>
-        <div style="display:flex;gap:10px;">
-          <button id="csPhotoMorona" onclick="WKS.photoFit='cover';renderWeekly();_csRefreshActive();"   style="flex:1;padding:11px 0;border-radius:10px;border:2px solid #1e3a5f;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">&#128444; مرنة</button>
-          <button id="csPhotoFixed"  onclick="WKS.photoFit='contain';renderWeekly();_csRefreshActive();" style="flex:1;padding:11px 0;border-radius:10px;border:2px solid #1e3a5f;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">&#9634; غير مرنة</button>
-        </div>
-      </div>
-      <div>
-        <div style="font-size:13px;color:#94a3b8;font-weight:700;margin-bottom:8px;">&#128203; تفعيل الغياب في الفترة</div>
-        <div style="background:#0a1e35;border:1px solid #1e3a5f;border-radius:8px;padding:8px 12px;font-size:12px;color:#60a5fa;margin-bottom:10px;line-height:1.6;">
-          &#128161; اختر الفترة التي تريد تسجيل الغياب فيها على الكروت — اختر <b style="color:#fbbf24;">بدون</b> لإخفاء زر الغياب
-        </div>
-        <div id="csAbsCols" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
-      </div>
-      <div>
-        <div style="font-size:13px;color:#94a3b8;font-weight:700;margin-bottom:10px;">&#128292; الخط</div>
-        <button onclick="closeCardsSettings();openCardFontSettings();" style="width:100%;padding:11px 0;border-radius:10px;border:2px solid #1e3a5f;background:#0a1628;color:#60a5fa;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">&#9881; فتح إعدادات الخط التفصيلية</button>
-      </div>
-    </div>
-    <div style="padding:12px 18px;border-top:1px solid #1e3a5f;display:flex;justify-content:flex-end;">
-      <button onclick="closeCardsSettings();" style="background:#1d4ed8;color:white;border:none;border-radius:10px;padding:10px 28px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;">&#10003; تم</button>
-    </div>
-  </div>
-</div>
 
 <!-- ══ DICT SETTINGS MODAL ══ -->
 <div id="dictSettingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9999;align-items:center;justify-content:center;padding:16px;direction:rtl;">
