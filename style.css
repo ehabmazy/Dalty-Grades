@@ -1760,7 +1760,7 @@ tr.hl-abs td{background:#fff7ed!important;}
 .np2-wrap {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 130px);
+  height: calc(100vh - 130px - 90px); /* خصم ارتفاع شريط التنقل السفلي */
   background: #0b1829 !important;
   position: relative;
   overflow: hidden;
