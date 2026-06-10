@@ -5427,6 +5427,19 @@ function renderSettings(){
   html+='<div id="whisperProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#059669,#34d399);border-radius:8px;transition:width .3s ease;"></div>';
   html+='</div>';
   html+='</div>';
+  /* اختيار النموذج */
+  var curModel = (DB.meta && DB.meta.whisperModel) ? DB.meta.whisperModel : 'auto';
+  html+='<div class="settings-row">';
+  html+='<span class="settings-lbl">النموذج:</span>';
+  html+='<div class="settings-val" style="display:flex;flex-direction:column;gap:4px;">';
+  html+='<select class="s-inp" style="width:220px;" onchange="DB.meta.whisperModel=(this.value===\'auto\'?null:this.value);saveDB();_npWhisperReady=false;_npWhisperPipe=null;renderSettings();showSnack(\'⚠️ أعد تحميل النموذج لتطبيق التغيير\')">';
+  html+='<option value="auto"'+(curModel==='auto'?' selected':'')+'>🤖 تلقائي (موبايل=tiny / كمبيوتر=base)</option>';
+  html+='<option value="Xenova/whisper-tiny"'+(curModel==='Xenova/whisper-tiny'?' selected':'')+'>⚡ tiny — أسرع (~39MB) — دقة أقل</option>';
+  html+='<option value="Xenova/whisper-base"'+(curModel==='Xenova/whisper-base'?' selected':'')+'>⚖️ base — متوازن (~74MB)</option>';
+  html+='<option value="Xenova/whisper-small"'+(curModel==='Xenova/whisper-small'?' selected':'')+'>🎯 small — أدق (~244MB) — أبطأ</option>';
+  html+='</select>';
+  html+='<span style="font-size:9px;color:#64748b;">تغيير النموذج يتطلب إعادة التحميل</span>';
+  html+='</div></div>';
   /* وصف */
   html+='<div style="font-size:9px;color:#64748b;line-height:1.7;">';
   html+='بعد التحميل، يعمل الإملاء الصوتي <b>بالكامل بدون إنترنت</b> باستخدام نموذج Whisper المحلي.<br>';
@@ -6654,18 +6667,22 @@ async function settingsDownloadWhisper() {
       });
     }
 
-    /* ── اختيار النموذج حسب الجهاز ── */
+    /* ── اختيار النموذج: يراعي إعداد المستخدم أولاً ── */
     var isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-    /* tiny ~39MB أسرع على الموبايل، small ~244MB أدق على الكمبيوتر */
-    var modelId    = isMobile ? 'Xenova/whisper-tiny' : 'Xenova/whisper-small';
-    var modelLabel = isMobile ? '~39MB (موبايل)' : '~244MB (كمبيوتر)';
-    _whisperSettingsUI('loading', 3, 'تحميل نموذج Whisper ' + modelLabel + '...');
+    var savedModel = (typeof DB !== 'undefined' && DB.meta && DB.meta.whisperModel) ? DB.meta.whisperModel : null;
+    /* الافتراضي: tiny.en أسرع على الموبايل (quantized)، base.en على الكمبيوتر */
+    var modelId = savedModel || (isMobile ? 'Xenova/whisper-tiny' : 'Xenova/whisper-base');
+    /* نستخدم النسخة المضغوطة quantized دائماً لأنها أسرع بـ 2-4x */
+    var modelLabel = modelId.split('/')[1] || modelId;
+    _whisperSettingsUI('loading', 3, 'تحميل نموذج Whisper (' + modelLabel + ')...');
 
     /* الخطوة 2: تحميل النموذج مع تتبع التقدم */
     _npWhisperPipe = await window._transformersPipeline(
       'automatic-speech-recognition',
       modelId,
       {
+        dtype: 'q8',          /* quantized 8-bit — أسرع بـ 3x وأخف في الذاكرة */
+        device: 'wasm',       /* WebAssembly — مدعوم على جميع الأجهزة */
         progress_callback: function(p) {
           if(p.status === 'progress' && p.total) {
             var pct = Math.round((p.loaded / p.total) * 100);
@@ -14346,10 +14363,15 @@ async function _npLoadWhisper() {
     WKS.npStatusType = 'info';
     _npRenderStatus();
 
+    var _isMob = /Android|iPhone|iPad/i.test(navigator.userAgent);
+    var _savedMdl = (typeof DB !== 'undefined' && DB.meta && DB.meta.whisperModel) ? DB.meta.whisperModel : null;
+    var _modelId = _savedMdl || (_isMob ? 'Xenova/whisper-tiny' : 'Xenova/whisper-base');
     _npWhisperPipe = await window._transformersPipeline(
       'automatic-speech-recognition',
-      'Xenova/whisper-small',
+      _modelId,
       {
+        dtype: 'q8',
+        device: 'wasm',
         progress_callback: function(p) {
           if(p.status === 'progress' && p.total) {
             var pct = Math.round((p.loaded / p.total) * 100);
@@ -14445,7 +14467,9 @@ async function _npWhisperRecord() {
         var result = await _npWhisperPipe(float32, {
           language: 'arabic',
           task: 'transcribe',
-          chunk_length_s: 30,
+          chunk_length_s: 15,   /* جزء أصغر = استجابة أسرع على الموبايل */
+          stride_length_s: 3,
+          return_timestamps: false,
         });
 
         var txt = (result.text || '').trim();
