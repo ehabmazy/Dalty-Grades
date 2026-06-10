@@ -196,7 +196,7 @@ function offlineFallback(request) {
   /* للموارد الأخرى: استجابة فارغة بدلاً من خطأ */
   return new Response('', {
     status: 503,
-    statusText: 'Service Unavailable — Offline',
+    statusText: 'Service Unavailable',
   });
 }
 
