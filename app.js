@@ -12632,8 +12632,8 @@ document.head.appendChild(st);
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
     setTimeout(function(){
-      navigator.serviceWorker.register('/grades-project/sw.js')
-        .then(function(reg){ console.log('SW registered'); })
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then(function(reg){ console.log('SW registered', reg.scope); })
         .catch(function(err){ console.log('SW error', err); });
     }, 1000);
   });
