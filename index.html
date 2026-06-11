@@ -130,7 +130,7 @@
     </div>
     <div style="flex:1;"></div>
     <div class="top-user-area">
-      <button id="cardsViewBtn" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='cards';renderWeekly();},80);" title="عرض الكروت" style="display:none;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">🃏</button>
+      <button id="cardsViewBtn" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);" title="عرض الراصد" style="display:none;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">🎯</button>
       <button id="notifBell" onclick="toggleNotifPanel()" title="الإشعارات" style="display:none;">🔔<span id="notifBadge"></span></button>
       <button id="topAccountBtn" onclick="openAboutModal()" title="الحساب" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">👤</button>
     </div>
@@ -721,8 +721,8 @@
           <button class="sb-btn" id="nb_grades" onclick="switchPage('grades');bnSetActive('grades');closeSidebarMobile();">
             <span class="sb-icon">📝</span><span class="sb-label">الدرجات</span>
           </button>
-          <button class="sb-btn" id="nb_weekly" onclick="switchPage('weekly');closeSidebarMobile();">
-            <span class="sb-icon">📅</span><span class="sb-label">الأسبوعي</span>
+          <button class="sb-btn" id="nb_weekly" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);closeSidebarMobile();">
+            <span class="sb-icon">🎯</span><span class="sb-label">الراصد</span>
           </button>
           <button class="sb-btn" id="nb_sched" onclick="switchPage('sched');closeSidebarMobile();">
             <span class="sb-icon">🗓</span><span class="sb-label">الجدول</span>
@@ -851,8 +851,8 @@
       <button class="dock-btn" id="bni_grades" onclick="switchPage('grades');bnSetActive('grades')">
         <div class="dock-icon">📝</div><div class="dock-lbl">الدرجات</div>
       </button>
-      <button class="dock-btn" id="bni_weekly" onclick="switchPage('weekly');bnSetActive('weekly')">
-        <div class="dock-icon">📅</div><div class="dock-lbl">الأسبوعي</div>
+      <button class="dock-btn" id="bni_weekly" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);bnSetActive('weekly')">
+        <div class="dock-icon">🎯</div><div class="dock-lbl">الراصد</div>
       </button>
       <button class="dock-btn" id="bni_sched" onclick="switchPage('sched');bnSetActive('sched')">
         <div class="dock-icon">🗓</div><div class="dock-lbl">الجدول</div>
@@ -863,8 +863,8 @@
     <div id="dockExpanded" style="max-height:0;overflow:hidden;transition:max-height .35s cubic-bezier(.4,0,.2,1);">
       <div style="height:6px;"></div>
       <div class="dock-grid">
-        <button class="dock-btn" id="bni_cards" onclick="switchPage('weekly');setTimeout(function(){if(typeof WKS!=='undefined'){WKS.viewMode='cards';renderWeekly();}},80);bnSetActive('weekly')">
-          <div class="dock-icon">🃏</div><div class="dock-lbl">الكروت</div>
+        <button class="dock-btn" id="bni_cards" onclick="switchPage('weekly');setTimeout(function(){if(typeof WKS!=='undefined'){WKS.viewMode='table';renderWeekly();renderViewBar();}},80);bnSetActive('weekly')">
+          <div class="dock-icon">📅</div><div class="dock-lbl">الأسبوعي</div>
         </button>
         <button class="dock-btn" id="bni_notifs" onclick="toggleNotifPanel()" style="position:relative;">
           <div class="dock-icon">🔔<span id="dockNotifBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:#ef4444;color:#fff;font-size:8px;font-weight:900;border-radius:8px;padding:0 4px;min-width:14px;text-align:center;"></span></div>
