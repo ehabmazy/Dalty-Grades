@@ -13732,26 +13732,6 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
 
   var h = '<div class="np2-wrap">';
 
-  /* ══ منطقة الإدخال — الأعلى (textarea + mic + تأكيد فقط) ══ */
-  h += '<div class="np2-top">';
-  h += '<div class="np2-dictbar">';
-  h += '<div class="np2-input-row">';
-  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
-  h += ' placeholder="اسم الطالب أو رقمه + الدرجة — مثال: محمد 15  أو  5 15"';
-  h += ' inputmode="none" id="npDictInput"';
-  h += ' oninput="WKS.npTextInput=this.value;">';
-  h += esc(WKS.npTextInput||'');
-  h += '</textarea>';
-  h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
-  h += '<button class="np2-kbd-btn" onclick="_npShowMobileKeyboard()" title="لوحة المفاتيح" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⌨️</button>';
-  h += '</div>';
-  if(WKS.npStatus) {
-    var stCls = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
-    h += '<div class="np2-status-box '+stCls+'"><span>'+esc(WKS.npStatus)+'</span></div>';
-  }
-  h += '</div>';
-  h += '</div>'; /* np2-top */
-
   /* ══ المنتصف: بطاقة الطالب + أزرار الحقل ══ */
   h += '<div class="np2-middle">';
 
@@ -13790,37 +13770,52 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
       var _asStyle  = (assessVal==='غ'||assessVal==='م')?'color:#f87171;':'';
       var _behStyle = (behVal==='غ'||behVal==='م')?'color:#f87171;':'';
 
-      h += '<div class="np2-card" style="display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto auto;gap:6px;padding:8px;">';
+      /* البطاقة: صورة يسار + وسط (اسم + درجات + أزرار الحقل) + رقم يمين */
+      h += '<div class="np2-card" style="display:flex;flex-direction:column;gap:6px;padding:8px;">';
 
-      /* ── صف 1: أزرار واجب / تقييم / سلوك (فوق) ── */
-      h += '<div style="grid-column:1/2;display:flex;gap:5px;">';
+      /* الصف العلوي: صورة + وسط + رقم */
+      h += '<div style="display:flex;flex-direction:row;align-items:center;gap:8px;">';
+
+      /* ── يسار: صورة الطالب ── */
+      h += '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;">';
+      if(photo) {
+        h += '<img class="np2-card-photo" src="'+photo+'" style="display:block;border-radius:10px;">';
+      } else {
+        h += '<div class="np2-card-photo np2-card-photo-ph">👤</div>';
+      }
+      h += '</div>';
+
+      /* ── وسط: الاسم + الدرجات + أزرار الحقل ── */
+      h += '<div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0;">';
+
+      /* الاسم */
+      h += '<div class="np2-card-name" style="margin:0;text-align:center;">'+esc(s.name)+'</div>';
+
+      /* الدرجات الثلاث */
+      h += '<div style="display:flex;gap:5px;justify-content:center;">';
+      h += '<div class="np2-grade-cell'+(fld==='hw'?' active':'')+'" onclick="_npSetField(\'hw\')" style="cursor:pointer;flex:1;"><span class="np2-grade-lbl">واجب</span><span class="np2-grade-val" id="npGradeHw" style="'+_hwStyle+'">'+esc(String(hwVal))+'</span>'+(hwVal==='غ'||hwVal==='م'?'':'<span class="np2-grade-max">/'+hwMax+'</span>')+'</div>';
+      h += '<div class="np2-grade-cell'+(fld==='assess'?' active':'')+'" onclick="_npSetField(\'assess\')" style="cursor:pointer;flex:1;"><span class="np2-grade-lbl">تقييم</span><span class="np2-grade-val" id="npGradeAssess" style="'+_asStyle+'">'+esc(String(assessVal))+'</span>'+(assessVal==='غ'||assessVal==='م'?'':'<span class="np2-grade-max">/'+assessMax+'</span>')+'</div>';
+      h += '<div class="np2-grade-cell'+(fld==='beh'?' active':'')+'" onclick="_npSetField(\'beh\')" style="cursor:pointer;flex:1;"><span class="np2-grade-lbl">سلوك</span><span class="np2-grade-val" id="npGradeBeh" style="'+_behStyle+'">'+esc(String(behVal))+'</span>'+(behVal==='غ'||behVal==='م'?'':'<span class="np2-grade-max">/10</span>')+'</div>';
+      h += '</div>';
+
+      /* أزرار تبديل الحقل */
+      h += '<div style="display:flex;gap:5px;">';
       h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" onclick="_npSetField(\'hw\')" style="flex:1;touch-action:manipulation;">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
       h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" onclick="_npSetField(\'assess\')" style="flex:1;touch-action:manipulation;">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
       h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" onclick="_npSetField(\'beh\')" style="flex:1;touch-action:manipulation;">سلوك<span class="np2-ftab-max">/10</span></button>';
       h += '</div>';
 
-      /* الصورة + رقم الطالب (عمود يمين — يمتد 3 صفوف) */
-      h += '<div style="grid-column:2/3;grid-row:1/4;display:flex;flex-direction:column;align-items:center;gap:5px;">';
-      if(photo) {
-        h += '<img class="np2-card-photo" src="'+photo+'" style="display:block;border-radius:8px;">';
-      } else {
-        h += '<div class="np2-card-photo np2-card-photo-ph">👤</div>';
-      }
+      h += '</div>'; /* وسط */
+
+      /* ── يمين: رقم الطالب ── */
+      h += '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;">';
       h += '<div style="width:44px;height:44px;border-radius:50%;background:#1e3a5f;border:2px solid #fbbf24;display:flex;align-items:center;justify-content:center;color:#fbbf24;font-size:19px;font-weight:900;">'+(WKS.numpadStudentIdx+1)+'</div>';
       h += '</div>';
 
-      /* ── صف 2: الاسم + الدرجات في المنتصف ── */
-      h += '<div style="grid-column:1/2;display:flex;flex-direction:column;gap:4px;">';
-      h += '<div class="np2-card-name" style="margin:0;">'+esc(s.name)+'</div>';
-      h += '<div style="display:flex;gap:5px;">';
-      h += '<div class="np2-grade-cell'+(fld==='hw'?' active':'')+'"><span class="np2-grade-lbl">واجب</span><span class="np2-grade-val" id="npGradeHw" style="'+_hwStyle+'">'+esc(String(hwVal))+'</span>'+(hwVal==='غ'||hwVal==='م'?'':'<span class="np2-grade-max">/'+hwMax+'</span>')+'</div>';
-      h += '<div class="np2-grade-cell'+(fld==='assess'?' active':'')+'"><span class="np2-grade-lbl">تقييم</span><span class="np2-grade-val" id="npGradeAssess" style="'+_asStyle+'">'+esc(String(assessVal))+'</span>'+(assessVal==='غ'||assessVal==='م'?'':'<span class="np2-grade-max">/'+assessMax+'</span>')+'</div>';
-      h += '<div class="np2-grade-cell'+(fld==='beh'?' active':'')+'"><span class="np2-grade-lbl">سلوك</span><span class="np2-grade-val" id="npGradeBeh" style="'+_behStyle+'">'+esc(String(behVal))+'</span>'+(behVal==='غ'||behVal==='م'?'':'<span class="np2-grade-max">/10</span>')+'</div>';
-      h += '</div>';
-      h += '</div>';
+      h += '</div>'; /* الصف العلوي */
 
-      /* ── صف 3: أزرار الغياب (تحت) ── */
-      h += '<div style="grid-column:1/2;display:flex;gap:5px;flex-wrap:wrap;">';
+      /* ── أزرار الغياب في الأسفل ── */
+      h += '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
       absCols.forEach(function(col, ci) {
         var absState = getAbsenceState(cls, s.id, week, ci);
         var lbl = col.label || ('ف'+(ci+1));
@@ -13843,6 +13838,21 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
 
   /* ══ لوحة المفاتيح — الأسفل مثبتة ══ */
   h += '<div class="np2-keyboard">';
+  /* صف البحث المدمج */
+  h += '<div class="np2-kb-search-row">';
+  h += '<textarea id="npDictInput" class="np2-kb-search-inp" rows="1"';
+  h += ' placeholder="اسم الطالب أو رقمه + الدرجة — مثال: محمد 15  أو  5 15"';
+  h += ' inputmode="none"';
+  h += ' oninput="WKS.npTextInput=this.value;">';
+  h += esc(WKS.npTextInput||'');
+  h += '</textarea>';
+  h += '<button class="np2-kb-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
+  h += '<button class="np2-kb-mic-btn" onclick="_npShowMobileKeyboard()" title="لوحة المفاتيح" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⌨️</button>';
+  h += '</div>';
+  if(WKS.npStatus) {
+    var stCls2 = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
+    h += '<div class="np2-status-box '+stCls2+'" style="margin:0 6px 4px;padding:4px 10px;font-size:11px;"><span>'+esc(WKS.npStatus)+'</span></div>';
+  }
   /* صف 1 (أعلى): مسطرة + إدخال + تراجع + مسح */
   h += '<div class="np2-kb-row np2-kb-row4">';
   h += '<button class="np2-key np2-ruler" onclick="_npKeyPress(\' \')" title="مسافة">⎵</button>';
@@ -14123,7 +14133,7 @@ async function _npLoadWhisper() {
 /* ── تحديث صندوق الحالة بدون re-render كامل ── */
 function _npRenderStatus() {
   /* نبحث عن صندوق الحالة الموجود ونحدّثه، أو نضيفه */
-  var top = document.querySelector('.np2-top .np2-dictbar');
+  var top = document.querySelector('.np2-keyboard');
   if(!top) return;
   var existing = top.querySelector('.np2-status-box');
   if(WKS.npStatus) {
