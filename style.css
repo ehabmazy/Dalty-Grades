@@ -2236,3 +2236,189 @@ tr.hl-abs td{background:#fff7ed!important;}
   outline: 2px solid #fbbf24 !important;
   outline-offset: 1px;
 }
+
+/* ══════════════════════════════════════════════════
+   لوحة الأرقام العائمة — قابلة للسحب وتغيير الحجم
+   ══════════════════════════════════════════════════ */
+
+/* إخفاء اللوحة الثابتة الأصلية عند تفعيل العائمة */
+.np2-keyboard-hidden {
+  display: none !important;
+}
+
+/* اللوحة العائمة */
+#floatingNumpad {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(260px, 85vw, 380px);
+  background: #0d1e38;
+  border: 2px solid rgba(59,130,246,.45);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.7), 0 0 0 1px rgba(59,130,246,.15);
+  z-index: 9998;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  min-width: 220px;
+  min-height: 180px;
+  resize: none; /* نستخدم مقابض مخصصة */
+}
+
+#floatingNumpad.fnp-visible {
+  display: flex;
+}
+
+/* شريط السحب (المقبض العلوي) */
+#floatingNumpad .fnp-handle {
+  background: linear-gradient(90deg, #0a1628, #0f2040, #0a1628);
+  border-bottom: 1px solid rgba(59,130,246,.3);
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: grab;
+  flex-shrink: 0;
+}
+#floatingNumpad .fnp-handle:active { cursor: grabbing; }
+
+.fnp-handle-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.fnp-handle-dots span {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: rgba(96,165,250,.5);
+  display: block;
+}
+
+.fnp-title {
+  font-size: 11px;
+  color: #60a5fa;
+  font-weight: 700;
+  font-family: 'Cairo', sans-serif;
+}
+
+.fnp-close-btn {
+  background: rgba(239,68,68,.15);
+  border: 1px solid #dc2626;
+  color: #f87171;
+  border-radius: 6px;
+  width: 24px; height: 24px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.fnp-close-btn:active { background: rgba(239,68,68,.4); }
+
+/* جسم اللوحة */
+#floatingNumpad .fnp-body {
+  padding: clamp(6px,2vw,10px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px,1.5vw,8px);
+  flex: 1;
+}
+
+/* صفوف المفاتيح داخل اللوحة العائمة */
+#floatingNumpad .fnp-row {
+  display: grid;
+  gap: clamp(4px,1.5vw,7px);
+}
+#floatingNumpad .fnp-row5 { grid-template-columns: repeat(5, 1fr); }
+#floatingNumpad .fnp-row4 { grid-template-columns: repeat(4, 1fr); }
+
+#floatingNumpad .fnp-key {
+  background: var(--bg3, #1e293b);
+  border: 1px solid var(--border, #2a3f5f);
+  color: #f1f5f9;
+  font-family: 'Amiri', serif;
+  font-size: clamp(16px, 4vw, 24px);
+  font-weight: 900;
+  padding: clamp(8px,2vw,13px) 0;
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: center;
+  transition: transform .1s, background .1s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+#floatingNumpad .fnp-key:active {
+  transform: scale(.92);
+  background: rgba(59,130,246,.3);
+}
+#floatingNumpad .fnp-del { background: rgba(245,158,11,.15); border-color: #d97706; color: #fcd34d; }
+#floatingNumpad .fnp-clr { background: rgba(239,68,68,.15);  border-color: #dc2626; color: #f87171; }
+#floatingNumpad .fnp-enter { background: rgba(34,197,94,.15); border-color: #16a34a; color: #4ade80; font-size: clamp(16px,4vw,22px); }
+#floatingNumpad .fnp-space { background: rgba(16,185,129,.12); border-color: #059669; color: #6ee7b7; font-size: 15px; }
+#floatingNumpad .fnp-del:active   { background: rgba(245,158,11,.35); }
+#floatingNumpad .fnp-clr:active   { background: rgba(239,68,68,.35); }
+#floatingNumpad .fnp-enter:active { background: rgba(34,197,94,.35); }
+#floatingNumpad .fnp-space:active { background: rgba(16,185,129,.3); }
+
+/* مقبض تغيير الحجم (الزاوية السفلية اليسرى) */
+#floatingNumpad .fnp-resize-handle {
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 22px; height: 22px;
+  cursor: nwse-resize;
+  display: flex; align-items: flex-end; justify-content: flex-start;
+  padding: 3px;
+  z-index: 2;
+}
+#floatingNumpad .fnp-resize-handle::before {
+  content: '';
+  width: 14px; height: 14px;
+  border-left: 3px solid rgba(96,165,250,.6);
+  border-bottom: 3px solid rgba(96,165,250,.6);
+  border-radius: 0 0 0 4px;
+  display: block;
+}
+
+/* مقبض تغيير الحجم (الزاوية السفلية اليمنى) */
+#floatingNumpad .fnp-resize-handle-r {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 22px; height: 22px;
+  cursor: nesw-resize;
+  display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 3px;
+  z-index: 2;
+}
+#floatingNumpad .fnp-resize-handle-r::before {
+  content: '';
+  width: 14px; height: 14px;
+  border-right: 3px solid rgba(96,165,250,.6);
+  border-bottom: 3px solid rgba(96,165,250,.6);
+  border-radius: 0 0 4px 0;
+  display: block;
+}
+
+/* زر إظهار اللوحة العائمة */
+#floatingNumpadToggle {
+  position: fixed;
+  bottom: 90px;
+  right: 12px;
+  z-index: 9997;
+  display: none;
+  width: 46px; height: 46px;
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  border: 2px solid #60a5fa;
+  border-radius: 50%;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(59,130,246,.5);
+  align-items: center; justify-content: center;
+  transition: transform .15s;
+  touch-action: manipulation;
+}
+#floatingNumpadToggle.fnp-tog-visible { display: flex; }
+#floatingNumpadToggle:active { transform: scale(.9); }

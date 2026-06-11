@@ -13732,6 +13732,26 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
 
   var h = '<div class="np2-wrap">';
 
+  /* ══ منطقة الإدخال — الأعلى (textarea + mic + تأكيد فقط) ══ */
+  h += '<div class="np2-top">';
+  h += '<div class="np2-dictbar">';
+  h += '<div class="np2-input-row">';
+  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
+  h += ' placeholder="اسم الطالب أو رقمه + الدرجة — مثال: محمد 15  أو  5 15"';
+  h += ' inputmode="none" id="npDictInput"';
+  h += ' oninput="WKS.npTextInput=this.value;">';
+  h += esc(WKS.npTextInput||'');
+  h += '</textarea>';
+  h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
+  h += '<button class="np2-kbd-btn" onclick="_npShowMobileKeyboard()" title="لوحة المفاتيح" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⌨️</button>';
+  h += '</div>';
+  if(WKS.npStatus) {
+    var stCls = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
+    h += '<div class="np2-status-box '+stCls+'"><span>'+esc(WKS.npStatus)+'</span></div>';
+  }
+  h += '</div>';
+  h += '</div>'; /* np2-top */
+
   /* ══ المنتصف: بطاقة الطالب + أزرار الحقل ══ */
   h += '<div class="np2-middle">';
 
@@ -13838,21 +13858,6 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
 
   /* ══ لوحة المفاتيح — الأسفل مثبتة ══ */
   h += '<div class="np2-keyboard">';
-  /* صف البحث المدمج */
-  h += '<div class="np2-kb-search-row">';
-  h += '<textarea id="npDictInput" class="np2-kb-search-inp" rows="1"';
-  h += ' placeholder="اسم الطالب أو رقمه + الدرجة — مثال: محمد 15  أو  5 15"';
-  h += ' inputmode="none"';
-  h += ' oninput="WKS.npTextInput=this.value;">';
-  h += esc(WKS.npTextInput||'');
-  h += '</textarea>';
-  h += '<button class="np2-kb-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
-  h += '<button class="np2-kb-mic-btn" onclick="_npShowMobileKeyboard()" title="لوحة المفاتيح" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⌨️</button>';
-  h += '</div>';
-  if(WKS.npStatus) {
-    var stCls2 = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
-    h += '<div class="np2-status-box '+stCls2+'" style="margin:0 6px 4px;padding:4px 10px;font-size:11px;"><span>'+esc(WKS.npStatus)+'</span></div>';
-  }
   /* صف 1 (أعلى): مسطرة + إدخال + تراجع + مسح */
   h += '<div class="np2-kb-row np2-kb-row4">';
   h += '<button class="np2-key np2-ruler" onclick="_npKeyPress(\' \')" title="مسافة">⎵</button>';
@@ -13919,10 +13924,14 @@ function _npPress(n) {
   if(num > maxVal) next = String(maxVal);
   WKS.numpadInput = next;
 
-  /* حفظ مباشر */
+  /* حفظ مباشر بدون timer الـ render */
   var stuIdx = WKS.numpadStudentIdx;
   var val = clamp(Number(WKS.numpadInput)||0, 0, maxVal);
-  gradesSetField(stuIdx, curField, val);
+  if(DB.data[cls] && DB.data[cls][stuIdx]) {
+    DB.data[cls][stuIdx][curField] = val;
+    saveDB();
+    _gradesUpdateTotCell(cls, stuIdx);
+  }
 
   /* تحديث الشاشة فقط بدون إعادة رسم كاملة */
   _npRefreshDisplay();
@@ -13933,10 +13942,14 @@ function _npDel() {
   WKS.numpadInput = (WKS.numpadInput||'').slice(0,-1);
   _npRefreshDisplay();
   if(WKS.numpadInput==='') {
-    /* حفظ القيمة الحالية المحذوفة */
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
     var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
-    gradesSetField(WKS.numpadStudentIdx, curField, '');
+    /* حفظ مباشر */
+    if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
+      DB.data[cls][WKS.numpadStudentIdx][curField] = '';
+      saveDB();
+      _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
+    }
   }
 }
 
@@ -13945,7 +13958,12 @@ function _npClear() {
   WKS.numpadInput='';
   var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
   var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
-  gradesSetField(WKS.numpadStudentIdx, curField, '');
+  /* حفظ مباشر */
+  if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
+    DB.data[cls][WKS.numpadStudentIdx][curField] = '';
+    saveDB();
+    _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
+  }
   _npRefreshDisplay();
 }
 
@@ -14133,7 +14151,7 @@ async function _npLoadWhisper() {
 /* ── تحديث صندوق الحالة بدون re-render كامل ── */
 function _npRenderStatus() {
   /* نبحث عن صندوق الحالة الموجود ونحدّثه، أو نضيفه */
-  var top = document.querySelector('.np2-keyboard');
+  var top = document.querySelector('.np2-top .np2-dictbar');
   if(!top) return;
   var existing = top.querySelector('.np2-status-box');
   if(WKS.npStatus) {
@@ -14299,7 +14317,15 @@ function _npKeyPress(ch) {
     var next=cur+String(ch);
     if(/^\d+$/.test(next)&&Number(next)>maxVal) next=String(maxVal);
     WKS.numpadInput=next;
-    if(/^\d+$/.test(next)) gradesSetField(WKS.numpadStudentIdx, curField, clamp(Number(next),0,maxVal));
+    if(/^\d+$/.test(next)) {
+      /* حفظ البيانات مباشرة بدون تشغيل timer الـ render */
+      var activeCls = WKS.activeClass;
+      if(DB.data[activeCls] && DB.data[activeCls][WKS.numpadStudentIdx]) {
+        DB.data[activeCls][WKS.numpadStudentIdx][curField] = clamp(Number(next),0,maxVal);
+        saveDB();
+        _gradesUpdateTotCell(activeCls, WKS.numpadStudentIdx);
+      }
+    }
     _npRefreshDisplay();
   } else {
     _npPressToInput(ch);
@@ -14522,7 +14548,12 @@ function _npPress(n) {
     if(Number(next) > maxVal) next = String(maxVal);
     WKS.numpadInput = next;
     var val = clamp(Number(WKS.numpadInput)||0, 0, maxVal);
-    gradesSetField(WKS.numpadStudentIdx, curField, val);
+    /* حفظ مباشر بدون timer الـ render */
+    if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
+      DB.data[cls][WKS.numpadStudentIdx][curField] = val;
+      saveDB();
+      _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
+    }
     _npRefreshDisplay();
   }
 }
@@ -14534,7 +14565,12 @@ function _npDel() {
   if(WKS.numpadInput==='') {
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
     var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
-    gradesSetField(WKS.numpadStudentIdx, curField, '');
+    /* حفظ مباشر */
+    if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
+      DB.data[cls][WKS.numpadStudentIdx][curField] = '';
+      saveDB();
+      _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
+    }
   }
 }
 
@@ -14543,7 +14579,12 @@ function _npClear() {
   WKS.numpadInput='';
   var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
   var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
-  gradesSetField(WKS.numpadStudentIdx, curField, '');
+  /* حفظ مباشر */
+  if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
+    DB.data[cls][WKS.numpadStudentIdx][curField] = '';
+    saveDB();
+    _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
+  }
   _npRefreshDisplay();
 }
 
@@ -14568,3 +14609,268 @@ function _initNumpadEvents() {
   }, 100);
 }
 
+
+// ══════════════════════════════════════════════════════
+// FLOATING NUMPAD — لوحة أرقام عائمة قابلة للسحب والتحجيم
+// ══════════════════════════════════════════════════════
+(function(){
+  var FNP = {
+    el: null,
+    tog: null,
+    dragging: false,
+    resizing: false,
+    resizeDir: null,
+    startX: 0, startY: 0,
+    startW: 0, startH: 0,
+    startL: 0, startT: 0,
+    visible: false
+  };
+
+  /* ── إنشاء عنصر اللوحة ── */
+  function buildFloatingNumpad() {
+    if (document.getElementById('floatingNumpad')) return;
+
+    var el = document.createElement('div');
+    el.id = 'floatingNumpad';
+    el.innerHTML =
+      '<div class="fnp-handle" id="fnpHandle">' +
+        '<div class="fnp-handle-dots"><span></span><span></span><span></span><span></span><span></span></div>' +
+        '<span class="fnp-title">🔢 لوحة الأرقام</span>' +
+        '<button class="fnp-close-btn" onclick="FNP_hide()" title="إغلاق">✕</button>' +
+      '</div>' +
+      '<div class="fnp-body">' +
+        /* صف العمليات */
+        '<div class="fnp-row fnp-row4">' +
+          '<button class="fnp-key fnp-space" onclick="_fnpKey(\' \')">⎵</button>' +
+          '<button class="fnp-key fnp-enter" onclick="_fnpSubmit()">↵</button>' +
+          '<button class="fnp-key fnp-del" onclick="_fnpDel()">⌫</button>' +
+          '<button class="fnp-key fnp-clr" onclick="_fnpClr()">✕</button>' +
+        '</div>' +
+        /* صف 1-5 */
+        '<div class="fnp-row fnp-row5">' +
+          [1,2,3,4,5].map(function(n){return '<button class="fnp-key" onclick="_fnpKey(\''+n+'\')">'+n+'</button>';}).join('') +
+        '</div>' +
+        /* صف 6-0 */
+        '<div class="fnp-row fnp-row5">' +
+          [6,7,8,9,0].map(function(n){return '<button class="fnp-key" onclick="_fnpKey(\''+n+'\')">'+n+'</button>';}).join('') +
+        '</div>' +
+      '</div>' +
+      /* مقابض تغيير الحجم */
+      '<div class="fnp-resize-handle" id="fnpResizeL"></div>' +
+      '<div class="fnp-resize-handle-r" id="fnpResizeR"></div>';
+
+    document.body.appendChild(el);
+    FNP.el = el;
+
+    /* زر التبديل */
+    var tog = document.createElement('button');
+    tog.id = 'floatingNumpadToggle';
+    tog.title = 'لوحة الأرقام';
+    tog.innerHTML = '🔢';
+    tog.onclick = FNP_toggle;
+    document.body.appendChild(tog);
+    FNP.tog = tog;
+
+    /* استعادة الموضع المحفوظ */
+    var saved = _fnpLoadPos();
+    if (saved) {
+      el.style.left   = saved.l;
+      el.style.top    = saved.t;
+      el.style.bottom = 'auto';
+      el.style.transform = 'none';
+      if (saved.w) el.style.width  = saved.w;
+      if (saved.h) el.style.height = saved.h;
+    }
+
+    _fnpBindDrag();
+    _fnpBindResize();
+  }
+
+  /* ── ربط السحب ── */
+  function _fnpBindDrag() {
+    var handle = document.getElementById('fnpHandle');
+    if (!handle) return;
+
+    function onStart(e) {
+      if (e.target.classList.contains('fnp-close-btn')) return;
+      FNP.dragging = true;
+      var touch = e.touches ? e.touches[0] : e;
+      var rect = FNP.el.getBoundingClientRect();
+      FNP.startX = touch.clientX - rect.left;
+      FNP.startY = touch.clientY - rect.top;
+      FNP.el.style.bottom = 'auto';
+      FNP.el.style.transform = 'none';
+      e.preventDefault();
+    }
+    function onMove(e) {
+      if (!FNP.dragging) return;
+      var touch = e.touches ? e.touches[0] : e;
+      var nx = touch.clientX - FNP.startX;
+      var ny = touch.clientY - FNP.startY;
+      /* حدود الشاشة */
+      var maxX = window.innerWidth  - FNP.el.offsetWidth;
+      var maxY = window.innerHeight - FNP.el.offsetHeight;
+      nx = Math.max(0, Math.min(nx, maxX));
+      ny = Math.max(0, Math.min(ny, maxY));
+      FNP.el.style.left = nx + 'px';
+      FNP.el.style.top  = ny + 'px';
+      e.preventDefault();
+    }
+    function onEnd() {
+      if (!FNP.dragging) return;
+      FNP.dragging = false;
+      _fnpSavePos();
+    }
+    handle.addEventListener('mousedown',  onStart, {passive:false});
+    handle.addEventListener('touchstart', onStart, {passive:false});
+    document.addEventListener('mousemove',  onMove, {passive:false});
+    document.addEventListener('touchmove',  onMove, {passive:false});
+    document.addEventListener('mouseup',  onEnd);
+    document.addEventListener('touchend', onEnd);
+  }
+
+  /* ── ربط تغيير الحجم ── */
+  function _fnpBindResize() {
+    function onStart(e, dir) {
+      FNP.resizing = true;
+      FNP.resizeDir = dir;
+      var touch = e.touches ? e.touches[0] : e;
+      FNP.startX = touch.clientX;
+      FNP.startY = touch.clientY;
+      FNP.startW = FNP.el.offsetWidth;
+      FNP.startH = FNP.el.offsetHeight;
+      FNP.startL = FNP.el.getBoundingClientRect().left;
+      FNP.el.style.bottom = 'auto';
+      FNP.el.style.transform = 'none';
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    function onMove(e) {
+      if (!FNP.resizing) return;
+      var touch = e.touches ? e.touches[0] : e;
+      var dx = touch.clientX - FNP.startX;
+      var dy = touch.clientY - FNP.startY;
+      var newW = FNP.startW, newH = FNP.startH + dy;
+      if (FNP.resizeDir === 'L') {
+        newW = FNP.startW - dx;
+        var newL = FNP.startL + dx;
+        newW = Math.max(220, Math.min(newW, window.innerWidth - newL));
+        FNP.el.style.width = newW + 'px';
+        FNP.el.style.left  = newL + 'px';
+      } else {
+        newW = Math.max(220, Math.min(FNP.startW + dx, window.innerWidth - FNP.startL));
+        FNP.el.style.width = newW + 'px';
+      }
+      newH = Math.max(180, newH);
+      FNP.el.style.height = newH + 'px';
+      e.preventDefault();
+    }
+    function onEnd() {
+      if (!FNP.resizing) return;
+      FNP.resizing = false;
+      _fnpSavePos();
+    }
+
+    var rL = document.getElementById('fnpResizeL');
+    var rR = document.getElementById('fnpResizeR');
+    if (rL) {
+      rL.addEventListener('mousedown',  function(e){onStart(e,'L');}, {passive:false});
+      rL.addEventListener('touchstart', function(e){onStart(e,'L');}, {passive:false});
+    }
+    if (rR) {
+      rR.addEventListener('mousedown',  function(e){onStart(e,'R');}, {passive:false});
+      rR.addEventListener('touchstart', function(e){onStart(e,'R');}, {passive:false});
+    }
+    document.addEventListener('mousemove',  onMove, {passive:false});
+    document.addEventListener('touchmove',  onMove, {passive:false});
+    document.addEventListener('mouseup',  onEnd);
+    document.addEventListener('touchend', onEnd);
+  }
+
+  /* ── حفظ واستعادة الموضع ── */
+  function _fnpSavePos() {
+    try {
+      var rect = FNP.el.getBoundingClientRect();
+      localStorage.setItem('fnp_pos', JSON.stringify({
+        l: FNP.el.style.left, t: FNP.el.style.top,
+        w: FNP.el.style.width, h: FNP.el.style.height
+      }));
+    } catch(e){}
+  }
+  function _fnpLoadPos() {
+    try { return JSON.parse(localStorage.getItem('fnp_pos')||'null'); } catch(e){ return null; }
+  }
+
+  /* ── إظهار/إخفاء ── */
+  window.FNP_show = function() {
+    buildFloatingNumpad();
+    FNP.el.classList.add('fnp-visible');
+    FNP.tog.classList.add('fnp-tog-visible');
+    /* إخفاء اللوحة الثابتة */
+    var kb = document.querySelector('.np2-keyboard');
+    if (kb) kb.classList.add('np2-keyboard-hidden');
+    FNP.visible = true;
+  };
+  window.FNP_hide = function() {
+    if (FNP.el) FNP.el.classList.remove('fnp-visible');
+    /* إظهار اللوحة الثابتة مجدداً */
+    var kb = document.querySelector('.np2-keyboard');
+    if (kb) kb.classList.remove('np2-keyboard-hidden');
+    FNP.visible = false;
+  };
+  window.FNP_toggle = function() {
+    FNP.visible ? FNP_hide() : FNP_show();
+  };
+
+  /* ── أحداث الضغط تُحيل لوظائف الـ numpad الأصلية ── */
+  window._fnpKey = function(k) {
+    if (typeof _npKeyPress === 'function') _npKeyPress(k);
+  };
+  window._fnpDel = function() {
+    if (typeof _npKeyBackspace === 'function') _npKeyBackspace();
+  };
+  window._fnpClr = function() {
+    if (typeof _npKeyReset === 'function') _npKeyReset();
+  };
+  window._fnpSubmit = function() {
+    if (typeof _npSubmit === 'function') _npSubmit();
+  };
+
+  /* ── تفعيل تلقائي عند دخول وضع numpad ── */
+  var _origRenderWeekly = window.renderWeekly;
+  if (typeof _origRenderWeekly === 'function') {
+    window.renderWeekly = function() {
+      _origRenderWeekly.apply(this, arguments);
+      if (typeof WKS !== 'undefined' && WKS.viewMode === 'numpad') {
+        buildFloatingNumpad();
+        if (FNP.tog) FNP.tog.classList.add('fnp-tog-visible');
+        /* إخفاء اللوحة الثابتة وإظهار العائمة — فقط إذا لم تكن مرئية بالفعل */
+        if (!FNP.visible) {
+          setTimeout(function(){
+            var kb = document.querySelector('.np2-keyboard');
+            if (kb) {
+              kb.classList.add('np2-keyboard-hidden');
+              FNP_show();
+            }
+          }, 80);
+        } else {
+          /* اللوحة مرئية — اكتفِ بإخفاء اللوحة الثابتة دون إعادة رسم اللوحة العائمة */
+          var kb = document.querySelector('.np2-keyboard');
+          if (kb) kb.classList.add('np2-keyboard-hidden');
+        }
+      } else {
+        if (FNP.el)  FNP.el.classList.remove('fnp-visible');
+        if (FNP.tog) FNP.tog.classList.remove('fnp-tog-visible');
+        var kb = document.querySelector('.np2-keyboard');
+        if (kb) kb.classList.remove('np2-keyboard-hidden');
+        FNP.visible = false;
+      }
+    };
+  }
+
+  /* ── تهيئة عند تحميل الصفحة ── */
+  window.addEventListener('load', function(){
+    buildFloatingNumpad();
+  });
+
+})();
