@@ -1477,6 +1477,7 @@ function renderGrades(){
   html+='<div class="g-info-left">📌 '+esc(cls)+' — '+esc(DB.meta.subject)+'</div>';
   html+='<div class="g-info-right">';
   html+='<span class="badge badge-blue">'+filtered.length+' طالب</span>';
+  html+='<button class="btn btn-sm" style="background:#0e7490;color:white;border:none;" onclick="gradesSortAlpha()">🔤 أبجدي</button>';
   html+='<button class="btn btn-primary btn-sm" onclick="gradesAddStudent()">+ جديد</button>';
   html+='</div></div>';
 
@@ -1506,7 +1507,7 @@ function renderGrades(){
     html+='<div class="tw"><table><thead>';
     if(_wkSpan>0){
       html+='<tr>';
-      html+='<th style="min-width:20px">م</th><th class="td-name">الاسم</th>';
+      html+='<th style="min-width:20px">م</th><th class="td-name">الاسم</th><th style="width:32px;"></th>';
       weeks.forEach(function(w){
         if(_wkSpan>0)html+='<th colspan="'+_wkSpan+'" style="background:#0d2350;text-align:center;">أسبوع '+w+'</th>';
       });
@@ -1516,10 +1517,11 @@ function renderGrades(){
       html+='<th style="background:#1c1400;">اختبارات<br><small>/30</small></th>';
       if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+tmax+'</small></th>';
       if(_showDist)html+='<th>توزيع</th>';
+      html+='<th>تحريك</th><th>حذف</th>';
       html+='</tr>';
     }
     html+='<tr>';
-    html+='<th></th><th></th>';
+    html+='<th></th><th></th><th></th>';
     weeks.forEach(function(w){
       if(_showAssess)html+='<th style="background:#102060;font-size:8px;">تقييم<br>/20</th>';
       if(_showHw)html+='<th style="background:#102060;font-size:8px;">واجب<br>/10</th>';
@@ -1532,6 +1534,7 @@ function renderGrades(){
       html+='<th style="background:#1c1400;">اختبارات<br><small>/30</small></th>';
       if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+tmax+'</small></th>';
       if(_showDist)html+='<th>توزيع</th>';
+      html+='<th>تحريك</th><th>حذف</th>';
     } else {
       if(_showAvgAssess)html+='<th></th>';
       if(_showAvgHw)html+='<th></th>';
@@ -1539,6 +1542,7 @@ function renderGrades(){
       html+='<th></th>';
       if(_showTotal)html+='<th></th>';
       if(_showDist)html+='<th></th>';
+      html+='<th></th><th></th>';
     }
     html+='</tr></thead><tbody>';
 
@@ -1550,6 +1554,14 @@ function renderGrades(){
       html+='<tr>';
       html+='<td class="td-rn">'+(idx+1)+'</td>';
       html+='<td class="td-name" style="font-size:10px;padding:3px 5px;">'+esc(s.name)+'</td>';
+      var _gPhoto=s.photo||(DB.meta&&DB.meta.defaultStudentPhoto?DB.meta.defaultStudentPhoto:'');
+      html+='<td style="padding:1px;text-align:center;width:34px;">';
+      html+='<div class="pu" style="width:30px;height:30px;border-radius:50%;overflow:hidden;border:1.5px solid #1e3a5f;display:flex;align-items:center;justify-content:center;cursor:pointer;margin:auto;" onclick="document.getElementById(\'hph'+s.id+'\').click()">';
+      if(_gPhoto)html+='<img src="'+_gPhoto+'" style="width:100%;height:100%;object-fit:cover;"/>';
+      else html+='<span style="font-size:11px;color:#475569;">'+(idx+1)+'</span>';
+      html+='</div>';
+      html+='<input id="hph'+s.id+'" type="file" accept="image/*" capture="environment" style="display:none" onchange="gradesPhotoChange(event,'+idx+')" />';
+      html+='</td>';
       var behSum=0,behCnt=0;
       weeks.forEach(function(w){
         var aField='a'+w, hField='h'+w, bField='bw'+w;
@@ -1621,6 +1633,14 @@ function renderGrades(){
         html+='</div>';
         html+='</td>';
       }
+      // Move up/down
+      html+='<td style="white-space:nowrap;padding:1px 2px;">';
+      html+='<div style="display:flex;flex-direction:column;gap:1px;align-items:center;">';
+      html+='<button onclick="gradesMoveStudent('+idx+',-1)" style="background:#1e3a5f;border:none;color:#93c5fd;border-radius:3px;font-size:10px;cursor:pointer;padding:1px 5px;line-height:1.2;"'+(idx===0?' disabled style="opacity:.3;background:#1e3a5f;border:none;color:#93c5fd;border-radius:3px;font-size:10px;padding:1px 5px;"':'')+'>▲</button>';
+      html+='<button onclick="gradesMoveStudent('+idx+',1)" style="background:#1e3a5f;border:none;color:#93c5fd;border-radius:3px;font-size:10px;cursor:pointer;padding:1px 5px;line-height:1.2;"'+(idx===students.length-1?' disabled style="opacity:.3;background:#1e3a5f;border:none;color:#93c5fd;border-radius:3px;font-size:10px;padding:1px 5px;"':'')+'>▼</button>';
+      html+='</div></td>';
+      // Delete
+      html+='<td><button class="del-btn" onclick="openDelStudentModal('+idx+')">🗑</button></td>';
       html+='</tr>';
     });
     html+='</tbody></table></div>';
@@ -1660,7 +1680,7 @@ function renderGrades(){
   html+='<th title="متوسط السلوك = مجموع درجات السلوك الأسبوعية ÷ عدد الأسابيع المُرصدة">متوسط سلوك<span class="ml">/10</span><br><span style="font-size:7px;color:#a78bfa;font-weight:400;">Σ سلوك ÷ ن</span></th>';
   html+='<th title="مجموع درجات الاختبارات">متوسط<br><span style="font-size:7px;color:#fbbf24;">اختبارات/30</span></th>';
   html+='<th>مجموع<span class="ml">/'+tmax+'</span></th>';
-  html+='<th>غياب</th><th>توزيع</th><th>حذف</th>';
+  html+='<th>غياب</th><th>توزيع</th><th>تحريك</th><th>حذف</th>';
   html+='</tr></thead><tbody>';
 
   filtered.forEach(function(s){
@@ -1718,6 +1738,12 @@ function renderGrades(){
     html+='</div>';
     html+='<button style="background:'+(s._totalAbsent?'#fee2e2':'#fef3c7')+';border:1px solid '+(s._totalAbsent?'#ef4444':'#f59e0b')+';border-radius:2px;font-size:7.5px;color:'+(s._totalAbsent?'#dc2626':'#b45309')+';cursor:pointer;padding:1px 3px;" onclick="gradesSetAllAbsent('+idx+')">'+(s._totalAbsent?'↩ تراجع':'غ كامل')+'</button>';
     html+='</div></td>';
+    // Move up/down
+    html+='<td style="white-space:nowrap;padding:1px 2px;">';
+    html+='<div style="display:flex;flex-direction:column;gap:1px;align-items:center;">';
+    html+='<button onclick="gradesMoveStudent('+idx+',-1)" '+(idx===0?'disabled ':'')+'style="background:#1e3a5f;border:none;color:#93c5fd;border-radius:3px;font-size:10px;cursor:pointer;padding:1px 5px;line-height:1.2;'+(idx===0?'opacity:.3;':'')+'">▲</button>';
+    html+='<button onclick="gradesMoveStudent('+idx+',1)" '+(idx===students.length-1?'disabled ':'')+'style="background:#1e3a5f;border:none;color:#93c5fd;border-radius:3px;font-size:10px;cursor:pointer;padding:1px 5px;line-height:1.2;'+(idx===students.length-1?'opacity:.3;':'')+'">▼</button>';
+    html+='</div></td>';
     // Delete
     html+='<td><button class="del-btn" onclick="openDelStudentModal('+idx+')">🗑</button></td>';
     html+='</tr>';
@@ -1770,6 +1796,22 @@ function renderGrades(){
 
 function gradesAddStudent(){
   DB.data[GS.activeClass].push(emptyStudent(Date.now()));
+  saveDB();renderGrades();
+}
+function gradesSortAlpha(){
+  var cls=GS.activeClass;
+  if(!DB.data[cls])return;
+  DB.data[cls].sort(function(a,b){return (a.name||'').localeCompare(b.name||'','ar');});
+  saveDB();renderGrades();
+  showSnack('✅ تم الترتيب الأبجدي');
+}
+function gradesMoveStudent(idx,dir){
+  var cls=GS.activeClass;
+  var arr=DB.data[cls];
+  if(!arr)return;
+  var newIdx=idx+dir;
+  if(newIdx<0||newIdx>=arr.length)return;
+  var tmp=arr[idx];arr[idx]=arr[newIdx];arr[newIdx]=tmp;
   saveDB();renderGrades();
 }
 var _gradesRenderTimer=null;
@@ -4046,9 +4088,7 @@ function renderWeekly(){
     return;
   }
 
-  if(WKS.viewMode==='grid'){
-    html+=renderWeeklyGrid(displayStudents,cls,week,absCols,assessMax,hwMax);
-  } else {
+  {
 
   // ── Table card ──
   html+='<div class=\"wk-card\">';
@@ -5964,7 +6004,6 @@ function renderViewBar(){
   var mode=WKS.viewMode||'table';
   var h='<span class="view-bar-lbl">👁 طريقة العرض:</span>';
   h+='<button class="view-bar-tab'+(mode==='table'?' active':'')+'" onclick="WKS.viewMode=\'table\';renderWeekly();renderViewBar();">🗂 جدول</button>';
-  h+='<button class="view-bar-tab'+(mode==='grid'?' active':'')+'" onclick="WKS.viewMode=\'grid\';renderWeekly();renderViewBar();">&#8862; شبكي</button>';
   h+='<button class="view-bar-tab'+(mode==='numpad'?' active':'')+'" onclick="WKS.viewMode=\'numpad\';WKS.numpadStudent=null;WKS.numpadInput=\'\';renderWeekly();renderViewBar();">🎯 الراصد</button>';
   h+='<button class="view-bar-tab'+(mode==='attend'?' active':'')+'" onclick="WKS.viewMode=\'attend\';WKS._attendPresent={};renderWeekly();renderViewBar();" style="'+(mode==='attend'?'background:#059669;border-color:#10b981;':'')+'">✅ رصد الحضور</button>';
   bar.innerHTML=h;
@@ -13837,10 +13876,12 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   }
   h += '</div>';
   /* أزرار تبديل الحقل — ظاهرة دائماً حتى قبل اختيار الطالب، لتحديد وجهة الإدخال الصوتي/اليدوي */
-  h += '<div style="display:flex;gap:4px;margin-top:6px;">';
+  h += '<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">';
   h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" onclick="_npSetField(\'hw\');renderWeekly();" style="flex:1;touch-action:manipulation;">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
   h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" onclick="_npSetField(\'assess\');renderWeekly();" style="flex:1;touch-action:manipulation;">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
   h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" onclick="_npSetField(\'beh\');renderWeekly();" style="flex:1;touch-action:manipulation;">سلوك<span class="np2-ftab-max">/10</span></button>';
+  h += '<button class="np2-ftab'+(fld==='ex1'?' on':'')+'" onclick="_npSetField(\'ex1\');renderWeekly();" style="flex:1;touch-action:manipulation;">اختبار1<span class="np2-ftab-max">/15</span></button>';
+  h += '<button class="np2-ftab'+(fld==='ex2'?' on':'')+'" onclick="_npSetField(\'ex2\');renderWeekly();" style="flex:1;touch-action:manipulation;">اختبار2<span class="np2-ftab-max">/15</span></button>';
   h += '</div>';
   h += '</div>'; /* np2-top */
 
@@ -13899,18 +13940,27 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
     h += '<div style="width:34px;height:34px;border-radius:50%;background:#1e3a5f;border:2px solid #fbbf24;display:flex;align-items:center;justify-content:center;color:#fbbf24;font-size:14px;font-weight:900;">'+(WKS.numpadStudentIdx+1)+'</div>';
     h += '</div>';
 
-    /* الدرجات الثلاث */
-    h += '<div style="display:flex;gap:4px;margin-bottom:5px;">';
-    h += '<div class="np2-grade-cell'+(fld==='hw'?' active':'')+'" onclick="_npSetField(\'hw\')" style="cursor:pointer;flex:1;"><span class="np2-grade-lbl">واجب</span><span class="np2-grade-val" style="'+_hwStyle+'">'+esc(String(hwVal))+'</span>'+(hwVal==='غ'||hwVal==='م'?'':'<span class="np2-grade-max">/'+hwMax+'</span>')+'</div>';
-    h += '<div class="np2-grade-cell'+(fld==='assess'?' active':'')+'" onclick="_npSetField(\'assess\')" style="cursor:pointer;flex:1;"><span class="np2-grade-lbl">تقييم</span><span class="np2-grade-val" style="'+_asStyle+'">'+esc(String(assessVal))+'</span>'+(assessVal==='غ'||assessVal==='م'?'':'<span class="np2-grade-max">/'+assessMax+'</span>')+'</div>';
-    h += '<div class="np2-grade-cell'+(fld==='beh'?' active':'')+'" onclick="_npSetField(\'beh\')" style="cursor:pointer;flex:1;"><span class="np2-grade-lbl">سلوك</span><span class="np2-grade-val" style="'+_behStyle+'">'+esc(String(behVal))+'</span>'+(behVal==='غ'||behVal==='م'?'':'<span class="np2-grade-max">/10</span>')+'</div>';
+    var ex1Val = _sFresh['ex1']!==undefined&&_sFresh['ex1']!==''?_sFresh['ex1']:'—';
+    var ex2Val = _sFresh['ex2']!==undefined&&_sFresh['ex2']!==''?_sFresh['ex2']:'—';
+    var _ex1Style = (ex1Val==='غ'||ex1Val==='م')?'color:#f87171;':'';
+    var _ex2Style = (ex2Val==='غ'||ex2Val==='م')?'color:#f87171;':'';
+
+    /* الدرجات الخمس */
+    h += '<div style="display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap;">';
+    h += '<div class="np2-grade-cell'+(fld==='hw'?' active':'')+'" onclick="_npSetField(\'hw\')" style="cursor:pointer;flex:1;min-width:55px;"><span class="np2-grade-lbl">واجب</span><span class="np2-grade-val" style="'+_hwStyle+'" id="npGradeHw">'+esc(String(hwVal))+'</span>'+(hwVal==='غ'||hwVal==='م'?'':'<span class="np2-grade-max">/'+hwMax+'</span>')+'</div>';
+    h += '<div class="np2-grade-cell'+(fld==='assess'?' active':'')+'" onclick="_npSetField(\'assess\')" style="cursor:pointer;flex:1;min-width:55px;"><span class="np2-grade-lbl">تقييم</span><span class="np2-grade-val" style="'+_asStyle+'" id="npGradeAssess">'+esc(String(assessVal))+'</span>'+(assessVal==='غ'||assessVal==='م'?'':'<span class="np2-grade-max">/'+assessMax+'</span>')+'</div>';
+    h += '<div class="np2-grade-cell'+(fld==='beh'?' active':'')+'" onclick="_npSetField(\'beh\')" style="cursor:pointer;flex:1;min-width:55px;"><span class="np2-grade-lbl">سلوك</span><span class="np2-grade-val" style="'+_behStyle+'" id="npGradeBeh">'+esc(String(behVal))+'</span>'+(behVal==='غ'||behVal==='م'?'':'<span class="np2-grade-max">/10</span>')+'</div>';
+    h += '<div class="np2-grade-cell'+(fld==='ex1'?' active':'')+'" onclick="_npSetField(\'ex1\')" style="cursor:pointer;flex:1;min-width:55px;"><span class="np2-grade-lbl">اختبار1</span><span class="np2-grade-val" style="'+_ex1Style+'" id="npGradeEx1">'+esc(String(ex1Val))+'</span>'+(ex1Val==='غ'||ex1Val==='م'?'':'<span class="np2-grade-max">/15</span>')+'</div>';
+    h += '<div class="np2-grade-cell'+(fld==='ex2'?' active':'')+'" onclick="_npSetField(\'ex2\')" style="cursor:pointer;flex:1;min-width:55px;"><span class="np2-grade-lbl">اختبار2</span><span class="np2-grade-val" style="'+_ex2Style+'" id="npGradeEx2">'+esc(String(ex2Val))+'</span>'+(ex2Val==='غ'||ex2Val==='م'?'':'<span class="np2-grade-max">/15</span>')+'</div>';
     h += '</div>';
 
     /* أزرار تبديل الحقل */
-    h += '<div style="display:flex;gap:4px;margin-bottom:5px;">';
+    h += '<div style="display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap;">';
     h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" onclick="_npSetField(\'hw\')" style="flex:1;touch-action:manipulation;">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
     h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" onclick="_npSetField(\'assess\')" style="flex:1;touch-action:manipulation;">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
     h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" onclick="_npSetField(\'beh\')" style="flex:1;touch-action:manipulation;">سلوك<span class="np2-ftab-max">/10</span></button>';
+    h += '<button class="np2-ftab'+(fld==='ex1'?' on':'')+'" onclick="_npSetField(\'ex1\')" style="flex:1;touch-action:manipulation;">اختبار1<span class="np2-ftab-max">/15</span></button>';
+    h += '<button class="np2-ftab'+(fld==='ex2'?' on':'')+'" onclick="_npSetField(\'ex2\')" style="flex:1;touch-action:manipulation;">اختبار2<span class="np2-ftab-max">/15</span></button>';
     h += '</div>';
 
     /* أزرار الغياب */
@@ -13925,7 +13975,30 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
     });
     h += '</div>';
   } else {
-    h += '<div class="np2-empty" style="padding:20px;text-align:center;">✍️ أدخل اسم الطالب أعلاه</div>';
+    h += '<div style="display:flex;flex-direction:column;gap:8px;padding:10px 6px;">';
+  h += '<div style="text-align:center;font-size:13px;font-weight:900;color:#60a5fa;margin-bottom:2px;">كيف تستخدم الراصد؟</div>';
+  h += '<div style="display:flex;align-items:flex-start;gap:8px;background:rgba(99,102,241,.08);border:1px solid #3730a3;border-radius:9px;padding:8px 10px;">';
+  h += '<span style="font-size:18px;flex-shrink:0;">1️⃣</span>';
+  h += '<div><div style="font-size:11px;font-weight:800;color:#a5b4fc;">اختر نوع الرصد</div>';
+  h += '<div style="font-size:10px;color:#64748b;margin-top:2px;">اضغط: واجب / تقييم / سلوك / اختبار1 / اختبار2 من الأزرار أعلاه</div></div>';
+  h += '</div>';
+  h += '<div style="display:flex;align-items:flex-start;gap:8px;background:rgba(16,185,129,.08);border:1px solid #065f46;border-radius:9px;padding:8px 10px;">';
+  h += '<span style="font-size:18px;flex-shrink:0;">2️⃣</span>';
+  h += '<div><div style="font-size:11px;font-weight:800;color:#6ee7b7;">ابحث عن الطالب</div>';
+  h += '<div style="font-size:10px;color:#64748b;margin-top:2px;">اكتب اسمه أو رقمه في الحقل أعلاه — يمكنك استخدام المايك 🎤</div></div>';
+  h += '</div>';
+  h += '<div style="display:flex;align-items:flex-start;gap:8px;background:rgba(245,158,11,.08);border:1px solid #78350f;border-radius:9px;padding:8px 10px;">';
+  h += '<span style="font-size:18px;flex-shrink:0;">3️⃣</span>';
+  h += '<div><div style="font-size:11px;font-weight:800;color:#fcd34d;">أدخل الدرجة</div>';
+  h += '<div style="font-size:10px;color:#64748b;margin-top:2px;">اكتب الدرجة بعد الاسم — مثال: <span style="color:#fbbf24;font-weight:700;">محمد 15</span> أو <span style="color:#fbbf24;font-weight:700;">5 15</span> — بدون درجة = غياب تلقائي 🔴</div></div>';
+  h += '</div>';
+  if(absCols.length > 0) {
+    h += '<div style="display:flex;align-items:center;gap:6px;background:rgba(239,68,68,.07);border:1px solid #7f1d1d;border-radius:9px;padding:7px 10px;">';
+    h += '<span style="font-size:15px;">📌</span>';
+    h += '<div style="font-size:10px;color:#fca5a5;">الفترة المحددة للغياب تظهر بإطار مضيء أسفل بطاقة الطالب — غيّرها قبل الرصد</div>';
+    h += '</div>';
+  }
+  h += '</div>';
   }
 
   h += '</div>'; /* np2-float-body */
@@ -13944,6 +14017,15 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '<button class="np2-key np2-del" onclick="_npKeyBackspace()">⌫</button>';
   h += '<button class="np2-key np2-clr" onclick="_npKeyReset()">✕</button>';
   h += '</div>';
+  /* صف غ/م — يظهر فقط عند اختيار اختبار 1 أو 2 */
+  if(fld==='ex1' || fld==='ex2') {
+    h += '<div class="np2-kb-row np2-kb-row4" style="margin-bottom:2px;">';
+    var _exF = fld;
+    var _curExVal = s ? (s[_exF]!==undefined&&s[_exF]!==''?s[_exF]:'') : '';
+    h += '<button class="np2-key'+(WKS.numpadStudent&&_curExVal==='غ'?' np2-key-active':'')+'" onclick="_npSetExamAbs(\'غ\')" style="flex:2;background:'+(WKS.numpadStudent&&_curExVal==='غ'?'#7f1d1d':'rgba(239,68,68,.15)')+';color:#f87171;border-color:#ef4444;font-weight:900;font-size:14px;">غ غائب</button>';
+    h += '<button class="np2-key'+(WKS.numpadStudent&&_curExVal==='م'?' np2-key-active':'')+'" onclick="_npSetExamAbs(\'م\')" style="flex:2;background:'+(WKS.numpadStudent&&_curExVal==='م'?'#1e1b4b':'rgba(99,102,241,.15)')+';color:#a5b4fc;border-color:#6366f1;font-weight:900;font-size:14px;">م معفى</button>';
+    h += '</div>';
+  }
   /* صف 2: 1-2-3-4-5 */
   h += '<div class="np2-kb-row np2-kb-row5">';
   [1,2,3,4,5].forEach(function(n){ h += '<button class="np2-key" onclick="_npKeyPress(\''+n+'\')">'+n+'</button>'; });
@@ -14281,8 +14363,8 @@ function _npPress(n) {
   var week = WKS.activeWeek;
   var fld  = WKS.numpadField || 'assess';
   var aF   = 'a'+week, hF = 'h'+week, bF = 'bw'+week;
-  var curField = fld==='assess'?aF : fld==='hw'?hF : bF;
-  var maxVal   = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : 10;
+  var curField = fld==='assess'?aF : fld==='hw'?hF : fld==='beh'?bF : fld==='ex1'?'ex1' : 'ex2';
+  var maxVal   = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : (fld==='ex1'||fld==='ex2')?15 : 10;
 
   var cur = WKS.numpadInput || '';
   var next = cur + String(n);
@@ -14310,7 +14392,7 @@ function _npDel() {
   _npRefreshDisplay();
   if(WKS.numpadInput==='') {
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-    var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
+    var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
     /* حفظ مباشر */
     if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
       DB.data[cls][WKS.numpadStudentIdx][curField] = '';
@@ -14324,7 +14406,7 @@ function _npClear() {
   if(!WKS.numpadStudent) return;
   WKS.numpadInput='';
   var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-  var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
+  var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
   /* حفظ مباشر */
   if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
     DB.data[cls][WKS.numpadStudentIdx][curField] = '';
@@ -14344,17 +14426,37 @@ function _npToggleAbs(colIndex) {
   renderWeekly();
 }
 
+/* تعيين غائب/معفى لحقول الاختبارات */
+function _npSetExamAbs(val) {
+  if(!WKS.numpadStudent) return;
+  var fld = WKS.numpadField || 'assess';
+  if(fld !== 'ex1' && fld !== 'ex2') return;
+  var cls = WKS.activeClass;
+  var stuIdx = WKS.numpadStudentIdx;
+  /* إذا كانت القيمة مضبوطة بالفعل — ألغِها (toggle) */
+  var cur = DB.data[cls] && DB.data[cls][stuIdx] ? DB.data[cls][stuIdx][fld] : '';
+  var newVal = (cur === val) ? '' : val;
+  WKS.numpadInput = '';
+  gradesSetField(stuIdx, fld, newVal);
+  /* تحديث كائن الطالب في WKS */
+  var st = (DB.data[cls]||[]).find(function(s){ return s.id == WKS.numpadStudent.id; });
+  if(st){ WKS.numpadStudent = st; }
+  WKS.npStatus = newVal === '' ? '🗑 تم المسح' : (newVal === 'غ' ? '🚫 غائب في الاختبار' : '✅ معفى من الاختبار');
+  WKS.npStatusType = newVal === 'غ' ? 'err' : newVal === 'م' ? 'info' : 'ok';
+  renderWeekly();
+}
+
 /* تبديل الحقل — تحديث فوري للـ UI بدون re-render كامل */
 function _npSetField(fld) {
   WKS.numpadField = fld;
   /* active على أزرار التبويب */
-  ['hw','assess','beh'].forEach(function(t) {
+  ['hw','assess','beh','ex1','ex2'].forEach(function(t) {
     var id = 'npTab' + t.charAt(0).toUpperCase() + t.slice(1);
     var btn = document.getElementById(id);
     if(btn) btn.className = 'np2-ftab' + (fld===t?' on':'');
   });
   /* active على خلايا الدرجات */
-  var map = {assess:'npGradeAssess', hw:'npGradeHw', beh:'npGradeBeh'};
+  var map = {assess:'npGradeAssess', hw:'npGradeHw', beh:'npGradeBeh', ex1:'npGradeEx1', ex2:'npGradeEx2'};
   Object.keys(map).forEach(function(k) {
     var el = document.getElementById(map[k]);
     if(el) {
@@ -14369,20 +14471,26 @@ function _npRefreshDisplay() {
   var s=WKS.numpadStudent, inp=WKS.numpadInput||'', fld=WKS.numpadField||'assess';
   var week=WKS.activeWeek;
   var aF='a'+week, hF='h'+week, bF='bw'+week;
-  var curField=fld==='assess'?aF:fld==='hw'?hF:bF;
+  var curField=fld==='assess'?aF:fld==='hw'?hF:fld==='beh'?bF:fld==='ex1'?'ex1':'ex2';
   var curVal=s?s[curField]:undefined;
 
-  /* تحديث خلايا الدرجات الثلاث */
+  /* تحديث خلايا الدرجات */
   if(s) {
     var assessVal = inp!==''&&fld==='assess'?inp:(s[aF]!==undefined&&s[aF]!==''?s[aF]:'—');
     var hwVal     = inp!==''&&fld==='hw'    ?inp:(s[hF]!==undefined&&s[hF]!==''?s[hF]:'—');
     var behVal    = inp!==''&&fld==='beh'   ?inp:(s[bF]!==undefined&&s[bF]!==''?s[bF]:'—');
+    var ex1Val    = inp!==''&&fld==='ex1'   ?inp:(s['ex1']!==undefined&&s['ex1']!==''?s['ex1']:'—');
+    var ex2Val    = inp!==''&&fld==='ex2'   ?inp:(s['ex2']!==undefined&&s['ex2']!==''?s['ex2']:'—');
     var ga=document.getElementById('npGradeAssess');
     var gh=document.getElementById('npGradeHw');
     var gb=document.getElementById('npGradeBeh');
+    var ge1=document.getElementById('npGradeEx1');
+    var ge2=document.getElementById('npGradeEx2');
     if(ga) ga.textContent = String(assessVal);
     if(gh) gh.textContent = String(hwVal);
     if(gb) gb.textContent = String(behVal);
+    if(ge1) ge1.textContent = String(ex1Val);
+    if(ge2) ge2.textContent = String(ex2Val);
   }
 }
 
@@ -14687,8 +14795,8 @@ function _npKeyPress(ch) {
   if(WKS._npDirectMode && WKS.numpadStudent) {
     var cls=WKS.activeClass, week=WKS.activeWeek, fld=WKS.numpadField||'assess';
     var aF='a'+week, hF='h'+week, bF='bw'+week;
-    var curField=fld==='assess'?aF:fld==='hw'?hF:bF;
-    var maxVal=fld==='assess'?_getNpMax('assess',week):fld==='hw'?_getNpMax('hw',week):10;
+    var curField=fld==='assess'?aF:fld==='hw'?hF:fld==='beh'?bF:fld==='ex1'?'ex1':'ex2';
+    var maxVal=fld==='assess'?_getNpMax('assess',week):fld==='hw'?_getNpMax('hw',week):(fld==='ex1'||fld==='ex2')?15:10;
     var cur=WKS.numpadInput||'';
     var next=cur+String(ch);
     if(/^\d+$/.test(next)&&Number(next)>maxVal) next=String(maxVal);
@@ -14715,7 +14823,7 @@ function _npKeyReset() {
   if(WKS._npDirectMode && WKS.numpadStudent) {
     WKS.numpadInput='';
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-    gradesSetField(WKS.numpadStudentIdx, fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week, '');
+    gradesSetField(WKS.numpadStudentIdx, fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2', '');
     WKS._npDirectMode=false; WKS.numpadStudent=null; WKS.npStatus='';
     renderWeekly();
   } else {
@@ -14775,8 +14883,8 @@ function _npSubmit() {
   var week    = WKS.activeWeek;
   var fld     = WKS.numpadField || 'assess';
   var aF='a'+week, hF='h'+week, bF='bw'+week;
-  var curField = fld==='assess'?aF : fld==='hw'?hF : bF;
-  var maxVal   = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : 10;
+  var curField = fld==='assess'?aF : fld==='hw'?hF : fld==='beh'?bF : fld==='ex1'?'ex1' : 'ex2';
+  var maxVal   = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : (fld==='ex1'||fld==='ex2')?15 : 10;
   var students = DB.data[cls] || [];
 
   /* فصل الاسم/الرقم عن الدرجة */
@@ -14815,24 +14923,38 @@ function _npSubmit() {
       WKS._npDirectMode = false;
       WKS.numpadInput   = '';
     } else {
-      /* لا توجد درجة — سجّل غائباً في عمود الغياب + "غ" في حقل التقييم أو الواجب */
+      /* لا توجد درجة — سجّل غائباً حسب نوع الحقل */
       var absCols = buildAbsCols(cls, week);
-      var hwAbsIdx = Math.min(WKS.hwAbsLink||0, Math.max(0, absCols.length-1));
-      var targetCi = WKS.npAbsTarget!==undefined ? WKS.npAbsTarget : (fld==='hw' ? hwAbsIdx : 0);
-      var _absField = fld==='hw' ? hF : aF;
-      var _absLabel = fld==='hw' ? 'الواجب' : 'التقييم';
       var stuIdx2 = students.indexOf(st);
-      /* 1. تسجيل في عمود الغياب */
-      if(absCols.length > 0 && absCols[targetCi]) {
-        var absData = getStudentAbsences(cls, st.id);
-        var k = 'w' + week + '_ci' + targetCi;
-        absData[k] = 'abs';
-        applyAbsenceToGrades(cls, st.id);
+      var targetCi = WKS.npAbsTarget !== undefined ? WKS.npAbsTarget : 0;
+      if(fld === 'ex1' || fld === 'ex2') {
+        /* اختبار: سجّل غياب الفترة فقط بدون تغيير التقييم/الواجب + "غ" في حقل الاختبار */
+        if(absCols.length > 0 && absCols[targetCi]) {
+          var absData = getStudentAbsences(cls, st.id);
+          var k = 'w' + week + '_ci' + targetCi;
+          absData[k] = 'abs';
+          saveDB(); /* حفظ الغياب مباشرة بدون applyAbsenceToGrades */
+        }
+        gradesSetField(stuIdx2, fld, 'غ');
+        var _exLabel = fld === 'ex1' ? 'اختبار 1' : 'اختبار 2';
+        WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _exLabel + (absCols[targetCi] ? ' + ' + absCols[targetCi].label : '') + ')';
+        WKS.npStatusType = 'warn';
+      } else {
+        /* تقييم / واجب / سلوك — السلوك الافتراضي */
+        var hwAbsIdx = Math.min(WKS.hwAbsLink||0, Math.max(0, absCols.length-1));
+        var targetCi2 = WKS.npAbsTarget!==undefined ? WKS.npAbsTarget : (fld==='hw' ? hwAbsIdx : 0);
+        var _absField = fld==='hw' ? hF : aF;
+        var _absLabel = fld==='hw' ? 'الواجب' : 'التقييم';
+        if(absCols.length > 0 && absCols[targetCi2]) {
+          var absData2 = getStudentAbsences(cls, st.id);
+          var k2 = 'w' + week + '_ci' + targetCi2;
+          absData2[k2] = 'abs';
+          applyAbsenceToGrades(cls, st.id);
+        }
+        gradesSetField(stuIdx2, _absField, 'غ');
+        WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _absLabel + (absCols[targetCi2] ? ' + ' + absCols[targetCi2].label : '') + ')';
+        WKS.npStatusType = 'warn';
       }
-      /* 2. تسجيل "غ" في حقل التقييم أو الواجب */
-      gradesSetField(stuIdx2, _absField, 'غ');
-      WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _absLabel + (absCols[targetCi] ? ' + ' + absCols[targetCi].label : '') + ')';
-      WKS.npStatusType = 'warn';
       if(ta) ta.value = '';
       WKS.npTextInput  = '';
       WKS.numpadInput  = '';
@@ -14917,8 +15039,8 @@ function _npPress(n) {
     var cls = WKS.activeClass, week = WKS.activeWeek;
     var fld = WKS.numpadField || 'assess';
     var aF='a'+week, hF='h'+week, bF='bw'+week;
-    var curField = fld==='assess'?aF : fld==='hw'?hF : bF;
-    var maxVal = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : 10;
+    var curField = fld==='assess'?aF : fld==='hw'?hF : fld==='beh'?bF : fld==='ex1'?'ex1' : 'ex2';
+    var maxVal = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : (fld==='ex1'||fld==='ex2')?15 : 10;
     var cur = WKS.numpadInput || '';
     var next = cur + String(n);
     if(Number(next) > maxVal) next = String(maxVal);
@@ -14940,7 +15062,7 @@ function _npDel() {
   _npRefreshDisplay();
   if(WKS.numpadInput==='') {
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-    var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
+    var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
     /* حفظ مباشر */
     if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
       DB.data[cls][WKS.numpadStudentIdx][curField] = '';
@@ -14954,7 +15076,7 @@ function _npClear() {
   if(!WKS.numpadStudent) return;
   WKS.numpadInput='';
   var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-  var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:'bw'+week;
+  var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
   /* حفظ مباشر */
   if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
     DB.data[cls][WKS.numpadStudentIdx][curField] = '';
@@ -15373,7 +15495,7 @@ function _initNumpadEvents() {
   function _fnpUpdateTableHeader() {
     var hdr = document.getElementById('fnpHeaderLabel');
     if (!hdr || !WKS._tblCell) return;
-    var fldNames = {assess:'تقييم', hw:'واجب', beh:'سلوك', imlaa:'إملاء'};
+    var fldNames = {assess:'تقييم', hw:'واجب', beh:'سلوك', imlaa:'إملاء', ex1:'اختبار 1', ex2:'اختبار 2'};
     var fldName = fldNames[WKS._tblCell.fld] || WKS._tblCell.fld;
     var cls = WKS.activeClass || '';
     var week = WKS.activeWeek || 1;
