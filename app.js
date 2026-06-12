@@ -13836,6 +13836,12 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
     h += '<div class="np2-status-box '+stCls+'"><span>'+esc(WKS.npStatus)+'</span></div>';
   }
   h += '</div>';
+  /* أزرار تبديل الحقل — ظاهرة دائماً حتى قبل اختيار الطالب، لتحديد وجهة الإدخال الصوتي/اليدوي */
+  h += '<div style="display:flex;gap:4px;margin-top:6px;">';
+  h += '<button class="np2-ftab'+(fld==='hw'?' on':'')+'" onclick="_npSetField(\'hw\');renderWeekly();" style="flex:1;touch-action:manipulation;">واجب<span class="np2-ftab-max">/'+hwMax+'</span></button>';
+  h += '<button class="np2-ftab'+(fld==='assess'?' on':'')+'" onclick="_npSetField(\'assess\');renderWeekly();" style="flex:1;touch-action:manipulation;">تقييم<span class="np2-ftab-max">/'+assessMax+'</span></button>';
+  h += '<button class="np2-ftab'+(fld==='beh'?' on':'')+'" onclick="_npSetField(\'beh\');renderWeekly();" style="flex:1;touch-action:manipulation;">سلوك<span class="np2-ftab-max">/10</span></button>';
+  h += '</div>';
   h += '</div>'; /* np2-top */
 
   /* ══ اللوحة العائمة: بطاقة الطالب + أزرار الحقل ══ */
@@ -14636,6 +14642,12 @@ function _npMicToggle() {
       var txt = e.results[0][0].transcript || '';
       var ta = document.getElementById('npDictInput');
       if(ta) { ta.value = txt; WKS.npTextInput = txt; }
+      if(!txt) {
+        WKS.npStatus = '⚠️ لم يُسمع كلام واضح — حاول مرة أخرى';
+        WKS.npStatusType = 'warn';
+        _npRenderStatus();
+        return;
+      }
       setTimeout(WKS.viewMode==='attend'?_attendSubmit:_npSubmit, 100);
     };
     _npMicRec.onerror = function(e) {
@@ -14646,7 +14658,10 @@ function _npMicToggle() {
         if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
         _npWhisperReady ? _npWhisperRecord() : _npLoadWhisper();
       } else {
-        showSnack('❌ خطأ في المايك: ' + (e.error||''));
+        var _errMsgs={'no-speech':'لم يُسمع كلام — حاول مرة أخرى','audio-capture':'لا يوجد مايك متاح','not-allowed':'تم رفض إذن المايك من المتصفح','aborted':'تم إلغاء التسجيل'};
+        WKS.npStatus = '❌ ' + (_errMsgs[e.error] || ('خطأ في المايك: ' + (e.error||'')));
+        WKS.npStatusType = 'err';
+        _npRenderStatus();
       }
     };
     _npMicRec.onend = function() {
