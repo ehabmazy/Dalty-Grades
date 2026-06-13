@@ -642,41 +642,9 @@ function _refreshCurrentAndRelated(){
 }
 
 function applyAbsenceToGrades(cls,studentId){
-  var abs=getStudentAbsences(cls,studentId);
-  var stu=null;var stuIdx=-1;
-  (DB.data[cls]||[]).forEach(function(s,i){if(s.id==studentId){stu=s;stuIdx=i;}});
-  if(!stu)return;
-  var p=Object.assign({},stu);
-
-  ALL_WEEKS.forEach(function(w){
-    var cols=buildAbsCols(cls,w);
-    // hwAbsLink: which colIndex maps to HW (default 0)
-    var hwIdx=window.WKS&&WKS.hwAbsLink!==undefined
-              ?Math.min(Number(WKS.hwAbsLink),Math.max(0,cols.length-1)):0;
-
-    var absHw=false,absAssess=false,sickHw=false,sickAssess=false;
-
-    cols.forEach(function(col,ci){
-      var k="w"+w+"_ci"+ci;
-      var val=abs[k];
-      if(!val)return;
-      var isHwCol=(ci===hwIdx);
-      if(val==="abs"){ if(isHwCol)absHw=true;    else absAssess=true; }
-      if(val==="sick"){if(isHwCol)sickHw=true;   else sickAssess=true;}
-    });
-
-    // HW grade
-    if(absHw)        p["h"+w]="غ";
-    else if(sickHw)  p["h"+w]="م";
-    else if(p["h"+w]==="غ"||p["h"+w]==="م") p["h"+w]="";
-
-    // Assess grade
-    if(absAssess)       p["a"+w]="غ";
-    else if(sickAssess) p["a"+w]="م";
-    else if(p["a"+w]==="غ"||p["a"+w]==="م") p["a"+w]="";
-  });
-
-  DB.data[cls][stuIdx]=p;
+  // فُكّ الربط التلقائي بين فترات الغياب وحقول الواجب/التقييم.
+  // الآن يتم تحديد الحقل المتأثر (واجب/تقييم) من خلال الراصد حسب الحقل المحدد في بطاقة الطالب فقط.
+  return;
 }
 
 
@@ -4012,7 +3980,7 @@ setInterval(function(){
 // ══════════════════════════════════════════════════════
 // SECTION NEW-A: WEEKLY GRADES PAGE
 // ══════════════════════════════════════════════════════
-var WKS={activeClass:"",activeWeek:1,_autoWeekSet:false,search:'',selectedCol:'',viewMode:'table',imlaaPanel:{open:false,conf:70,sep:'التالي',log:[],justSet:{}}};
+var WKS={activeClass:"",activeWeek:1,_autoWeekSet:false,search:'',selectedCol:'',viewMode:'numpad',imlaaPanel:{open:false,conf:70,sep:'التالي',log:[],justSet:{}}};
 
 function _getActiveWeeks(){
   var n=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
@@ -4075,21 +4043,6 @@ function renderWeekly(){
   if(WKS.hwAbsLink===undefined)WKS.hwAbsLink=0;
   var hwAbsIdx=Math.min(WKS.hwAbsLink,Math.max(0,absCols.length-1));
 
-  var html='<div class="weekly-page">';
-
-  // ── Toolbar ──
-  html+='<div class="wk-toolbar">';
-  html+='<span class="wk-toolbar-title">📅 الأسبوعي</span>';
-  if(WKS.search){
-    html+='<span style="background:rgba(99,102,241,.2);border:1px solid #6366f1;color:#a5b4fc;padding:2px 8px;border-radius:6px;font-size:10px;display:flex;align-items:center;gap:5px;">🔍 '+esc(WKS.search)+'<button onclick="WKS.search=\'\';if(typeof _devBarState!==\'undefined\'&&_devBarState.search){var i=document.getElementById(\'devBarSearchInp\');if(i)i.value=\'\';}renderWeekly();" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:11px;padding:0 2px;">✕</button></span>';
-  }
-  html+='</div>';
-
-  // ── Settings bar — hidden in cards mode ──
-  html+='<div class="weekly-body">';
-
-  var autoW=_calcCurrentWeek();
-
   // ── Filter by search ──
   var _srch=(WKS.search||'').trim();
   var displayStudents=students;
@@ -4101,36 +4054,53 @@ function renderWeekly(){
     });
   }
 
-  // ── Statistics bar — hidden in cards/numpad mode ──
-  if(WKS.viewMode!=='numpad'){
-    var totalCells=students.length*(absCols.length+2);
-    var recordedCells=0,absentCount=0,assessRecorded=0,hwRecorded=0;
-    students.forEach(function(s){
-      var aV=s[aF];var hV=s[hF];
-      if(aV!==undefined&&aV!==""){assessRecorded++; recordedCells++;}
-      if(hV!==undefined&&hV!==""){hwRecorded++; recordedCells++;}
-      var absData=getStudentAbsences(cls,s.id);
-      absCols.forEach(function(col,ai){
-        var k="w"+week+"_ci"+ai;
-        if(absData[k]){recordedCells++;}
-        if(absData[k]==="abs"){absentCount++;}
-      });
+  // ── Compute key stats for toolbar ──
+  var totalCells=students.length*(absCols.length+2);
+  var recordedCells=0,absentCount=0,assessRecorded=0,hwRecorded=0;
+  students.forEach(function(s){
+    var aV=s[aF];var hV=s[hF];
+    if(aV!==undefined&&aV!==""){assessRecorded++; recordedCells++;}
+    if(hV!==undefined&&hV!==""){hwRecorded++; recordedCells++;}
+    var absData=getStudentAbsences(cls,s.id);
+    absCols.forEach(function(col,ai){
+      var k="w"+week+"_ci"+ai;
+      if(absData[k]){recordedCells++;}
+      if(absData[k]==="abs"){absentCount++;}
     });
-    var pct=totalCells>0?Math.round(recordedCells/totalCells*100):0;
-    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:7px;padding:6px 8px;background:'+(week===autoW?'#0d2a10':'#0a1628')+';border-radius:8px;border:1px solid '+(week===autoW?'#10b981':'#1e3a5f')+';">';
-    html+='<span style="font-size:9px;color:'+(week===autoW?'#34d399':'#64748b')+';font-weight:700;">📊 إحصائيات الأسبوع '+week+(week===autoW?' ⭐':'')+':</span>';
-    html+='<span style="font-size:9px;background:#1e3a5f;padding:1px 8px;border-radius:10px;color:#93c5fd;">👥 الطلاب: <strong>'+(_srch?displayStudents.length+'/'+students.length:students.length)+'</strong></span>';
-    html+='<span style="font-size:9px;background:rgba(239,68,68,.15);padding:1px 8px;border-radius:10px;color:#fca5a5;">✗ غائبون (فترات): <strong>'+absentCount+'</strong></span>';
-    html+='<span style="font-size:9px;background:rgba(16,185,129,.12);padding:1px 8px;border-radius:10px;color:#6ee7b7;">📝 تقييم مُرصد: <strong>'+assessRecorded+'/'+students.length+'</strong></span>';
-    html+='<span style="font-size:9px;background:rgba(99,102,241,.12);padding:1px 8px;border-radius:10px;color:#a5b4fc;">📚 واجب مُرصد: <strong>'+hwRecorded+'/'+students.length+'</strong></span>';
-    html+='<span style="font-size:9px;background:rgba(251,191,36,.12);padding:1px 8px;border-radius:10px;color:#fcd34d;">⚡ الإكمال: <strong>'+pct+'%</strong></span>';
-    html+='</div>';
+  });
+  var pct=totalCells>0?Math.round(recordedCells/totalCells*100):0;
+
+  var html='<div class="weekly-page">';
+
+  // ── Toolbar ──
+  html+='<div class="wk-toolbar" style="flex-wrap:wrap;gap:6px;align-items:center;">';
+  html+='<span class="wk-toolbar-title">📅 الأسبوعي</span>';
+  if(WKS.activeClass) html+='<span style="background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.35);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;">🏷 '+WKS.activeClass+'</span>';
+  html+='<span style="background:rgba(16,185,129,.15);color:#6ee7b7;border:1px solid rgba(16,185,129,.35);border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;">📆 الأسبوع '+WKS.activeWeek+'</span>';
+  html+='<span style="font-size:10px;background:#1e3a5f;padding:3px 9px;border-radius:8px;color:#93c5fd;font-weight:700;">👥 '+(_srch?(displayStudents.length+'/'+students.length):students.length)+'</span>';
+  html+='<span style="font-size:10px;background:rgba(239,68,68,.15);padding:3px 9px;border-radius:8px;color:#fca5a5;font-weight:700;">✗ '+absentCount+'</span>';
+  html+='<span style="font-size:10px;background:rgba(16,185,129,.12);padding:3px 9px;border-radius:8px;color:#6ee7b7;font-weight:700;">📝 '+assessRecorded+'/'+students.length+'</span>';
+  html+='<span style="font-size:10px;background:rgba(99,102,241,.12);padding:3px 9px;border-radius:8px;color:#a5b4fc;font-weight:700;">📚 '+hwRecorded+'/'+students.length+'</span>';
+  html+='<span style="font-size:10px;background:rgba(251,191,36,.12);padding:3px 9px;border-radius:8px;color:#fcd34d;font-weight:700;">⚡ '+pct+'%</span>';
+  html+='<button onclick="if(typeof FNP_toggle===\'function\')FNP_toggle();" title="لوحة الأرقام" style="background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.4);color:#c4b5fd;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer;">🔢</button>';
+  if(WKS.search){
+    html+='<span style="background:rgba(99,102,241,.2);border:1px solid #6366f1;color:#a5b4fc;padding:2px 8px;border-radius:6px;font-size:10px;display:flex;align-items:center;gap:5px;">🔍 '+esc(WKS.search)+'<button onclick="WKS.search=\'\';if(typeof _devBarState!==\'undefined\'&&_devBarState.search){var i=document.getElementById(\'devBarSearchInp\');if(i)i.value=\'\';}renderWeekly();" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:11px;padding:0 2px;">✕</button></span>';
   }
+  html+='</div>';
+
+  // ── Settings bar — hidden in cards mode ──
+  html+='<div class="weekly-body">';
+
+  var autoW=_calcCurrentWeek();
 
   // ── View mode branch ──
   if(WKS.viewMode==='numpad'){
     var _oldPanel = document.getElementById('np2FloatPanel');
     if(_oldPanel && typeof _oldPanel._cleanup==='function') _oldPanel._cleanup();
+    var _oldAttP = document.getElementById('attFloatPanel');
+    if(_oldAttP && typeof _oldAttP._cleanup==='function') _oldAttP._cleanup();
+    var _oldAbsP = document.getElementById('absFloatPanel');
+    if(_oldAbsP && typeof _oldAbsP._cleanup==='function') _oldAbsP._cleanup();
     html+=renderWeeklyNumpad(cls,students,displayStudents,week,absCols,aF,hF,assessMax,hwMax);
     html+='</div></div>';
     root.innerHTML=html;
@@ -4140,13 +4110,40 @@ function renderWeekly(){
   }
 
   if(WKS.viewMode==='attend'){
+    var _oldAttPanel = document.getElementById('attFloatPanel');
+    if(_oldAttPanel && typeof _oldAttPanel._cleanup==='function') _oldAttPanel._cleanup();
+    var _oldNpPanelA = document.getElementById('np2FloatPanel');
+    if(_oldNpPanelA && typeof _oldNpPanelA._cleanup==='function') _oldNpPanelA._cleanup();
+    var _oldAbsPanelA = document.getElementById('absFloatPanel');
+    if(_oldAbsPanelA && typeof _oldAbsPanelA._cleanup==='function') _oldAbsPanelA._cleanup();
     html+=renderWeeklyAttend(cls,students,week,absCols);
     html+='</div></div>';
     root.innerHTML=html;
+    _initFloatPanel('attFloatPanel','attFloatDrag','attFloatResize',{x:'_afpX',y:'_afpY',w:'_afpW',h:'_afpH'});
+    return;
+  }
+
+  if(WKS.viewMode==='absent'){
+    var _oldAbsPanel = document.getElementById('absFloatPanel');
+    if(_oldAbsPanel && typeof _oldAbsPanel._cleanup==='function') _oldAbsPanel._cleanup();
+    var _oldNpPanelB = document.getElementById('np2FloatPanel');
+    if(_oldNpPanelB && typeof _oldNpPanelB._cleanup==='function') _oldNpPanelB._cleanup();
+    var _oldAttPanelB = document.getElementById('attFloatPanel');
+    if(_oldAttPanelB && typeof _oldAttPanelB._cleanup==='function') _oldAttPanelB._cleanup();
+    html+=renderWeeklyAbsent(cls,students,week,absCols);
+    html+='</div></div>';
+    root.innerHTML=html;
+    _initFloatPanel('absFloatPanel','absFloatDrag','absFloatResize',{x:'_bfpX',y:'_bfpY',w:'_bfpW',h:'_bfpH'});
     return;
   }
 
   {
+  var _oldNpPanelT = document.getElementById('np2FloatPanel');
+  if(_oldNpPanelT && typeof _oldNpPanelT._cleanup==='function') _oldNpPanelT._cleanup();
+  var _oldAttPanelT = document.getElementById('attFloatPanel');
+  if(_oldAttPanelT && typeof _oldAttPanelT._cleanup==='function') _oldAttPanelT._cleanup();
+  var _oldAbsPanelT = document.getElementById('absFloatPanel');
+  if(_oldAbsPanelT && typeof _oldAbsPanelT._cleanup==='function') _oldAbsPanelT._cleanup();
 
   // ── Table card ──
   html+='<div class=\"wk-card\">';
@@ -6064,6 +6061,7 @@ function renderViewBar(){
   h+='<button class="view-bar-tab'+(mode==='table'?' active':'')+'" onclick="WKS.viewMode=\'table\';renderWeekly();renderViewBar();">🗂 جدول</button>';
   h+='<button class="view-bar-tab'+(mode==='numpad'?' active':'')+'" onclick="WKS.viewMode=\'numpad\';WKS.numpadStudent=null;WKS.numpadInput=\'\';renderWeekly();renderViewBar();">🎯 الراصد</button>';
   h+='<button class="view-bar-tab'+(mode==='attend'?' active':'')+'" onclick="WKS.viewMode=\'attend\';WKS._attendPresent={};renderWeekly();renderViewBar();" style="'+(mode==='attend'?'background:#059669;border-color:#10b981;':'')+'">✅ رصد الحضور</button>';
+  h+='<button class="view-bar-tab'+(mode==='absent'?' active':'')+'" onclick="WKS.viewMode=\'absent\';WKS._attendAbsent={};renderWeekly();renderViewBar();" style="'+(mode==='absent'?'background:#dc2626;border-color:#ef4444;':'')+'">🚫 رصد الغياب</button>';
   bar.innerHTML=h;
 }
 
@@ -12589,8 +12587,30 @@ if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
     setTimeout(function(){
       navigator.serviceWorker.register('/grades-project/sw.js')
-        .then(function(reg){ console.log('SW registered'); })
+        .then(function(reg){
+          console.log('SW registered');
+          // فرض تحديث الكاش وتحميل أحدث نسخة من الملفات (app.js, index.html, ...)
+          reg.update();
+          if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
+          reg.addEventListener('updatefound', function(){
+            var nw = reg.installing;
+            if(!nw) return;
+            nw.addEventListener('statechange', function(){
+              if(nw.state === 'installed' && navigator.serviceWorker.controller){
+                nw.postMessage({type:'SKIP_WAITING'});
+              }
+            });
+          });
+        })
         .catch(function(err){ console.log('SW error', err); });
+
+      // إعادة تحميل الصفحة تلقائياً عند تفعيل نسخة جديدة من الـ Service Worker
+      var _swRefreshed = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function(){
+        if(_swRefreshed) return;
+        _swRefreshed = true;
+        location.reload();
+      });
     }, 1000);
   });
 }
@@ -14142,9 +14162,27 @@ function renderWeeklyAttend(cls, students, week, absCols) {
   h += '</div>';
   h += '</div>'; /* np2-top */
 
-  /* ══ عداد + أزرار التحكم السريع ══ */
+  /* ══ عداد + أزرار التحكم السريع — لوحة عائمة مثل الراصد ══ */
   h += '<div class="np2-middle">';
   h += '<div class="np2-middle-content">';
+
+  /* اللوحة العائمة */
+  h += '<div id="attFloatPanel" class="np2-float-panel" style="'
+    +'width:'+(WKS._afpW||320)+'px;'
+    +'height:'+(WKS._afpH||360)+'px;'
+    +'left:'+(WKS._afpX!==undefined?WKS._afpX:Math.max(10,Math.floor((window.innerWidth-320)/2)))+'px;'
+    +'top:'+(WKS._afpY!==undefined?WKS._afpY:80)+'px;'
+    +'">';
+  /* شريط السحب */
+  h += '<div class="np2-float-drag" id="attFloatDrag">'
+    +'<span style="font-size:10px;color:#94a3b8;font-weight:700;">✅ بطاقة رصد الحضور</span>'
+    +'<div style="display:flex;gap:4px;">'
+    +'<button onclick="WKS._afpW=320;WKS._afpH=360;WKS._afpX=undefined;WKS._afpY=80;renderWeekly();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:12px;padding:2px 5px;" title="إعادة ضبط">⟳</button>'
+    +'</div>'
+    +'</div>';
+
+  /* محتوى اللوحة */
+  h += '<div class="np2-float-body">';
 
   /* بطاقة الإحصاء */
   h += '<div class="np2-card" style="padding:10px;gap:8px;">';
@@ -14164,6 +14202,19 @@ function renderWeeklyAttend(cls, students, week, absCols) {
   h += '<div style="font-size:9px;color:#818cf8;font-weight:700;">👥 الكل</div>';
   h += '</div>';
   h += '</div>';
+
+  /* ══ أزرار اختيار رقم فترة الغياب (بجوار الإحصائيات) ══ */
+  if(absCnt > 1) {
+    h += '<div style="display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;">';
+    h += '<span style="font-size:9px;color:#64748b;font-weight:700;">📌 فترة الغياب:</span>';
+    absCols.forEach(function(col, ci) {
+      var isActive = (ci === selPeriod);
+      h += '<button onclick="WKS._attendPeriodIdx='+ci+';renderWeekly();" title="'+esc(col.label||('ف'+(ci+1)))+'" style="width:26px;height:26px;border-radius:50%;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;touch-action:manipulation;border:2px solid '+(isActive?'#f59e0b':'#1e3a5f')+';background:'+(isActive?'rgba(245,158,11,.2)':'transparent')+';color:'+(isActive?'#fcd34d':'#64748b')+';transition:all .15s;">';
+      h += (ci+1);
+      h += '</button>';
+    });
+    h += '</div>';
+  }
 
   /* تعليمة */
   h += '<div style="font-size:10px;color:#64748b;text-align:center;line-height:1.6;">أدخل اسم أو رقم كل <span style="color:#34d399;font-weight:700;">حاضر</span> ثم اضغط ↵<br>وفي النهاية اضغط زر <span style="color:#fbbf24;font-weight:700;">تعيين الغياب</span></div>';
@@ -14230,6 +14281,9 @@ function renderWeeklyAttend(cls, students, week, absCols) {
   }
 
   h += '</div>'; /* np2-card */
+  h += '</div>'; /* np2-float-body */
+  h += '<div class="np2-float-resize" id="attFloatResize">⤡</div>';
+  h += '</div>'; /* attFloatPanel */
   h += '</div>'; /* np2-middle-content */
   h += '</div>'; /* np2-middle */
 
@@ -14383,6 +14437,310 @@ function _attendApplyAbsence() {
   renderWeekly();
 }
 
+// ══════════════════════════════════════════════════════
+// رصد الغياب — تسجيل الغائبين مباشرة (عكس رصد الحضور)
+// ══════════════════════════════════════════════════════
+
+function renderWeeklyAbsent(cls, students, week, absCols) {
+  if(!WKS._attendAbsent) WKS._attendAbsent = {};
+  if(WKS._attendPeriodIdx === undefined || WKS._attendPeriodIdx >= absCols.length)
+    WKS._attendPeriodIdx = 0;
+  var absentMap  = WKS._attendAbsent;
+  var absentCount = Object.keys(absentMap).length;
+  var presentCount = students.filter(function(s){ return !absentMap[s.id]; }).length;
+  var absCnt      = absCols.length;
+  var selPeriod   = WKS._attendPeriodIdx;
+
+  var h = '<div class="np2-wrap">';
+
+  /* ══ شريط الإدخال ══ */
+  h += '<div class="np2-top">';
+  h += '<div class="np2-dictbar">';
+  h += '<div class="np2-input-row">';
+  h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
+  h += ' placeholder="اسم الطالب الغائب أو رقمه — مثال: محمد  أو  5"';
+  h += ' inputmode="none"';
+  h += ' oninput="WKS.npTextInput=this.value;">';
+  h += esc(WKS.npTextInput||'');
+  h += '</textarea>';
+  h += '<button class="np2-mic-btn" id="npMicBtn" onclick="_npMicToggle()" title="إملاء صوتي" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">🎤</button>';
+  h += '<button class="np2-kbd-btn" onclick="_npShowMobileKeyboard()" title="لوحة المفاتيح" style="touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⌨️</button>';
+  h += '</div>';
+
+  if(WKS.npStatus) {
+    var stCls = WKS.npStatusType==='ok'?'np2-status-ok':WKS.npStatusType==='warn'?'np2-status-warn':WKS.npStatusType==='info'?'np2-status-info':'np2-status-err';
+    h += '<div class="np2-status-box '+stCls+'"><span>'+esc(WKS.npStatus)+'</span></div>';
+  }
+  h += '</div>';
+  h += '</div>'; /* np2-top */
+
+  /* ══ عداد + أزرار التحكم السريع — لوحة عائمة مثل الراصد ══ */
+  h += '<div class="np2-middle">';
+  h += '<div class="np2-middle-content">';
+
+  /* اللوحة العائمة */
+  h += '<div id="absFloatPanel" class="np2-float-panel" style="'
+    +'width:'+(WKS._bfpW||320)+'px;'
+    +'height:'+(WKS._bfpH||360)+'px;'
+    +'left:'+(WKS._bfpX!==undefined?WKS._bfpX:Math.max(10,Math.floor((window.innerWidth-320)/2)))+'px;'
+    +'top:'+(WKS._bfpY!==undefined?WKS._bfpY:80)+'px;'
+    +'">';
+  /* شريط السحب */
+  h += '<div class="np2-float-drag" id="absFloatDrag">'
+    +'<span style="font-size:10px;color:#94a3b8;font-weight:700;">🚫 بطاقة رصد الغياب</span>'
+    +'<div style="display:flex;gap:4px;">'
+    +'<button onclick="WKS._bfpW=320;WKS._bfpH=360;WKS._bfpX=undefined;WKS._bfpY=80;renderWeekly();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:12px;padding:2px 5px;" title="إعادة ضبط">⟳</button>'
+    +'</div>'
+    +'</div>';
+
+  /* محتوى اللوحة */
+  h += '<div class="np2-float-body">';
+
+  h += '<div class="np2-card" style="padding:10px;gap:8px;">';
+
+  /* صف العدادات */
+  h += '<div style="display:flex;gap:8px;justify-content:center;">';
+  h += '<div style="flex:1;text-align:center;background:rgba(239,68,68,.12);border:1.5px solid #ef4444;border-radius:10px;padding:8px 4px;">';
+  h += '<div style="font-size:22px;font-weight:900;color:#f87171;">'+absentCount+'</div>';
+  h += '<div style="font-size:9px;color:#fca5a5;font-weight:700;">✗ غائب</div>';
+  h += '</div>';
+  h += '<div style="flex:1;text-align:center;background:rgba(16,185,129,.12);border:1.5px solid #10b981;border-radius:10px;padding:8px 4px;">';
+  h += '<div style="font-size:22px;font-weight:900;color:#34d399;">'+presentCount+'</div>';
+  h += '<div style="font-size:9px;color:#6ee7b7;font-weight:700;">✅ حاضر</div>';
+  h += '</div>';
+  h += '<div style="flex:1;text-align:center;background:rgba(99,102,241,.12);border:1.5px solid #6366f1;border-radius:10px;padding:8px 4px;">';
+  h += '<div style="font-size:22px;font-weight:900;color:#a5b4fc;">'+students.length+'</div>';
+  h += '<div style="font-size:9px;color:#818cf8;font-weight:700;">👥 الكل</div>';
+  h += '</div>';
+  h += '</div>';
+
+  /* ══ أزرار اختيار رقم فترة الغياب (بجوار الإحصائيات) ══ */
+  if(absCnt > 1) {
+    h += '<div style="display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;">';
+    h += '<span style="font-size:9px;color:#64748b;font-weight:700;">📌 فترة الغياب:</span>';
+    absCols.forEach(function(col, ci) {
+      var isActive = (ci === selPeriod);
+      h += '<button onclick="WKS._attendPeriodIdx='+ci+';renderWeekly();" title="'+esc(col.label||('ف'+(ci+1)))+'" style="width:26px;height:26px;border-radius:50%;font-size:11px;font-weight:900;cursor:pointer;font-family:inherit;touch-action:manipulation;border:2px solid '+(isActive?'#f59e0b':'#1e3a5f')+';background:'+(isActive?'rgba(245,158,11,.2)':'transparent')+';color:'+(isActive?'#fcd34d':'#64748b')+';transition:all .15s;">';
+      h += (ci+1);
+      h += '</button>';
+    });
+    h += '</div>';
+  }
+
+  /* تعليمة */
+  h += '<div style="font-size:10px;color:#64748b;text-align:center;line-height:1.6;">أدخل اسم أو رقم كل <span style="color:#f87171;font-weight:700;">غائب</span> ثم اضغط ↵<br>وفي النهاية اضغط زر <span style="color:#fbbf24;font-weight:700;">تعيين الغياب</span></div>';
+
+  /* ══ اختيار الفترة ══ */
+  if(absCnt > 1) {
+    h += '<div style="background:#0a1628;border:1px solid #1e3a5f;border-radius:8px;padding:7px 10px;">';
+    h += '<div style="font-size:9px;color:#64748b;font-weight:700;margin-bottom:6px;">📌 الفترة التي سيُسجَّل فيها الغياب:</div>';
+    h += '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
+    absCols.forEach(function(col, ci) {
+      var isActive = (ci === selPeriod);
+      h += '<button onclick="WKS._attendPeriodIdx='+ci+';renderWeekly();" style="flex:1;min-width:40px;padding:6px 4px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;border:2px solid '+(isActive?'#f59e0b':'#1e3a5f')+';background:'+(isActive?'rgba(245,158,11,.2)':'transparent')+';color:'+(isActive?'#fcd34d':'#64748b')+';transition:all .15s;">';
+      h += esc(col.label||('ف'+(ci+1)));
+      h += '</button>';
+    });
+    h += '</div>';
+    h += '</div>';
+  }
+
+  /* أزرار التحكم */
+  var selColLabel = absCols[selPeriod] ? (absCols[selPeriod].label||('ف'+(selPeriod+1))) : 'ف1';
+  h += '<div style="display:flex;gap:6px;">';
+  h += '<button onclick="_absentSelectAll()" style="flex:1;background:#dc2626;color:white;border:none;border-radius:8px;padding:7px 4px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">☑ الكل غائب</button>';
+  h += '<button onclick="_absentClearAll()" style="flex:1;background:#374151;color:#d1d5db;border:none;border-radius:8px;padding:7px 4px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">✕ مسح</button>';
+  h += '<button onclick="_absentApply()" '+(absentCount===0?'disabled ':'')+'style="flex:2;background:'+(absentCount>0?'#dc2626':'#374151')+';color:white;border:none;border-radius:8px;padding:7px 8px;font-size:10px;font-weight:800;cursor:'+(absentCount>0?'pointer':'not-allowed')+';font-family:inherit;touch-action:manipulation;opacity:'+(absentCount>0?'1':'.5')+';">⚡ '+absentCount+' غياب — '+esc(selColLabel)+'</button>';
+  h += '</div>';
+
+  /* ══ قائمة الطلاب المُرصَدين ══ */
+  if(WKS._npCandidates && WKS._npCandidates.length) {
+    h += '<div class="np2-results np2-results-full">';
+    WKS._npCandidates.forEach(function(st) {
+      var stuIdx = students.indexOf(st);
+      var photo  = st.photo || (DB.meta&&DB.meta.defaultStudentPhoto?DB.meta.defaultStudentPhoto:'');
+      h += '<div class="np2-result-row" onclick="_absentPickCandidate(\''+esc(st.id)+'\')">';
+      h += '<span class="np2-rnum">'+(stuIdx+1)+'</span>';
+      if(photo) h += '<img class="np2-rphoto" src="'+photo+'">';
+      else       h += '<div class="np2-rphoto np2-rphoto-ph">'+(stuIdx+1)+'</div>';
+      h += '<span class="np2-rname">'+esc(st.name)+'</span>';
+      h += '<span style="color:#f87171;font-size:18px;margin-right:auto;">✕</span>';
+      h += '</div>';
+    });
+    h += '</div>';
+  } else {
+    /* قائمة الغائبين الملتقطين حتى الآن */
+    var absentList = students.filter(function(s){ return !!absentMap[s.id]; });
+    if(absentList.length > 0) {
+      h += '<div style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;">';
+      absentList.forEach(function(s) {
+        var idx   = students.indexOf(s);
+        var photo = s.photo || (DB.meta&&DB.meta.defaultStudentPhoto?DB.meta.defaultStudentPhoto:'');
+        h += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;">';
+        if(photo) h += '<img src="'+photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;">';
+        else       h += '<div style="width:28px;height:28px;border-radius:50%;background:#7f1d1d;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#f87171;flex-shrink:0;">'+(idx+1)+'</div>';
+        h += '<span style="flex:1;font-size:11px;color:#fee2e2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(s.name)+'</span>';
+        h += '<span style="color:#f87171;font-size:13px;">✕</span>';
+        h += '<button onclick="_absentRemove(\''+s.id+'\')" style="background:none;border:none;color:#34d399;font-size:14px;cursor:pointer;padding:0 4px;line-height:1;touch-action:manipulation;" title="إلغاء">✓</button>';
+        h += '</div>';
+      });
+      h += '</div>';
+    } else {
+      h += '<div class="np2-empty">✍️ أدخل اسم أول غائب أعلاه</div>';
+    }
+  }
+
+  h += '</div>'; /* np2-card */
+  h += '</div>'; /* np2-float-body */
+  h += '<div class="np2-float-resize" id="absFloatResize">⤡</div>';
+  h += '</div>'; /* absFloatPanel */
+  h += '</div>'; /* np2-middle-content */
+  h += '</div>'; /* np2-middle */
+
+  /* ══ لوحة المفاتيح ══ */
+  h += '<div class="np2-keyboard">';
+  h += '<div class="np2-kb-row np2-kb-row4">';
+  h += '<button class="np2-key np2-ruler" onclick="_npKeyPress(\' \')" title="مسافة">⎵</button>';
+  h += '<button class="np2-key np2-enter" onclick="_absentSubmit()" title="تسجيل غائب">↵</button>';
+  h += '<button class="np2-key np2-del" onclick="_npKeyBackspace()">⌫</button>';
+  h += '<button class="np2-key np2-clr" onclick="_npKeyReset()">✕</button>';
+  h += '</div>';
+  h += '<div class="np2-kb-row np2-kb-row5">';
+  [1,2,3,4,5].forEach(function(n){ h += '<button class="np2-key" onclick="_npKeyPress(\''+n+'\')">'+n+'</button>'; });
+  h += '</div>';
+  h += '<div class="np2-kb-row np2-kb-row5">';
+  [6,7,8,9,0].forEach(function(n){ h += '<button class="np2-key" onclick="_npKeyPress(\''+n+'\')">'+n+'</button>'; });
+  h += '</div>';
+  h += '</div>'; /* np2-keyboard */
+
+  h += '</div>'; /* np2-wrap */
+  return h;
+}
+
+/* ── تسجيل الطالب غائباً من شريط الإدخال ── */
+function _absentSubmit() {
+  var ta  = document.getElementById('npDictInput');
+  var raw = ta ? ta.value.trim() : (WKS.npTextInput||'').trim();
+  if(!raw) return;
+
+  var cls      = WKS.activeClass;
+  var students = (DB.data[cls]||[]).filter(function(s){ return s.name; });
+
+  var queryNum = parseInt(raw, 10);
+  var matched  = students.filter(function(s, si) {
+    if(!isNaN(queryNum) && queryNum > 0 && (si+1) === queryNum) return true;
+    return s.name && s.name.indexOf(raw) >= 0;
+  });
+
+  if(matched.length === 0) {
+    WKS.npStatus     = '❌ لم يُعثر على: ' + raw;
+    WKS.npStatusType = 'err';
+    WKS._npCandidates = null;
+    renderWeekly();
+    return;
+  }
+
+  if(matched.length === 1) {
+    _absentMark(matched[0].id, matched[0].name, ta);
+    return;
+  }
+
+  WKS._npCandidates = matched;
+  WKS.npStatus     = '🔍 اختر الطالب من القائمة';
+  WKS.npStatusType = 'info';
+  renderWeekly();
+}
+
+/* ── تحديد طالب واحد كغائب ── */
+function _absentMark(studentId, studentName, ta) {
+  if(!WKS._attendAbsent) WKS._attendAbsent = {};
+  WKS._attendAbsent[studentId] = true;
+  WKS._npCandidates = null;
+  WKS.npStatus     = '✗ ' + (studentName||'') + ' — غائب';
+  WKS.npStatusType = 'ok';
+  if(ta) ta.value = '';
+  WKS.npTextInput  = '';
+  WKS._npDirectMode = false;
+  WKS.numpadInput   = '';
+  renderWeekly();
+}
+
+/* ── اختيار مرشح من القائمة ── */
+function _absentPickCandidate(studentId) {
+  var cls = WKS.activeClass;
+  var st  = (DB.data[cls]||[]).find(function(s){ return String(s.id)===String(studentId); });
+  if(!st) return;
+  var ta = document.getElementById('npDictInput');
+  _absentMark(st.id, st.name, ta);
+}
+
+/* ── إلغاء تحديد طالب غائب ── */
+function _absentRemove(studentId) {
+  if(WKS._attendAbsent) delete WKS._attendAbsent[studentId];
+  WKS.npStatus = '';
+  renderWeekly();
+}
+
+/* ── تحديد الكل غائب ── */
+function _absentSelectAll() {
+  var cls      = WKS.activeClass;
+  var students = (DB.data[cls]||[]).filter(function(s){ return s.name; });
+  WKS._attendAbsent = {};
+  students.forEach(function(s){ WKS._attendAbsent[s.id] = true; });
+  WKS.npStatus = '✗ تم تحديد كل الطلاب غائبين';
+  WKS.npStatusType = 'ok';
+  renderWeekly();
+}
+
+/* ── مسح الكل ── */
+function _absentClearAll() {
+  WKS._attendAbsent = {};
+  WKS.npStatus = '';
+  WKS.npTextInput = '';
+  var ta = document.getElementById('npDictInput');
+  if(ta) ta.value = '';
+  renderWeekly();
+}
+
+/* ── تطبيق الغياب على الطلاب المحددين كغائبين ── */
+function _absentApply() {
+  var cls       = WKS.activeClass;
+  var week      = WKS.activeWeek;
+  var students  = (DB.data[cls]||[]).filter(function(s){ return s.name; });
+  var absCols   = buildAbsCols(cls, week);
+  var absentMap = WKS._attendAbsent || {};
+  var ci        = WKS._attendPeriodIdx !== undefined ? WKS._attendPeriodIdx : 0;
+  if(ci >= absCols.length) ci = 0;
+  var colLabel  = absCols[ci] ? (absCols[ci].label || ('ف'+(ci+1))) : ('ف'+(ci+1));
+
+  var absentStudents = students.filter(function(s){ return !!absentMap[s.id]; });
+  if(absentStudents.length === 0) {
+    showSnack('✅ لا يوجد طلاب غائبون للتسجيل');
+    return;
+  }
+
+  var confirmed = confirm(
+    'سيتم تسجيل غياب ' + absentStudents.length + ' طالب\n' +
+    'في الفترة: ' + colLabel + ' — الأسبوع ' + week + '.\n\n' +
+    'هل تريد المتابعة؟'
+  );
+  if(!confirmed) return;
+
+  absentStudents.forEach(function(s) {
+    var abs = getStudentAbsences(cls, s.id);
+    abs['w'+week+'_ci'+ci] = 'abs';
+    applyAbsenceToGrades(cls, s.id);
+  });
+
+  saveDB();
+  _refreshCurrentAndRelated();
+  showSnack('✅ تم تسجيل غياب ' + absentStudents.length + ' طالب في ' + colLabel, 'ok');
+
+  WKS._attendAbsent = {};
+  WKS.npStatus = '';
+  renderWeekly();
+}
+
 /* ── ربط المايك بـ _attendSubmit عند وضع الحضور ── */
 var _origNpSubmitRef = null; // محفوظ للاستعادة
 
@@ -14480,7 +14838,26 @@ function _npToggleAbs(colIndex) {
   toggleAbsence(cls, WKS.numpadStudent.id, week, colIndex);
   /* تحديث كائن الطالب في WKS */
   var st=(DB.data[cls]||[]).find(function(s){return s.id==WKS.numpadStudent.id;});
-  if(st){ WKS.numpadStudent=st; WKS.numpadStudentIdx=(DB.data[cls]||[]).indexOf(st); }
+  if(st){
+    WKS.numpadStudent=st; WKS.numpadStudentIdx=(DB.data[cls]||[]).indexOf(st);
+    /* تطبيق الغياب فقط على الحقل المحدد حالياً (واجب/تقييم) وللفترة المحددة فقط */
+    var fld=WKS.numpadField||'assess';
+    if(fld==='hw'||fld==='assess'){
+      var fField = fld==='hw' ? ('h'+week) : ('a'+week);
+      var absData=getStudentAbsences(cls, st.id);
+      var k='w'+week+'_ci'+colIndex;
+      var state=absData[k];
+      var stuIdx=WKS.numpadStudentIdx;
+      if(DB.data[cls] && DB.data[cls][stuIdx]){
+        if(state==='abs') DB.data[cls][stuIdx][fField]='غ';
+        else if(state==='sick') DB.data[cls][stuIdx][fField]='م';
+        else if(DB.data[cls][stuIdx][fField]==='غ'||DB.data[cls][stuIdx][fField]==='م') DB.data[cls][stuIdx][fField]='';
+        saveDB();
+        st=DB.data[cls][stuIdx];
+        WKS.numpadStudent=st;
+      }
+    }
+  }
   renderWeekly();
 }
 
@@ -14755,7 +15132,7 @@ async function _npWhisperRecord() {
           WKS.npStatus = '✅ ' + txt;
           WKS.npStatusType = 'ok';
           _npRenderStatus();
-          setTimeout(WKS.viewMode==='attend'?_attendSubmit:_npSubmit, 300);
+          setTimeout(WKS.viewMode==='attend'?_attendSubmit:(WKS.viewMode==='absent'?_absentSubmit:_npSubmit), 300);
         } else {
           WKS.npStatus = '⚠️ لم يُتعرَّف على كلام واضح';
           WKS.npStatusType = 'warn';
@@ -14814,7 +15191,7 @@ function _npMicToggle() {
         _npRenderStatus();
         return;
       }
-      setTimeout(WKS.viewMode==='attend'?_attendSubmit:_npSubmit, 100);
+      setTimeout(WKS.viewMode==='attend'?_attendSubmit:(WKS.viewMode==='absent'?_absentSubmit:_npSubmit), 100);
     };
     _npMicRec.onerror = function(e) {
       /* لو انقطع النت أثناء التسجيل — انتقل لـ Whisper */
@@ -14999,15 +15376,14 @@ function _npSubmit() {
         WKS.npStatusType = 'warn';
       } else {
         /* تقييم / واجب / سلوك — السلوك الافتراضي */
-        var hwAbsIdx = Math.min(WKS.hwAbsLink||0, Math.max(0, absCols.length-1));
-        var targetCi2 = WKS.npAbsTarget!==undefined ? WKS.npAbsTarget : (fld==='hw' ? hwAbsIdx : 0);
+        var targetCi2 = WKS.npAbsTarget!==undefined ? WKS.npAbsTarget : 0;
         var _absField = fld==='hw' ? hF : aF;
         var _absLabel = fld==='hw' ? 'الواجب' : 'التقييم';
         if(absCols.length > 0 && absCols[targetCi2]) {
           var absData2 = getStudentAbsences(cls, st.id);
           var k2 = 'w' + week + '_ci' + targetCi2;
           absData2[k2] = 'abs';
-          applyAbsenceToGrades(cls, st.id);
+          saveDB();
         }
         gradesSetField(stuIdx2, _absField, 'غ');
         WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _absLabel + (absCols[targetCi2] ? ' + ' + absCols[targetCi2].label : '') + ')';
@@ -15157,11 +15533,12 @@ function _npOpenKeyboard() {
 }
 
 
-function _initFloatPanel() {
-  var panel = document.getElementById('np2FloatPanel');
-  var drag  = document.getElementById('np2FloatDrag');
-  var rsz   = document.getElementById('np2FloatResize');
+function _initFloatPanel(panelId, dragId, rszId, posKeys) {
+  var panel = document.getElementById(panelId || 'np2FloatPanel');
+  var drag  = document.getElementById(dragId  || 'np2FloatDrag');
+  var rsz   = document.getElementById(rszId   || 'np2FloatResize');
   if (!panel || !drag || !rsz) return;
+  var K = posKeys || {x:'_fpX', y:'_fpY', w:'_fpW', h:'_fpH'};
 
   /* ── السحب ── */
   var dx=0, dy=0, dragging=false;
@@ -15177,7 +15554,7 @@ function _initFloatPanel() {
     var y = Math.max(0, Math.min(window.innerHeight - 80, cy - dy));
     panel.style.left = x + 'px';
     panel.style.top  = y + 'px';
-    WKS._fpX = x; WKS._fpY = y;
+    WKS[K.x] = x; WKS[K.y] = y;
   }
 
   drag.addEventListener('mousedown', function(e) {
@@ -15203,7 +15580,7 @@ function _initFloatPanel() {
     var nh = Math.max(180, rh + (cy - ry));
     panel.style.width  = nw + 'px';
     panel.style.height = nh + 'px';
-    WKS._fpW = nw; WKS._fpH = nh;
+    WKS[K.w] = nw; WKS[K.h] = nh;
   }
 
   rsz.addEventListener('mousedown', function(e) {
@@ -15304,6 +15681,7 @@ function _initNumpadEvents() {
     tog.title = 'لوحة الأرقام';
     tog.innerHTML = '🔢';
     tog.onclick = FNP_toggle;
+    tog.style.display = 'none';
     document.body.appendChild(tog);
     FNP.tog = tog;
 
@@ -15499,6 +15877,8 @@ function _initNumpadEvents() {
       _tblFnpSubmit();
     } else if (typeof WKS !== 'undefined' && WKS.viewMode === 'attend') {
       if (typeof _attendSubmit === 'function') _attendSubmit();
+    } else if (typeof WKS !== 'undefined' && WKS.viewMode === 'absent') {
+      if (typeof _absentSubmit === 'function') _absentSubmit();
     } else {
       if (typeof _npSubmit === 'function') _npSubmit();
     }
@@ -15509,7 +15889,7 @@ function _initNumpadEvents() {
   if (typeof _origRenderWeekly === 'function') {
     window.renderWeekly = function() {
       _origRenderWeekly.apply(this, arguments);
-      if (typeof WKS !== 'undefined' && (WKS.viewMode === 'numpad' || WKS.viewMode === 'attend')) {
+      if (typeof WKS !== 'undefined' && (WKS.viewMode === 'numpad' || WKS.viewMode === 'attend' || WKS.viewMode === 'absent')) {
         buildFloatingNumpad();
         if (FNP.tog) FNP.tog.classList.add('fnp-tog-visible');
         /* إخفاء اللوحة الثابتة وإظهار العائمة — فقط إذا لم تكن مرئية بالفعل */
