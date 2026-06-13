@@ -689,7 +689,8 @@ document.addEventListener('click',function(e){
   var p=document.getElementById('notifPanel');
   var b=document.getElementById('notifBell');
   var b2=document.getElementById('subNotifBell');
-  var clickedBell=(b&&(e.target===b||b.contains(e.target)))||(b2&&(e.target===b2||b2.contains(e.target)));
+  var b3=document.getElementById('bni_notifs');
+  var clickedBell=(b&&(e.target===b||b.contains(e.target)))||(b2&&(e.target===b2||b2.contains(e.target)))||(b3&&(e.target===b3||b3.contains(e.target)));
   if(p&&p.classList.contains('open')&&!p.contains(e.target)&&!clickedBell){
     p.classList.remove('open');
   }

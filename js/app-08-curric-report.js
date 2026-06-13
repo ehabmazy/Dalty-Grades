@@ -1152,6 +1152,10 @@ var _curricView='table'; // 'table' | 'config'
 
 function getCurricData(){
   if(!DB.curric)DB.curric={units:[],weeks:[],holidays:[],exams:[]};
+  if(!Array.isArray(DB.curric.units))DB.curric.units=[];
+  if(!Array.isArray(DB.curric.weeks))DB.curric.weeks=[];
+  if(!Array.isArray(DB.curric.holidays))DB.curric.holidays=[];
+  if(!Array.isArray(DB.curric.exams))DB.curric.exams=[];
   return DB.curric;
 }
 
