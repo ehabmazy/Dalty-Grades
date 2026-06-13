@@ -115,7 +115,7 @@ function switchPage(p){
   var _tbTools=document.getElementById("tbMenuTools");
   var _tbGWeeks=document.getElementById("tbMenuGradeWeeks");
   if(_tbEdit)_tbEdit.style.display=(_isHome)?"none":"flex";
-  if(_tbCls)_tbCls.style.display=(_isHome||p==="dict")?"none":"flex";
+  if(_tbCls)_tbCls.style.display=(_isHome||p==="dict"||p==="absence")?"none":"flex";
   var _tbDict=document.getElementById("tbDictBtns");
   if(_tbDict)_tbDict.style.display=(p==="dict")?"flex":"none";
   if(_tbPages)_tbPages.style.display=_isGrades?"flex":"none";
@@ -130,6 +130,12 @@ function switchPage(p){
   if(_tbWeeks)_tbWeeks.style.display=_isWeekly?"flex":"none";
   var _tbView=document.getElementById("tbViewBtn");
   if(_tbView)_tbView.style.display=_isWeekly?"flex":"none";
+  var _isAbsence=(p==="absence");
+  var _tbAbsCls=document.getElementById("tbMenuAbsCls");
+  var _tbAbsWeeks=document.getElementById("tbMenuAbsWeeks");
+  if(_tbAbsCls)_tbAbsCls.style.display=_isAbsence?"flex":"none";
+  if(_tbAbsWeeks)_tbAbsWeeks.style.display=_isAbsence?"flex":"none";
+  if(!_isAbsence){absClsBarClose();absWeeksBarClose();}
   if(!_isWeekly){
     var sp=document.getElementById('devBar');
     if(sp)sp.classList.remove('open');
@@ -1260,12 +1266,73 @@ function settingsQuickFillTimes(){
 
 
 // ══════════════════════════════════════════════════════
-var AS={activeClass:"",activeWeek:1,search:"",showAllPeriods:false};
+var AS={activeClass:"",activeWeek:1,search:"",showAllPeriods:false,_autoWeekSet:false};
+
+// ══ ABS CLS/WEEKS BARS ══
+function absClsBarToggle(){
+  var bar=document.getElementById('absClsBar');
+  var btn=document.getElementById('tbAbsClsBtn');
+  if(!bar||!btn)return;
+  var isOpen=bar.classList.contains('open');
+  absWeeksBarClose();
+  if(isOpen){bar.classList.remove('open');btn.classList.remove('active');}
+  else{renderAbsClsBar();bar.classList.add('open');btn.classList.add('active');}
+}
+function absClsBarClose(){
+  var bar=document.getElementById('absClsBar');
+  var btn=document.getElementById('tbAbsClsBtn');
+  if(bar)bar.classList.remove('open');
+  if(btn)btn.classList.remove('active');
+}
+function absWeeksBarToggle(){
+  var bar=document.getElementById('absWeeksBar');
+  var btn=document.getElementById('tbAbsWeeksBtn');
+  if(!bar||!btn)return;
+  var isOpen=bar.classList.contains('open');
+  absClsBarClose();
+  if(isOpen){bar.classList.remove('open');btn.classList.remove('active');}
+  else{renderAbsWeeksBar();bar.classList.add('open');btn.classList.add('active');}
+}
+function absWeeksBarClose(){
+  var bar=document.getElementById('absWeeksBar');
+  var btn=document.getElementById('tbAbsWeeksBtn');
+  if(bar)bar.classList.remove('open');
+  if(btn)btn.classList.remove('active');
+}
+function renderAbsClsBar(){
+  var bar=document.getElementById('absClsBar');
+  if(!bar)return;
+  var cls=AS.activeClass;
+  var h='<span class="cls-bar-lbl">الفصول:</span>';
+  DB.classes.forEach(function(c){
+    var absCnt=totalClassAbsencePeriods(c);
+    h+='<button class="cls-bar-tab'+(c===cls?" active":"")+'" onclick="AS.activeClass=\''+esc(c)+'\';AS.activeWeek=1;renderAbsence();renderAbsClsBar();renderAbsWeeksBar();">'+esc(c)+(absCnt?' <span class="badge badge-red">'+absCnt+'</span>':"")+'</button>';
+  });
+  bar.innerHTML=h;
+}
+function renderAbsWeeksBar(){
+  var bar=document.getElementById('absWeeksBar');
+  if(!bar)return;
+  var cls=AS.activeClass;
+  var week=AS.activeWeek;
+  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
+  var h='<span class="weeks-bar-lbl">📅 الأسابيع:</span>';
+  var _absW=ALL_WEEKS.slice(0,Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length));
+  var _curW=_calcCurrentWeek();
+  _absW.forEach(function(w){
+    var hasAbs=false;
+    students.forEach(function(s){var abs=getStudentAbsences(cls,s.id);Object.keys(abs).forEach(function(k){if(abs[k]&&k.startsWith("w"+w+"_"))hasAbs=true;});});
+    var isCur=(w===_curW&&w!==week);
+    h+='<button class="abs-week-btn'+(w===week?" active":hasAbs?" has-abs":"")+(isCur?" cur-week":"")+'" title="'+(isCur?"الأسبوع الحالي":"")+'" onclick="AS.activeWeek='+w+';renderAbsence();renderAbsWeeksBar();">'+(isCur?'<span style="font-size:7px;vertical-align:super;color:#34d399">●</span> ':'')+'أ'+w+'</button>';
+  });
+  bar.innerHTML=h;
+}
 
 function renderAbsence(){
   var root=document.getElementById("absenceRoot");
   if(!root)return;
   if(!AS.activeClass&&DB.classes.length)AS.activeClass=DB.classes[0];
+  if(!AS._autoWeekSet){AS.activeWeek=_calcCurrentWeek();AS._autoWeekSet=true;}
   var cls=AS.activeClass;
   var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
   var _shared=(DB.schedule&&DB.schedule._shared)||{periods:[],slots:{}};
@@ -1298,41 +1365,32 @@ function renderAbsence(){
 
   var html='<div class="abs-page">';
   html+='<div class="abs-header">';
-  html+='<div style="display:flex;align-items:center;gap:8px;"><div class="abs-title">📋 سجل الغياب</div><span style="font-size:8px;color:#475569;background:#1e293b;padding:1px 8px;border-radius:8px;">عرض فقط — التعديل من صفحتي الأسبوعي والمرضى</span></div>';
+  html+='<div style="display:flex;align-items:center;gap:8px;">';
+  html+='<div class="abs-title">📋 سجل الغياب</div>';
+  html+='<span style="font-size:8px;color:#64748b;background:rgba(30,41,59,.8);border:1px solid #1e3a5f;padding:2px 9px;border-radius:10px;">عرض فقط — التعديل من الأسبوعي والمرضى</span>';
+  html+='</div>';
   html+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
-  html+='<input style="background:#0f172a;border:1px solid #334155;color:#f1f5f9;border-radius:6px;padding:3px 9px;font-size:10px;outline:none;" placeholder="🔍 بحث..." value="'+esc(AS.search)+'" oninput="AS.search=this.value;renderAbsence()"/>';
-  html+='<button class="btn btn-success btn-sm" onclick="absExport()">⬇ Excel</button>';
+  html+='<div style="position:relative;">';
+  html+='<span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:10px;pointer-events:none;">🔍</span>';
+  html+='<input style="background:#0f172a;border:1px solid #1e3a5f;color:#f1f5f9;border-radius:8px;padding:4px 26px 4px 10px;font-size:10px;outline:none;width:110px;transition:border-color .15s;" placeholder="بحث..." value="'+esc(AS.search)+'" oninput="AS.search=this.value;renderAbsence()" onfocus="this.style.borderColor=\'#38bdf8\'" onblur="this.style.borderColor=\'#1e3a5f\'"/>';
+  html+='</div>';
+  html+='<button class="btn btn-success btn-sm" onclick="absExport()" style="display:flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;font-size:10px;">⬇ Excel</button>';
   html+='</div></div>';
   html+='<div class="abs-body">';
 
-  // Class tabs
-  html+='<div class="abs-cls-tabs">';
-  DB.classes.forEach(function(c){
-    var absCnt=totalClassAbsencePeriods(c);
-    html+='<button class="abs-cls-tab'+(c===cls?" active":"")+'" onclick="AS.activeClass=\''+esc(c)+'\';AS.activeWeek=1;renderAbsence()">'+esc(c)+(absCnt?' <span class="badge badge-red">'+absCnt+'</span>':"")+' </button>';
-  });
-  html+='</div>';
+  // إعادة رسم أشرطة الفصول/الأسابيع العلوية إن كانت مفتوحة
+  if(document.getElementById('absClsBar')&&document.getElementById('absClsBar').classList.contains('open'))renderAbsClsBar();
+  if(document.getElementById('absWeeksBar')&&document.getElementById('absWeeksBar').classList.contains('open'))renderAbsWeeksBar();
 
   // Stats
   var totalSick=0;
   students.forEach(function(s){totalSick+=countStudentSickPeriods(cls,s.id);});
   html+='<div class="abs-stats-row">';
-  html+='<div class="abs-stat"><div class="abs-stat-v" style="color:#f87171;">'+thisWeekAbs+'</div><div class="abs-stat-l">غياب هذا الأسبوع</div></div>';
-  html+='<div class="abs-stat"><div class="abs-stat-v" style="color:#fbbf24;">'+thisWeekSick+'</div><div class="abs-stat-l">مرضى هذا الأسبوع</div></div>';
-  html+='<div class="abs-stat"><div class="abs-stat-v" style="color:#fcd34d;">'+totalAbsPeriods+'</div><div class="abs-stat-l">إجمالي غياب</div></div>';
-  html+='<div class="abs-stat"><div class="abs-stat-v" style="color:#60a5fa;">'+totalSick+'</div><div class="abs-stat-l">إجمالي مرضى</div></div>';
-  html+='<div class="abs-stat"><div class="abs-stat-v" style="color:#34d399;">'+students.length+'</div><div class="abs-stat-l">عدد الطلاب</div></div>';
-  html+='</div>';
-
-  // Week nav
-  html+='<div class="abs-week-nav">';
-  html+='<span style="font-size:10px;color:#64748b;">الأسبوع:</span>';
-  var _absW=ALL_WEEKS.slice(0,Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length));
-  _absW.forEach(function(w){
-    var hasAbs=false;
-    students.forEach(function(s){var abs=getStudentAbsences(cls,s.id);Object.keys(abs).forEach(function(k){if(abs[k]&&k.startsWith("w"+w+"_"))hasAbs=true;});});
-    html+='<button class="abs-week-btn'+(w===week?" active":hasAbs?" has-abs":"")+'" onclick="AS.activeWeek='+w+';renderAbsence()">أ'+w+'</button>';
-  });
+  html+='<div class="abs-stat" style="color:#f87171;"><div class="abs-stat-v" style="color:#f87171;">'+thisWeekAbs+'</div><div class="abs-stat-l">غياب هذا الأسبوع</div></div>';
+  html+='<div class="abs-stat" style="color:#fbbf24;"><div class="abs-stat-v" style="color:#fbbf24;">'+thisWeekSick+'</div><div class="abs-stat-l">مرضى هذا الأسبوع</div></div>';
+  html+='<div class="abs-stat" style="color:#fb923c;"><div class="abs-stat-v" style="color:#fb923c;">'+totalAbsPeriods+'</div><div class="abs-stat-l">إجمالي الغياب</div></div>';
+  html+='<div class="abs-stat" style="color:#60a5fa;"><div class="abs-stat-v" style="color:#60a5fa;">'+totalSick+'</div><div class="abs-stat-l">إجمالي المرضى</div></div>';
+  html+='<div class="abs-stat" style="color:#34d399;"><div class="abs-stat-v" style="color:#34d399;">'+students.length+'</div><div class="abs-stat-l">عدد الطلاب</div></div>';
   html+='</div>';
 
   // الأعمدة دائماً من buildAbsCols (يعتمد على periodsPerWeek)
@@ -1351,12 +1409,12 @@ function renderAbsence(){
     // Only show columns where any slot has content OR all (show all for full control)
     // Actually show all period×day combos but mark scheduled ones
     var colCount=activePeriodDays.length;
-    var gridCols="120px repeat("+colCount+",minmax(36px,1fr)) 60px";
+    var gridCols="170px repeat("+colCount+",minmax(36px,1fr)) 60px";
 
     // Header
-    html+='<div style="display:flex;gap:7px;align-items:center;margin-bottom:7px;flex-wrap:wrap;">';
-    html+='<span style="background:#1e3a5f;border:1px solid #2d4a6e;border-radius:10px;padding:2px 10px;font-size:9px;color:#60a5fa;">📚 '+activePeriodDays.length+' فترة / الأسبوع</span>';
-    html+='<button onclick="switchPage(\'settings\')" style="background:#0f172a;border:1px solid #334155;padding:2px 9px;border-radius:6px;cursor:pointer;font-size:9px;color:#64748b;font-family:inherit;">⚙️ تغيير العدد</button>';
+    html+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">';
+    html+='<span style="background:linear-gradient(135deg,#0c2a52,#0e3268);border:1px solid #1e4a8a;border-radius:10px;padding:3px 11px;font-size:9px;color:#60a5fa;font-weight:700;">📚 '+activePeriodDays.length+' فترة / الأسبوع</span>';
+    html+='<button onclick="switchPage(\'settings\')" style="background:#0f172a;border:1px solid #1e3a5f;padding:3px 10px;border-radius:8px;cursor:pointer;font-size:9px;color:#64748b;font-family:inherit;transition:all .15s;" onmouseover="this.style.borderColor=\'#334155\';this.style.color=\'#94a3b8\'" onmouseout="this.style.borderColor=\'#1e3a5f\';this.style.color=\'#64748b\'">⚙️ تغيير العدد</button>';
     html+='</div>';
     html+='<div class="abs-grid">';
     html+='<div class="abs-grid-hdr" style="display:grid;grid-template-columns:'+gridCols+';">';
@@ -1398,11 +1456,11 @@ function renderAbsence(){
   }
 
   // Legend
-  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:9px;">';
-  html+='<span style="background:rgba(239,68,68,.2);color:#f87171;padding:1px 7px;border-radius:4px;">✗ = غائب (يُحتسب صفر)</span>';
-  html+='<span style="background:rgba(245,158,11,.2);color:#fbbf24;padding:1px 7px;border-radius:4px;">م = مريض (مستثنى من المتوسط)</span>';
-  html+='<span style="background:rgba(29,78,216,.1);color:#60a5fa;padding:1px 7px;border-radius:4px;">· = فترة مجدولة</span>';
-  html+='<span style="color:#64748b;">اضغط مرة=غائب، مرتين=مريض، ثلاث=إلغاء</span>';
+  html+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;font-size:9px;padding:7px 10px;background:#0f172a;border-radius:10px;border:1px solid #1e293b;">';
+  html+='<span style="background:rgba(239,68,68,.15);color:#f87171;padding:2px 9px;border-radius:6px;border:1px solid rgba(239,68,68,.25);">✗ غائب (صفر)</span>';
+  html+='<span style="background:rgba(245,158,11,.15);color:#fbbf24;padding:2px 9px;border-radius:6px;border:1px solid rgba(245,158,11,.25);">م مريض (مستثنى)</span>';
+  html+='<span style="background:rgba(29,78,216,.1);color:#60a5fa;padding:2px 9px;border-radius:6px;border:1px solid rgba(29,78,216,.25);">· فترة مجدولة</span>';
+  html+='<span style="color:#475569;font-size:8.5px;margin-top:1px;">اضغط: مرة=غائب، مرتين=مريض، ثلاث=إلغاء</span>';
   html+='</div>';
 
   html+='</div></div>';
