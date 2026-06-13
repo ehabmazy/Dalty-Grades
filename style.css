@@ -963,8 +963,8 @@ tr.hl-abs td{background:#fff7ed!important;}
 .home-ring-status-badge{border-radius:6px;padding:2px 8px;font-size:9px;font-weight:700;}
 .home-ring-center{display:flex;align-items:center;gap:16px;}
 .home-ring-wrap{position:relative;width:196px;height:196px;flex-shrink:0;}
-.home-ring-wrap svg{transform:rotate(-90deg);}
-.home-ring-inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.home-ring-wrap svg{transform:rotate(-90deg);display:block;width:100%;height:100%;}
+.home-ring-inner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;text-align:center;}
 .home-ring-countdown{font-size:20px;font-weight:900;color:#f1f5f9;line-height:1;font-variant-numeric:tabular-nums;}
 .home-ring-countdown-lbl{font-size:8px;color:#475569;margin-top:1px;}
 .home-ring-info{flex:1;min-width:0;}
@@ -1036,6 +1036,15 @@ tr.hl-abs td{background:#fff7ed!important;}
 /* ── RING CENTERED ── */
 .home-ring-section{padding:0 8px 8px;display:flex;justify-content:center;}
 .home-ring-card{width:100%;max-width:420px;}
+
+/* ── منع تراكب معلومات الحصة مع الدائرة في الشاشات الصغيرة ── */
+@media(max-width:480px){
+  .home-ring-center{flex-direction:column;align-items:center;text-align:center;gap:10px;}
+  .home-ring-info{flex:none;width:100%;min-width:0;}
+  .home-ring-period-name{white-space:normal;}
+  .home-ring-time-badge{display:block;width:fit-content;margin:0 auto;}
+  .home-ring-next-row{flex-direction:column;align-items:center;gap:4px;text-align:center;}
+}
 
 /* ── CURRIC WEEK WIDGET ── */
 .home-curric-strip{
