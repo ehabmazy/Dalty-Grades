@@ -1757,11 +1757,12 @@ function _homeFmtMins(m){var h=Math.floor(m/60),mn=m%60;return h>0?(h+'س '+mn+'
 function _homeRingHTML(r,prog,color,strokeW){
   var circ=2*Math.PI*r;
   var dash=circ*(prog/100);
-  return '<svg width="'+(r*2+strokeW*2)+'" height="'+(r*2+strokeW*2)+'" viewBox="0 0 '+(r*2+strokeW*2)+' '+(r*2+strokeW*2)+'">'
-    +'<circle cx="'+(r+strokeW)+'" cy="'+(r+strokeW)+'" r="'+r+'" fill="none" stroke="#1a2540" stroke-width="'+strokeW+'"/>'
-    +'<circle cx="'+(r+strokeW)+'" cy="'+(r+strokeW)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+strokeW+'"'
+  var cx=r+strokeW, cy=r+strokeW;
+  return '<svg width="'+(r*2+strokeW*2)+'" height="'+(r*2+strokeW*2)+'" viewBox="0 0 '+(r*2+strokeW*2)+' '+(r*2+strokeW*2)+'" style="transform:rotate(-90deg);">'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#1a2540" stroke-width="'+strokeW+'"/>'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+strokeW+'"'
     +' stroke-dasharray="'+dash.toFixed(1)+' '+circ.toFixed(1)+'"'
-    +' stroke-linecap="round" transform="rotate(-90 '+(r+strokeW)+' '+(r+strokeW)+')">'
+    +' stroke-linecap="round">'
     +'</circle></svg>';
 }
 
