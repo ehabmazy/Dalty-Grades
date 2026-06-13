@@ -136,6 +136,10 @@ function switchPage(p){
   if(_tbAbsCls)_tbAbsCls.style.display=_isAbsence?"flex":"none";
   if(_tbAbsWeeks)_tbAbsWeeks.style.display=_isAbsence?"flex":"none";
   if(!_isAbsence){absClsBarClose();absWeeksBarClose();}
+  /* إخفاء لوحة الأرقام العائمة عند الانتقال لأي صفحة لا تستخدمها */
+  if(p!=='weekly' && p!=='grades'){
+    if(typeof FNP_hide==='function') FNP_hide();
+  }
   if(!_isWeekly){
     var sp=document.getElementById('devBar');
     if(sp)sp.classList.remove('open');

@@ -2001,10 +2001,17 @@ function _initNumpadEvents() {
       _origRenderWeekly.apply(this, arguments);
       if (typeof WKS !== 'undefined' && (WKS.viewMode === 'numpad' || WKS.viewMode === 'attend' || WKS.viewMode === 'absent')) {
         buildFloatingNumpad();
-        if (FNP.tog) FNP.tog.classList.add('fnp-tog-visible');
-        /* إخفاء اللوحة الثابتة وإظهار العائمة — فقط إذا لم تكن مرئية بالفعل */
-        if (!FNP.visible) {
+        /* إظهار اللوحة فقط إذا كانت الصفحة الحالية هي الراصد */
+        if (typeof _currentPage === 'undefined' || _currentPage !== 'weekly') {
+          /* لسنا في صفحة الراصد — لا تُظهر اللوحة */
+          if (FNP.el)  FNP.el.classList.remove('fnp-visible');
+          if (FNP.tog) FNP.tog.classList.remove('fnp-tog-visible');
+          FNP.visible = false;
+        } else if (!FNP.visible) {
+          if (FNP.tog) FNP.tog.classList.add('fnp-tog-visible');
+          /* إخفاء اللوحة الثابتة وإظهار العائمة */
           setTimeout(function(){
+            if (typeof _currentPage !== 'undefined' && _currentPage !== 'weekly') return;
             var kb = document.querySelector('.np2-keyboard');
             if (kb) {
               kb.classList.add('np2-keyboard-hidden');
