@@ -82,73 +82,33 @@ function _notifUpdateBadge(){
   }
 }
 // ── Multi-tone notification sounds ────────────────────
+// مسار مجلد الأصوات المدمجة
+var _SOUNDS_PATH = 'sounds/';
+
+// نغمات مدمجة — [label, durationLabel, file|null, fallback_fn|null]
+// file: اسم ملف WAV في مجلد sounds/
+// fallback_fn: دالة WebAudio احتياطية إذا فشل تحميل الملف
 var _NOTIF_TONES={
-  // id: [label, durationLabel, fn(ctx)]
-  'chime_short': ['🎵 جرس قصير','0.8 ث',function(ctx){
-    [523,659,784].forEach(function(hz,i){
-      var o=ctx.createOscillator(),g=ctx.createGain();
-      o.type='sine';o.connect(g);g.connect(ctx.destination);o.frequency.value=hz;
-      var t=ctx.currentTime+i*.2;
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.18,t+.05);
-      g.gain.exponentialRampToValueAtTime(.001,t+.4);
-      o.start(t);o.stop(t+.45);
-    });
-  }],
-  'chime_long': ['🔔 جرس طويل','2.5 ث',function(ctx){
-    [[523,.0],[659,.5],[784,1.0],[1046,1.5],[784,2.0]].forEach(function(item){
-      var hz=item[0],delay=item[1];
-      var o=ctx.createOscillator(),g=ctx.createGain();
-      o.type='sine';o.connect(g);g.connect(ctx.destination);o.frequency.value=hz;
-      var t=ctx.currentTime+delay;
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.16,t+.06);
-      g.gain.exponentialRampToValueAtTime(.001,t+.55);
-      o.start(t);o.stop(t+.6);
-    });
-  }],
-  'ding': ['✨ دنق نظيف','0.5 ث',function(ctx){
-    var o=ctx.createOscillator(),g=ctx.createGain();
-    o.type='sine';o.connect(g);g.connect(ctx.destination);o.frequency.value=1318;
-    g.gain.setValueAtTime(.2,ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.6);
-    o.start(ctx.currentTime);o.stop(ctx.currentTime+.65);
-  }],
-  'alert_double': ['⚡ تنبيه مزدوج','0.7 ث',function(ctx){
-    [0,.32].forEach(function(delay){
-      var o=ctx.createOscillator(),g=ctx.createGain();
-      o.type='square';o.connect(g);g.connect(ctx.destination);o.frequency.value=880;
-      var t=ctx.currentTime+delay;
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.08,t+.02);
-      g.gain.linearRampToValueAtTime(.0,t+.22);
-      o.start(t);o.stop(t+.25);
-    });
-  }],
-  'school_bell': ['🏫 جرس المدرسة','3 ث',function(ctx){
-    // Realistic school bell: rapid oscillation
-    for(var i=0;i<10;i++){
-      var o=ctx.createOscillator(),g=ctx.createGain();
-      o.type='sine';o.connect(g);g.connect(ctx.destination);
-      o.frequency.value=880+(i%2)*220;
-      var t=ctx.currentTime+i*.28;
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.13,t+.02);
-      g.gain.linearRampToValueAtTime(.0,t+.24);
-      o.start(t);o.stop(t+.28);
-    }
-  }],
-  'melody': ['🎶 لحن قصير','2 ث',function(ctx){
-    [[523,0],[587,.25],[659,.5],[698,.75],[784,1.0],[698,1.3],[784,1.6]].forEach(function(item){
-      var hz=item[0],delay=item[1];
-      var o=ctx.createOscillator(),g=ctx.createGain();
-      o.type='triangle';o.connect(g);g.connect(ctx.destination);o.frequency.value=hz;
-      var t=ctx.currentTime+delay;
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.14,t+.04);
-      g.gain.exponentialRampToValueAtTime(.001,t+.28);
-      o.start(t);o.stop(t+.3);
-    });
-  }]
+  'chime_short':      ['🎵 جرس قصير',    '0.8 ث', 'chime_short.wav',      function(ctx){ [523,659,784].forEach(function(hz,i){ var o=ctx.createOscillator(),g=ctx.createGain(); o.type='sine';o.connect(g);g.connect(ctx.destination);o.frequency.value=hz; var t=ctx.currentTime+i*.2; g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.18,t+.05); g.gain.exponentialRampToValueAtTime(.001,t+.4); o.start(t);o.stop(t+.45); }); }],
+  'chime_long':       ['🔔 جرس طويل',    '2.5 ث', 'chime_long.wav',       function(ctx){ [[523,.0],[659,.5],[784,1.0],[1046,1.5],[784,2.0]].forEach(function(item){ var hz=item[0],delay=item[1]; var o=ctx.createOscillator(),g=ctx.createGain(); o.type='sine';o.connect(g);g.connect(ctx.destination);o.frequency.value=hz; var t=ctx.currentTime+delay; g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.16,t+.06); g.gain.exponentialRampToValueAtTime(.001,t+.55); o.start(t);o.stop(t+.6); }); }],
+  'ding':             ['✨ دنق نظيف',     '0.5 ث', 'ding.wav',             function(ctx){ var o=ctx.createOscillator(),g=ctx.createGain(); o.type='sine';o.connect(g);g.connect(ctx.destination);o.frequency.value=1318; g.gain.setValueAtTime(.2,ctx.currentTime); g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.6); o.start(ctx.currentTime);o.stop(ctx.currentTime+.65); }],
+  'alert_double':     ['⚡ تنبيه مزدوج', '0.7 ث', 'alert_double.wav',     function(ctx){ [0,.32].forEach(function(delay){ var o=ctx.createOscillator(),g=ctx.createGain(); o.type='square';o.connect(g);g.connect(ctx.destination);o.frequency.value=880; var t=ctx.currentTime+delay; g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.08,t+.02); g.gain.linearRampToValueAtTime(.0,t+.22); o.start(t);o.stop(t+.25); }); }],
+  'school_bell':      ['🏫 جرس المدرسة', '3 ث',   'school_bell.wav',      function(ctx){ for(var i=0;i<10;i++){ var o=ctx.createOscillator(),g=ctx.createGain(); o.type='sine';o.connect(g);g.connect(ctx.destination); o.frequency.value=880+(i%2)*220; var t=ctx.currentTime+i*.28; g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.13,t+.02); g.gain.linearRampToValueAtTime(.0,t+.24); o.start(t);o.stop(t+.28); } }],
+  'melody':           ['🎶 لحن قصير',    '2 ث',   'melody.wav',           function(ctx){ [[523,0],[587,.25],[659,.5],[698,.75],[784,1.0],[698,1.3],[784,1.6]].forEach(function(item){ var hz=item[0],delay=item[1]; var o=ctx.createOscillator(),g=ctx.createGain(); o.type='triangle';o.connect(g);g.connect(ctx.destination);o.frequency.value=hz; var t=ctx.currentTime+delay; g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.14,t+.04); g.gain.exponentialRampToValueAtTime(.001,t+.28); o.start(t);o.stop(t+.3); }); }],
+  // ── نغمات جديدة من مجلد sounds ──
+  'notification_ping':['🔔 نبضة إشعار',  '0.4 ث', 'notification_ping.wav',null],
+  'alert_important':  ['🚨 تنبيه هام',   '2.2 ث', 'alert_important.wav',  null],
+  'phone_ring':       ['📱 رنين هاتف',   '2.8 ث', 'phone_ring.wav',       null],
+  'alarm_beep':       ['⏰ منبه إنذار',  '3 ث',   'alarm_beep.wav',       null],
+  'success':          ['✅ نجاح / إتمام','1.2 ث', 'success.wav',          null],
+  'gentle_alert':     ['🌸 تنبيه لطيف', '0.9 ث', 'gentle_alert.wav',     null]
 };
+
+// كاش الأصوات المحمّلة
+var _audioCache = {};
 function _playNotifSound(toneId){
   try{
-    // Check if it's a custom tone first
+    // 1. نغمة مخصصة (رُفعت من المستخدم)
     if(toneId && toneId.startsWith('custom_')){
       var ct=_customTones.find(function(t){return t.id===toneId;});
       if(ct && ct.dataUrl){
@@ -159,11 +119,74 @@ function _playNotifSound(toneId){
       }
     }
     var id=toneId||_notifSettings.soundTone||'chime_short';
-    var ctx=new(window.AudioContext||window.webkitAudioContext)();
-    var tone=_NOTIF_TONES[id];
-    if(tone) tone[2](ctx);
-    else _NOTIF_TONES['chime_short'][2](ctx);
+    var toneEntry=_NOTIF_TONES[id]||_NOTIF_TONES['chime_short'];
+    var fileName=toneEntry[2]||null;
+    var fallbackFn=toneEntry[3]||toneEntry[2]||null;
+    // إذا كان toneEntry[2] دالة (النغمات القديمة) → شغّلها مباشرة
+    if(typeof toneEntry[2]==='function'){
+      var ctx2=new(window.AudioContext||window.webkitAudioContext)();
+      toneEntry[2](ctx2);
+      return;
+    }
+    // 2. حاول تشغيل ملف WAV من مجلد sounds
+    if(fileName){
+      var src=_SOUNDS_PATH+fileName;
+      if(_audioCache[src]){
+        var aud=_audioCache[src].cloneNode();
+        aud.volume=0.75;
+        aud.play().catch(function(){ _playFallback(id,fallbackFn); });
+      } else {
+        var a=new Audio(src);
+        a.preload='auto';
+        a.oncanplaythrough=function(){
+          _audioCache[src]=a;
+          var aud2=a.cloneNode();
+          aud2.volume=0.75;
+          aud2.play().catch(function(){ _playFallback(id,fallbackFn); });
+        };
+        a.onerror=function(){ _playFallback(id,fallbackFn); };
+        a.load();
+      }
+      return;
+    }
+    // 3. احتياطي: WebAudio
+    _playFallback(id,fallbackFn);
   }catch(e){}
+}
+
+function _playFallback(id,fn){
+  try{
+    if(typeof fn==='function'){
+      var ctx=new(window.AudioContext||window.webkitAudioContext)();
+      fn(ctx);
+    } else {
+      // أبسط fallback: chime_short بـ WebAudio
+      var ctx=new(window.AudioContext||window.webkitAudioContext)();
+      _NOTIF_TONES['chime_short'][3](ctx);
+    }
+  }catch(e){}
+}
+
+// تحميل مسبق لأصوات المجلد عند بدء التطبيق
+function _preloadSounds(){
+  Object.keys(_NOTIF_TONES).forEach(function(id){
+    var entry=_NOTIF_TONES[id];
+    if(typeof entry[2]==='string' && entry[2]){
+      var src=_SOUNDS_PATH+entry[2];
+      if(!_audioCache[src]){
+        var a=new Audio(src);
+        a.preload='auto';
+        a.oncanplaythrough=function(){ _audioCache[src]=a; };
+        a.load();
+      }
+    }
+  });
+}
+// تشغيل التحميل المسبق بعد لحظة من تحميل الصفحة
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',function(){ setTimeout(_preloadSounds,1500); });
+} else {
+  setTimeout(_preloadSounds,1500);
 }
 
 // ── Custom Tones (My Tones) ───────────────────────────
@@ -1757,12 +1780,11 @@ function _homeFmtMins(m){var h=Math.floor(m/60),mn=m%60;return h>0?(h+'س '+mn+'
 function _homeRingHTML(r,prog,color,strokeW){
   var circ=2*Math.PI*r;
   var dash=circ*(prog/100);
-  var cx=r+strokeW, cy=r+strokeW;
-  return '<svg width="'+(r*2+strokeW*2)+'" height="'+(r*2+strokeW*2)+'" viewBox="0 0 '+(r*2+strokeW*2)+' '+(r*2+strokeW*2)+'" style="transform:rotate(-90deg);">'
-    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#1a2540" stroke-width="'+strokeW+'"/>'
-    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+strokeW+'"'
+  return '<svg width="'+(r*2+strokeW*2)+'" height="'+(r*2+strokeW*2)+'" viewBox="0 0 '+(r*2+strokeW*2)+' '+(r*2+strokeW*2)+'">'
+    +'<circle cx="'+(r+strokeW)+'" cy="'+(r+strokeW)+'" r="'+r+'" fill="none" stroke="#1a2540" stroke-width="'+strokeW+'"/>'
+    +'<circle cx="'+(r+strokeW)+'" cy="'+(r+strokeW)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+strokeW+'"'
     +' stroke-dasharray="'+dash.toFixed(1)+' '+circ.toFixed(1)+'"'
-    +' stroke-linecap="round">'
+    +' stroke-linecap="round" transform="rotate(-90 '+(r+strokeW)+' '+(r+strokeW)+')">'
     +'</circle></svg>';
 }
 

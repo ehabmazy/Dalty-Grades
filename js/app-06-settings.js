@@ -309,21 +309,48 @@ function renderSettings(){
 
   html+='</div></div>';
 
-  // ── نغماتي ──
+  // ── نغمات الصوت ──
   html+='<div class="settings-section">';
-  html+='<div class="settings-section-hdr" style="background:#0f3460;display:flex;align-items:center;justify-content:space-between;">🎵 نغماتي — نغمات مخصصة';
-  html+='<span style="font-size:9px;font-weight:400;opacity:.75;">ارفع ملفات صوتية واستخدمها في المنبه والإشعارات</span></div>';
+  html+='<div class="settings-section-hdr" style="background:#0f3460;display:flex;align-items:center;justify-content:space-between;">🎵 نغمات الصوت';
+  html+='<span style="font-size:9px;font-weight:400;opacity:.75;">نغمات مدمجة + نغماتك المخصصة</span></div>';
   html+='<div class="settings-section-body">';
-  html+='<div class="settings-row" style="flex-direction:column;gap:10px;">';
+  html+='<div class="settings-row" style="flex-direction:column;gap:12px;">';
+
+  // — النغمات المدمجة
+  html+='<div>';
+  html+='<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;letter-spacing:.3px;">📦 النغمات المدمجة</div>';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+  if(typeof _NOTIF_TONES !== "undefined"){
+    Object.keys(_NOTIF_TONES).forEach(function(id){
+      if(id.startsWith('custom_')) return;
+      var t=_NOTIF_TONES[id];
+      var isActive=typeof _notifSettings!=='undefined' && (_notifSettings.soundTone||'chime_short')===id;
+      html+='<div style="display:flex;align-items:center;gap:5px;">';
+      html+='<div style="flex:1;padding:8px 10px;border-radius:9px;border:1.5px solid '+(isActive?'#2563eb':'#1e293b')+';background:'+(isActive?'#1e3a5f':'#0f172a')+';">';
+      html+='<div style="font-size:11px;font-weight:700;color:'+(isActive?'#93c5fd':'#cbd5e1')+';">'+(t[0]||id)+'</div>';
+      html+='<div style="font-size:9px;color:#475569;margin-top:2px;">⏱ '+t[1]+'</div>';
+      html+='</div>';
+      html+='<button onclick="_playNotifSound(\''+id+'\')" title="معاينة" style="width:28px;height:28px;border-radius:8px;border:1px solid #1e293b;background:#0f172a;color:#60a5fa;font-size:13px;cursor:pointer;flex-shrink:0;">▶</button>';
+      html+='</div>';
+    });
+  }
+  html+='</div>';
+  html+='</div>';
+
+  // فاصل
+  html+='<div style="border-top:1px solid #1e293b;padding-top:12px;">';
+  html+='<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;letter-spacing:.3px;">🎼 نغماتي — مخصصة</div>';
   // Upload button
-  html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
-  html+='<label style="background:#1d4ed8;color:white;padding:6px 16px;border-radius:7px;cursor:pointer;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:6px;">🎵 رفع ملف صوتي<input type="file" accept="audio/*" multiple style="display:none;" onchange="customTonesUpload(event)"/></label>';
-  html+='<span style="font-size:9px;color:#475569;">MP3 · WAV · OGG · M4A (حجم أقصى 5 ميجا للملف)</span>';
+  html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">';
+  html+='<label style="background:#1d4ed8;color:white;padding:7px 16px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:6px;">➕ رفع ملف صوتي<input type="file" accept="audio/*" multiple style="display:none;" onchange="customTonesUpload(event)"/></label>';
+  html+='<span style="font-size:9px;color:#475569;">MP3 · WAV · OGG · M4A (حد أقصى 5 ميجا)</span>';
   html+='</div>';
   // List of custom tones
   html+='<div id="customTonesList" style="display:flex;flex-direction:column;gap:6px;">';
   html+=_renderCustomTonesList();
   html+='</div>';
+  html+='</div>';
+
   html+='</div></div></div>';
 
   // ── إملاء بدون نت ──
