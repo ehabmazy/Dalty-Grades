@@ -1529,4 +1529,7 @@ var st = document.createElement('style');
 st.textContent = '@keyframes fadeIn{from{opacity:0}to{opacity:1}}';
 document.head.appendChild(st);
 
+window.HELP = HELP;
+window._showHelpModal = _showHelpModal;
+
 })();

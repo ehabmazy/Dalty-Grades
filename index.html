@@ -138,7 +138,6 @@
     <div class="top-user-area">
       <button id="cardsViewBtn" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);" title="عرض الراصد" style="display:none;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">🎯</button>
       <button id="notifBell" onclick="toggleNotifPanel()" title="الإشعارات" style="display:none;">🔔<span id="notifBadge"></span></button>
-      <button id="topAccountBtn" onclick="openAboutModal()" title="الحساب" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">👤</button>
     </div>
   </div>
   <!-- SUB BAR: مخفي الآن — الكروت والإشعارات انتقلا للقاعدة -->
@@ -878,7 +877,7 @@
         <button class="dock-btn" id="bni_cards" onclick="switchPage('weekly');setTimeout(function(){if(typeof WKS!=='undefined'){WKS.viewMode='table';renderWeekly();renderViewBar();}},80);bnSetActive('weekly')">
           <div class="dock-icon">📅</div><div class="dock-lbl">الأسبوعي</div>
         </button>
-        <button class="dock-btn" id="bni_notifs" onclick="toggleNotifPanel()" style="position:relative;">
+        <button class="dock-btn" id="bni_notifs" onclick="switchPage('notifs');bnSetActive('notifs')" style="position:relative;">
           <div class="dock-icon">🔔<span id="dockNotifBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:#ef4444;color:#fff;font-size:8px;font-weight:900;border-radius:8px;padding:0 4px;min-width:14px;text-align:center;"></span></div>
           <div class="dock-lbl">الإشعارات</div>
         </button>
@@ -1056,10 +1055,318 @@
 
 
 <!-- ══ HELP SYSTEM JS ══ -->
+<script>
+/* ════════════════════════════════════════════
+   نظام المساعدة — Dalty Grades
+   محتوى مساعدة كل صفحة + نافذة العرض
+   ════════════════════════════════════════════ */
+var HELP = {
 
+  home: {
+    icon: '🏠', title: 'الصفحة الرئيسية',
+    desc: 'لوحة التحكم الرئيسية ونقطة انطلاقك لكل صفحات التطبيق',
+    groups: [
+      { h:'📌 ماذا تجد هنا', items: [
+        'ساعة مباشرة وتاريخ اليوم الحالي.',
+        'حلقة تقدّم (Progress Ring) تعرض مدى تقدّم اليوم الدراسي.',
+        'عرض «الحصة الحالية» تلقائياً بالاعتماد على الجدول الذي أنشأته في صفحة الجدول.',
+        'جرس الإشعارات 🔔 مع شارة تعرض عدد الإشعارات غير المقروءة.'
+      ]},
+      { h:'🧭 التنقل', items: [
+        'استخدم الشريط السفلي (الدوك) للتنقل السريع بين الصفحات.',
+        'اسحب مقبض الدوك لأعلى لإظهار باقي الأيقونات (الإحصائيات، التوزيع، التفريغ، المرضى... إلخ).',
+        'القائمة الجانبية (☰) تحتوي أيضاً على جميع الصفحات بالإضافة لقسم «المساعد».'
+      ]},
+      { h:'🔗 مشاركة الدرجات', items: [
+        'زر «مشاركة الدرجات مع الطلاب» من القائمة الجانبية ينشئ رابط عرض درجات (للطلاب فقط) يمكن نسخه وإرساله.'
+      ]}
+    ]
+  },
 
-<!-- زر المساعدة — انتقل للقائمة الجانبية -->
-<button id="globalHelpBtn" onclick="showPageHelp()" style="display:none;">؟</button>
+  grades: {
+    icon: '📝', title: 'صفحة الدرجات',
+    desc: 'إدخال ومتابعة درجات الطلاب لكل فصل دراسي',
+    groups: [
+      { h:'🗂 اختيار الفصل', items: [
+        'تظهر الصفحة الرئيسية لاختيار الفصل أولاً، ثم تنتقل لجدول الدرجات الخاص به.',
+        'يمكن إنشاء فصول متعددة وإضافة الطلاب مع صورهم.'
+      ]},
+      { h:'➕ الأعمدة والدرجات', items: [
+        'زر «الأعمدة» يتيح إظهار/إخفاء أي عمود (أعمال، اختبار، سلوك، إملاء...) لتبسيط العرض.',
+        'كل عمود له وزن قابل للتعديل، ويتم حساب المجموع والمتوسط تلقائياً.',
+        'تلوين الدرجات يتغيّر تلقائياً حسب مستوى الطالب (ممتاز / جيد / ضعيف...).',
+        'عمود السلوك له تنسيق خاص ويمكن تعديله مباشرة من الخلية.'
+      ]},
+      { h:'📅 الغياب وشريط الأسبوع', items: [
+        'يمكنك تسجيل غياب الطالب (غ / عذر) مباشرة من خلية الدرجة دون الحاجة لفتح صفحة الغياب.',
+        'شريط الأسبوع أعلى الصفحة يحدد الأسبوع الحالي ويربط البيانات بصفحة الأسبوعي تلقائياً.'
+      ]}
+    ]
+  },
+
+  weekly: {
+    icon: '🎯', title: 'الراصد — الرصد الأسبوعي',
+    desc: 'أسرع طريقة لرصد درجات وسلوك وغياب الطلاب أسبوعياً',
+    groups: [
+      { h:'🔢 لوحة الإدخال الرقمي (Numpad)', items: [
+        'الوضع الافتراضي السريع: اختر الطالب ثم أدخل درجته عبر لوحة أرقام مخصصة بدون لوحة مفاتيح.',
+        'يمكن التبديل بين عرض «اللوحة الرقمية» وعرض «الجدول الكامل» من شريط العرض.'
+      ]},
+      { h:'📊 صف الإحصائيات', items: [
+        'صف إحصائيات يظهر أعلى رأس الأعمدة (متوسط الفصل، أعلى درجة، أقل درجة) لمتابعة الأداء لحظياً.'
+      ]},
+      { h:'✅ الغياب الجماعي', items: [
+        'زر الغياب الجماعي يتيح تحديد عدة طلاب دفعة واحدة وتطبيق حالة الغياب أو العذر عليهم معاً.'
+      ]},
+      { h:'🛠 شريط «تطوير»', items: [
+        'التوزيع الذكي: يوزّع الدرجات تلقائياً على الطلاب حسب معايير محددة لتسريع الرصد.',
+        'البحث عن طالب: يقفز مباشرة لخلية الطالب المطلوب داخل الجدول.',
+        'الإدخال الصوتي (Dictation): تحدّث باسم الطالب والدرجة فيُسجَّلها التطبيق تلقائياً.'
+      ]},
+      { h:'🎤 الإدخال الصوتي بدون إنترنت', items: [
+        'في وجود إنترنت يستخدم التطبيق التعرف على الصوت المدمج في المتصفح.',
+        'عند انقطاع الإنترنت يتحول النظام تلقائياً لنموذج Whisper مصغّر يعمل محلياً على جهازك (يُحمَّل مرة واحدة فقط عند توفر الإنترنت).',
+        'إذا ظهرت رسالة تحميل النموذج، انتظر حتى الاكتمال مرة واحدة فقط — بعدها يعمل دون اتصال نهائياً.'
+      ]}
+    ]
+  },
+
+  sched: {
+    icon: '🗓', title: 'الجدول الدراسي',
+    desc: 'بناء الجدول الأسبوعي للحصص لكل فصل',
+    groups: [
+      { h:'🏗 بناء الجدول', items: [
+        'أضف الأيام والحصص وحدد توقيت كل حصة، مع مؤشرات للطابور والفسحة.',
+        'كل فصل دراسي يأخذ لوناً مميزاً لتمييزه بسهولة داخل الجدول.'
+      ]},
+      { h:'🔁 الربط التلقائي', items: [
+        'الجدول هو ما يحدّد «الحصة الحالية» التي تظهر في الصفحة الرئيسية ووِدجت توزيع المنهج.'
+      ]},
+      { h:'🖼 التصدير', items: [
+        'يمكن تصدير الجدول كصورة (PNG) لمشاركته أو طباعته.'
+      ]}
+    ]
+  },
+
+  absence: {
+    icon: '📋', title: 'صفحة الغياب',
+    desc: 'تسجيل ومتابعة غياب الطلاب أسبوعياً',
+    groups: [
+      { h:'📅 التسجيل الأسبوعي', items: [
+        'سجّل حالة كل طالب (حاضر / غائب / عذر) لكل أسبوع من الأسبوع 1 حتى 32.',
+        'تنقل بين الأسابيع بسهولة عبر أزرار التصفح.'
+      ]},
+      { h:'📈 الإحصاءات الفورية', items: [
+        'تظهر أعداد الغياب والحضور والمعذورين لحظياً أثناء التسجيل.'
+      ]},
+      { h:'🔗 الربط مع الدرجات', items: [
+        'بيانات الغياب هنا مرتبطة تلقائياً بصفحتي الدرجات والراصد الأسبوعي، فلا حاجة لتكرار التسجيل.'
+      ]}
+    ]
+  },
+
+  sick: {
+    icon: '🤒', title: 'صفحة المرضى',
+    desc: 'متابعة الطلاب المرضى أو ذوي الأعذار الطبية',
+    groups: [
+      { h:'📋 المتابعة', items: [
+        'سجّل الطلاب المرضى بشكل منفصل عن الغياب العادي لتمييز حالات الأعذار الطبية.',
+        'يساعد هذا في إعداد كشوف وتقارير دقيقة عند مراجعة سجل الغياب.'
+      ]}
+    ]
+  },
+
+  dict: {
+    icon: '🎤', title: 'صفحة الإملاء',
+    desc: 'رصد سريع لدرجات الإملاء',
+    groups: [
+      { h:'✍️ التسجيل السريع', items: [
+        'لوحة مخصصة لإدخال درجات الإملاء لكل طالب بسرعة.',
+        'يدعم الإدخال الصوتي: قل اسم الطالب والدرجة فيتم رصدها تلقائياً.'
+      ]},
+      { h:'📤 النسخ', items: [
+        'زر النسخ بنقرة واحدة لنسخ بيانات الإملاء كاملة (مفيد لنقلها أو حفظها خارجياً).'
+      ]},
+      { h:'🔗 ملاحظة', items: [
+        'درجات الإملاء يمكن أن تُرحَّل لعمود السلوك في صفحة الدرجات حسب إعدادات الربط.'
+      ]}
+    ]
+  },
+
+  stats: {
+    icon: '📊', title: 'صفحة الإحصائيات',
+    desc: 'تحليل شامل لأداء الطلاب والفصول',
+    groups: [
+      { h:'📈 أوضاع العرض', items: [
+        'اختر بين وضع «الاختبار» أو «السلوك» لعرض إحصائيات مختلفة.',
+        'تشمل الإحصائيات: المتوسطات، أعلى وأقل الدرجات، وتوزيع المستويات.'
+      ]},
+      { h:'⚖️ المقارنة', items: [
+        'يمكن مقارنة أداء فصول متعددة من نفس الصفحة لمتابعة الفروق بينها.'
+      ]}
+    ]
+  },
+
+  curric: {
+    icon: '📖', title: 'توزيع المنهج',
+    desc: 'خريطة توزيع الوحدات والدروس على أسابيع الترم',
+    groups: [
+      { h:'🗺 الخريطة الأسبوعية', items: [
+        'وزّع الوحدات والدروس على أسابيع الترم بالكامل من مكان واحد.',
+        'حدد أسابيع الاختبارات والعطلات على الخريطة بعلامات مميزة.'
+      ]},
+      { h:'🖨 الطباعة', items: [
+        'نظام طباعة مخصص يضم رأس المدرسة وخانة توقيع، جاهز للتسليم أو الأرشفة.'
+      ]},
+      { h:'🏠 ودجت الصفحة الرئيسية', items: [
+        'تظهر بطاقة في الصفحة الرئيسية تعرض «الأسبوع الحالي» و«الدرس الحالي» تلقائياً بناءً على هذه الخريطة والجدول الدراسي.'
+      ]}
+    ]
+  },
+
+  settings: {
+    icon: '⚙️', title: 'الإعدادات',
+    desc: 'تخصيص شكل التطبيق وضبط القاموس وتسجيل الدخول',
+    groups: [
+      { h:'🔤 الخطوط والمظهر', items: [
+        'تحكم في نوع وحجم الخط بشكل مستقل لكل قسم: الأسبوعي، كشف المتابعة، كشف الدرجات.',
+        'خطوط عربية مدعومة: Cairo, Tajawal, Almarai وغيرها.'
+      ]},
+      { h:'📚 إعدادات القاموس التلقائي', items: [
+        'يساعد القاموس في التعرف التلقائي على أسماء الطلاب عند الإدخال (مفيد للإدخال الصوتي وسريع الكتابة).',
+        'يمكن ضبط نسبة التطابق المطلوبة وكلمة الفاصل بين الاسم والدرجة.'
+      ]},
+      { h:'👤 الحساب وتسجيل الدخول', items: [
+        'يدعم تسجيل الدخول بحساب Google لمزامنة بياناتك بأمان وربطها بحسابك الخاص.',
+        'بيانات كل مستخدم مستقلة تماماً عن غيره حتى لو استُخدم التطبيق على نفس الجهاز.'
+      ]}
+    ]
+  },
+
+  backup: {
+    icon: '💾', title: 'النسخ الاحتياطي',
+    desc: 'حماية بياناتك وتصديرها',
+    groups: [
+      { h:'⬇️ التصدير والاستيراد', items: [
+        'احفظ نسخة احتياطية كاملة من بيانات التطبيق، واستعدها وقت الحاجة.',
+        'يُنصح بأخذ نسخة احتياطية بشكل دوري خصوصاً قبل أي تحديث كبير.'
+      ]},
+      { h:'📊 تصدير Excel', items: [
+        'تصدير درجات كل فصل إلى ملف Excel يحتوي على ورقتين منفصلتين لتسهيل المراجعة والأرشفة.'
+      ]}
+    ]
+  },
+
+  notifs: {
+    icon: '🔔', title: 'الإشعارات والتنبيهات',
+    desc: 'مركز الإشعارات ونظام المنبّه المخصص',
+    groups: [
+      { h:'📬 مركز الإشعارات', items: [
+        'تظهر كل التنبيهات في قائمة واحدة، مع شارة على الجرس تعرض عدد الإشعارات غير المقروءة.'
+      ]},
+      { h:'⏰ نظام المنبّه', items: [
+        'أنشئ تنبيهات مخصصة مرتبطة بأيام معينة من الأسبوع وبوقت محدد (مثل تذكير برصد الغياب).',
+        'يتوفر 6 نغمات منبه جاهزة، بالإضافة لإمكانية رفع نغمة صوتية خاصة بك.'
+      ]}
+    ]
+  },
+
+  sig: {
+    icon: '✍️', title: 'توقيع المتابع',
+    desc: 'كشف توقيعات لأولياء الأمور أو المتابعين',
+    groups: [
+      { h:'📄 الكشف والطباعة', items: [
+        'يُنشئ كشفاً يحتوي على أسماء الطلاب وخانة توقيع لكل منهم.',
+        'تنسيق طباعة A4 يشمل رأس المدرسة، جاهز للتوزيع أو الأرشفة.'
+      ]}
+    ]
+  },
+
+  kashef: {
+    icon: '📄', title: 'كشف الدرجات',
+    desc: 'كشف درجات رسمي قابل للطباعة',
+    groups: [
+      { h:'🖨 إعداد الكشف', items: [
+        'كشف درجات رسمي بتنسيق A4 عمودي يضم رأس المدرسة وخانة توقيع.',
+        'اختر وضع العرض (اختبار / سلوك) ونطاق الأعمدة المطلوب طباعتها.'
+      ]},
+      { h:'📌 ملاحظة', items: [
+        'يُبنى الكشف من البيانات الفعلية المخزّنة مباشرة، لضمان دقة الأرقام عند الطباعة.'
+      ]}
+    ]
+  },
+
+  tafrigh: {
+    icon: '🗃', title: 'كشف التفريغ',
+    desc: 'كشف مبسّط لإعادة تفريغ الدرجات',
+    groups: [
+      { h:'🗃 الاستخدام', items: [
+        'كشف بديل لكشف الدرجات الرسمي، مخصص لتفريغ الدرجات بسهولة على الورق أو في أنظمة أخرى.',
+        'يدعم نفس إعدادات الخط والحجم المضبوطة من صفحة الإعدادات.'
+      ]}
+    ]
+  }
+};
+
+/* ── عرض نافذة المساعدة ── */
+function _showHelpModal(data){
+  if(!data) return;
+  var modal = document.getElementById('helpModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'helpModal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:99999;align-items:center;justify-content:center;padding:16px;direction:rtl;';
+    modal.addEventListener('click', function(e){ if(e.target === modal) closeHelpModal(); });
+    document.body.appendChild(modal);
+  }
+
+  var groupsHtml = (data.groups || []).map(function(g){
+    var items = (g.items || []).map(function(it){
+      return '<li style="margin-bottom:7px;">' + it + '</li>';
+    }).join('');
+    return '' +
+      '<div style="margin-bottom:16px;">' +
+        '<div style="font-size:11.5px;color:#60a5fa;font-weight:800;margin-bottom:8px;">' + (g.h || '') + '</div>' +
+        '<ul style="margin:0;padding-right:18px;font-size:12px;color:#cbd5e1;line-height:1.9;list-style:disc;">' + items + '</ul>' +
+      '</div>';
+  }).join('');
+
+  modal.innerHTML = '' +
+    '<div style="background:linear-gradient(160deg,#0a1628 0%,#0f2040 60%,#0a1628 100%);border:1.5px solid #1d4ed8;border-radius:22px;width:100%;max-width:420px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.8),0 0 40px rgba(59,130,246,.18);overflow:hidden;font-family:inherit;">' +
+      '<div style="background:linear-gradient(135deg,#0d1a2e,#16243f);padding:20px 20px 16px;border-bottom:1px solid rgba(59,130,246,.3);position:relative;flex-shrink:0;">' +
+        '<button onclick="closeHelpModal()" style="position:absolute;top:12px;left:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#94a3b8;border-radius:8px;width:30px;height:30px;font-size:15px;cursor:pointer;line-height:1;">✕</button>' +
+        '<div style="font-size:30px;margin-bottom:6px;">' + (data.icon || '❓') + '</div>' +
+        '<div style="font-size:17px;font-weight:900;color:#60a5fa;">' + (data.title || 'مساعدة') + '</div>' +
+        (data.desc ? '<div style="font-size:11px;color:#94a3b8;margin-top:4px;line-height:1.6;">' + data.desc + '</div>' : '') +
+      '</div>' +
+      '<div style="padding:18px 20px;overflow-y:auto;flex:1;">' + groupsHtml + '</div>' +
+      '<div style="padding:10px 20px;border-top:1px solid rgba(59,130,246,.15);text-align:center;flex-shrink:0;">' +
+        '<button onclick="closeHelpModal()" style="background:#1d4ed8;color:#fff;border:none;border-radius:10px;padding:9px 28px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">حسناً</button>' +
+      '</div>' +
+    '</div>';
+
+  modal.style.display = 'flex';
+}
+
+function closeHelpModal(){
+  var modal = document.getElementById('helpModal');
+  if(modal) modal.style.display = 'none';
+}
+
+/* ── مساعدة الصفحة الحالية (الزر العائم) ── */
+function showPageHelp(){
+  var map = {
+    page_home:'home', page_grades:'grades', page_weekly:'weekly', page_sched:'sched',
+    page_absence:'absence', page_sick:'sick', page_dict:'dict', page_stats:'stats',
+    page_notifs:'notifs', page_settings:'settings', page_curric:'curric', page_backup:'backup',
+    page_report:'kashef', page_witness:'sig', page_tafrigh:'tafrigh'
+  };
+  var activeEl = document.querySelector('.page.active');
+  var key = (activeEl && map[activeEl.id]) || 'home';
+  _showHelpModal(HELP[key] || HELP.home);
+}
+</script>
+
 
 
 

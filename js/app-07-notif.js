@@ -690,7 +690,8 @@ document.addEventListener('click',function(e){
   var b=document.getElementById('notifBell');
   var b2=document.getElementById('subNotifBell');
   var b3=document.getElementById('bni_notifs');
-  var clickedBell=(b&&(e.target===b||b.contains(e.target)))||(b2&&(e.target===b2||b2.contains(e.target)))||(b3&&(e.target===b3||b3.contains(e.target)));
+  var b4=e.target.closest && e.target.closest('.home-bell');
+  var clickedBell=(b&&(e.target===b||b.contains(e.target)))||(b2&&(e.target===b2||b2.contains(e.target)))||(b3&&(e.target===b3||b3.contains(e.target)))||b4;
   if(p&&p.classList.contains('open')&&!p.contains(e.target)&&!clickedBell){
     p.classList.remove('open');
   }
@@ -2193,7 +2194,7 @@ function renderHomePage(){
     +'<div class="home-teacher-lbl">'+esc(shortTitle+firstName)+'</div>'
     +'</div>'
     +'</div>'
-    +'<div class="home-bell" onclick="switchPage(\'notifs\');bnSetActive(\'notifs\')">🔔<span id="homeBellDot" style="position:absolute;top:3px;right:3px;background:#ef4444;color:#fff;border-radius:50%;min-width:8px;height:8px;font-size:0;font-weight:800;display:none;line-height:1;padding:0;border:1.5px solid #0a0f1e;box-shadow:0 0 6px rgba(239,68,68,.7);"></span></div>'
+    +'<div class="home-bell" onclick="toggleNotifPanel()">🔔<span id="homeBellDot" style="position:absolute;top:3px;right:3px;background:#ef4444;color:#fff;border-radius:50%;min-width:8px;height:8px;font-size:0;font-weight:800;display:none;line-height:1;padding:0;border:1.5px solid #0a0f1e;box-shadow:0 0 6px rgba(239,68,68,.7);"></span></div>'
     +'</div>'
     // Greeting + رسالة دوارة في نفس السطر
     +'<div class="home-greeting-block">'
