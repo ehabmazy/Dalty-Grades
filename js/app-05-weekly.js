@@ -490,7 +490,10 @@ function renderWeekly(){
     html+='</div>';
     html+='<button class="btn btn-ghost btn-sm" onclick="wkImUndo()">↩ تراجع</button>';
     html+='<button class="btn btn-danger btn-sm" onclick="if(confirm(\'مسح سجل الإملاء؟\')){WKS.imlaaPanel.log=[];renderWeekly();}">🗑 مسح</button>';
-    if(ipLog.length>0)html+='<button class="btn btn-sm" style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.4);color:#6ee7b7;font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;" onclick="wkImSessionReport()">📊 تقرير الجلسة</button>';
+    {
+      var _tblOpen=IP.tableOpen;
+      html+='<button class="btn btn-sm" style="background:'+(_tblOpen?'rgba(16,185,129,.3)':'rgba(16,185,129,.15)')+';border:1px solid rgba(16,185,129,.4);color:#6ee7b7;font-size:10px;padding:3px 10px;border-radius:6px;cursor:pointer;font-family:inherit;font-weight:700;" onclick="WKS.imlaaPanel.tableOpen=!WKS.imlaaPanel.tableOpen;renderWeekly();">📋 جدول الرصد '+(_tblOpen?'▲':'▼')+'</button>';
+    }
     html+='</div>';
 
     // منطقة الإدخال
@@ -563,6 +566,9 @@ function renderWeekly(){
     html+='</div></div>';
     html+='</div>'; // flex row
     html+='</div>'; // padding
+    if(IP.tableOpen){
+      html+=renderWkGradesTableInline(cls,week,absCols);
+    }
   }
   html+='</div>'; // imlaa panel box
 
@@ -852,236 +858,128 @@ function wkImRivalSkip(){
 }
 
 
-// ══ تقرير الجلسة — الراصد ══
-function wkImSessionReport(){
+// ══ جدول رصد العمود المختار — مضمّن في الصفحة (متزامن) ══
+function renderWkGradesTableInline(cls,week,absCols){
   var IP=WKS.imlaaPanel;
-  var ipLog=IP.log||[];
-  if(!ipLog.length){showSnack('⚠ لا يوجد سجل لهذه الجلسة');return;}
-
-  var week=WKS.activeWeek||1;
-  var cls=WKS.activeClass||(DB.classes[0]||'');
 
   // إيجاد تعريف العمود المختار
   var _selColDef=null;
   (DB.colPages||[]).forEach(function(pg){pg.cols.forEach(function(c){if(c.id===WKS.selectedCol)_selColDef=c;});});
   var _isBehSel=WKS.selectedCol==='__beh__'||/^bw\d+$/.test(WKS.selectedCol);
-  var colLabel=_isBehSel?'السلوك والمواظبة':(_selColDef?_selColDef.label:'الإملاء');
+  var colLabel=_isBehSel?'السلوك والمواظبة':(_selColDef?_selColDef.label:'اختر عموداً');
   var colMax=_selColDef?_selColDef.max:10;
+  var colField=_isBehSel?('bw'+week):(_selColDef?_selColDef.field:('im'+week));
 
-  // ── إحصائيات ──
-  var total=ipLog.length;
-  var okList=ipLog.filter(function(l){return (l.status==="ok"||l.status==="weak")&&!l.isAbsent;});
-  var absList=ipLog.filter(function(l){return l.isAbsent&&(l.status==="ok"||l.status==="weak");});
-  var failList=ipLog.filter(function(l){return l.status==="unmatched"||l.status==="error";});
-  var okCount=okList.length;
-  var absCount=absList.length;
-  var failCount=failList.length;
-  var grades=okList.map(function(l){return Number(l.grade)||0;});
-  var gradeSum=grades.reduce(function(a,b){return a+b;},0);
-  var gradeAvg=grades.length?Math.round((gradeSum/grades.length)*10)/10:null;
-  var gradeMax=grades.length?Math.max.apply(null,grades):null;
-  var gradeMin=grades.length?Math.min.apply(null,grades):null;
-  var byNumCount=ipLog.filter(function(l){return l.byNum;}).length;
+  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
 
-  // توزيع الدرجات: مجموعات
-  var dist={};
-  okList.forEach(function(l){
-    var g=Number(l.grade)||0;
-    var bucket=Math.floor(g/2)*2; // 0-1, 2-3, ...
-    var key=bucket+'-'+(bucket+1);
-    dist[key]=(dist[key]||0)+1;
-  });
-
-  // نسبة نجاح التعرف
-  var recogTotal=total-failCount;
-  var recogPct=total>0?Math.round(recogTotal/total*100):0;
-
-  var old=document.getElementById('wkSessionReportModal');
-  if(old)old.remove();
-
-  var mo=document.createElement('div');
-  mo.id='wkSessionReportModal';
-  mo.className='mo';
-  mo.style.cssText='z-index:9999;';
-  mo.onclick=function(e){if(e.target===mo)mo.remove();};
-
-  var h='<div class="md" style="max-width:560px;max-height:90vh;overflow-y:auto;background:#0d1117;border:2px solid #16a34a;" onclick="event.stopPropagation()">';
+  var h='<div style="background:#0d1117;border:2px solid #16a34a;border-radius:10px;margin-top:8px;overflow:hidden;">';
 
   // ── رأس ──
-  h+='<div class="mh" style="background:linear-gradient(135deg,#064e3b,#065f46);border-bottom:2px solid #16a34a;position:sticky;top:0;z-index:2;">';
-  h+='<span style="font-size:18px;">📊</span>';
+  h+='<div style="background:linear-gradient(135deg,#064e3b,#065f46);border-bottom:2px solid #16a34a;padding:8px 12px;display:flex;align-items:center;gap:8px;">';
+  h+='<span style="font-size:16px;">📋</span>';
   h+='<div style="flex:1;">';
-  h+='<h2 style="color:#6ee7b7;margin:0;font-size:13px;">تقرير الجلسة — '+esc(colLabel)+'</h2>';
-  h+='<div style="font-size:9px;color:#4ade80;margin-top:2px;">الأسبوع '+week+' — الفصل: <strong>'+esc(cls)+'</strong> — '+total+' إدخال</div>';
+  h+='<div style="color:#6ee7b7;font-weight:900;font-size:12px;">جدول الرصد — '+esc(colLabel)+'</div>';
+  h+='<div style="font-size:9px;color:#4ade80;margin-top:2px;">الأسبوع '+week+' — الفصل: <strong>'+esc(cls)+'</strong></div>';
   h+='</div>';
-  h+='<button class="xbtn" style="color:#6ee7b7;" onclick="document.getElementById(\'wkSessionReportModal\').remove()">✕</button>';
-  h+='</div>';
-
-  h+='<div class="mb" style="padding:12px;display:flex;flex-direction:column;gap:12px;">';
-
-  // ── بطاقات الإحصاء ──
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;">';
-  function statCard(icon,val,label,bg,clr){
-    return '<div style="background:'+bg+';border:1px solid '+clr+'44;border-radius:10px;padding:8px 6px;text-align:center;">'
-      +'<div style="font-size:18px;font-weight:900;color:'+clr+';">'+val+'</div>'
-      +'<div style="font-size:8.5px;color:'+clr+'99;margin-top:2px;">'+icon+' '+label+'</div></div>';
-  }
-  h+=statCard('✅',''+okCount,'درجات مُرصدة','rgba(16,185,129,.12)','#6ee7b7');
-  h+=statCard('✗',''+absCount,'غائب','rgba(239,68,68,.12)','#fca5a5');
-  h+=statCard('❌',''+failCount,'لم يُعرف','rgba(251,191,36,.12)','#fcd34d');
-  h+=statCard('🎯',''+recogPct+'%','دقة التعرف','rgba(99,102,241,.12)','#a5b4fc');
-  if(gradeAvg!==null)h+=statCard('📈',''+gradeAvg,'متوسط الدرجات','rgba(249,115,22,.12)','#fdba74');
-  if(gradeMax!==null)h+=statCard('🏆',''+gradeMax+'/'+colMax,'أعلى درجة','rgba(16,185,129,.08)','#34d399');
-  if(gradeMin!==null)h+=statCard('📉',''+gradeMin+'/'+colMax,'أدنى درجة','rgba(239,68,68,.08)','#f87171');
-  if(byNumCount>0)h+=statCard('🔢',''+byNumCount,'بالرقم','rgba(124,58,237,.12)','#c4b5fd');
+  h+='<button class="btn btn-sm" style="background:rgba(16,185,129,.2);border:1px solid #16a34a;color:#6ee7b7;font-size:10px;" onclick="wkGradesTablePrint()">🖨 طباعة</button>';
+  h+='<button class="xbtn" style="color:#6ee7b7;" onclick="WKS.imlaaPanel.tableOpen=false;renderWeekly();">✕</button>';
   h+='</div>';
 
-  // ── شريط التوزيع ──
-  if(okList.length>0){
-    var buckets=[];
-    for(var b=0;b<=Math.ceil(colMax/2)*2;b+=2){
-      var bk=b+'-'+(b+1);
-      if(dist[bk]||false)buckets.push({label:b+'–'+(Math.min(b+1,colMax)),cnt:dist[bk]||0,pct:Math.round((dist[bk]||0)/okList.length*100)});
-    }
-    if(buckets.length){
-      h+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:10px 12px;">';
-      h+='<div style="font-size:9px;font-weight:700;color:#6ee7b7;margin-bottom:8px;">📊 توزيع الدرجات</div>';
-      h+='<div style="display:flex;flex-direction:column;gap:5px;">';
-      buckets.forEach(function(bk){
-        h+='<div style="display:flex;align-items:center;gap:8px;">';
-        h+='<div style="font-size:9px;color:#94a3b8;width:36px;text-align:left;flex-shrink:0;">'+bk.label+'</div>';
-        h+='<div style="flex:1;background:#1e293b;border-radius:3px;overflow:hidden;height:12px;">';
-        h+='<div style="width:'+bk.pct+'%;height:100%;background:linear-gradient(90deg,#065f46,#16a34a);border-radius:3px;transition:width .3s;"></div>';
-        h+='</div>';
-        h+='<div style="font-size:9px;color:#6ee7b7;width:20px;text-align:right;flex-shrink:0;">'+bk.cnt+'</div>';
-        h+='</div>';
-      });
-      h+='</div></div>';
-    }
-  }
-
-  // ── الطلاب الغائبون ──
-  if(absList.length>0){
-    h+='<div style="background:#1a0000;border:1px solid #7f1d1d;border-radius:8px;padding:8px 12px;">';
-    h+='<div style="font-size:9px;font-weight:700;color:#fca5a5;margin-bottom:6px;">✗ الغائبون ('+absList.length+')</div>';
-    h+='<div style="display:flex;flex-wrap:wrap;gap:5px;">';
-    absList.forEach(function(l){
-      h+='<span style="background:#7f1d1d;color:#fca5a5;padding:2px 10px;border-radius:8px;font-size:9.5px;font-weight:700;">'+esc(l.matchedName||'؟')+'</span>';
-    });
-    h+='</div></div>';
-  }
-
-  // ── الإدخالات الفاشلة ──
-  if(failList.length>0){
-    h+='<div style="background:#1a1200;border:1px solid #78350f;border-radius:8px;padding:8px 12px;">';
-    h+='<div style="font-size:9px;font-weight:700;color:#fcd34d;margin-bottom:6px;">⚠ لم يُعرف ('+failList.length+')</div>';
-    h+='<div style="display:flex;flex-direction:column;gap:3px;">';
-    failList.forEach(function(l){
-      h+='<div style="font-size:9px;color:#fb923c;background:rgba(249,115,22,.08);border-radius:5px;padding:3px 8px;">'+esc(l.error||l.nameStr||'؟')+'</div>';
-    });
-    h+='</div></div>';
-  }
-
-  // ── السجل الكامل بترتيب الإدخال ──
-  h+='<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">';
-  h+='<div style="background:#0d2a1f;padding:7px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e293b;">';
-  h+='<div style="font-size:9px;font-weight:700;color:#6ee7b7;">📋 سجل الرصد الكامل — بترتيب الإدخال</div>';
-  h+='<div style="font-size:9px;color:#4ade80;">'+total+' إدخال</div>';
-  h+='</div>';
-  h+='<div style="overflow-x:auto;">';
-  h+='<table style="width:100%;border-collapse:collapse;font-size:9.5px;">';
+  // ── الجدول القابل للتمرير ──
+  var _tblId='wkGradesTbl_'+Date.now();
+  h+='<div id="'+_tblId+'" style="max-height:320px;overflow-y:auto;overflow-x:auto;cursor:grab;user-select:none;" onmousedown="(function(el,e){if(e.button!==0)return;el.style.cursor=\'grabbing\';var sx=e.pageX,sl=el.scrollLeft,sy=e.pageY,st=el.scrollTop;function mm(ev){el.scrollLeft=sl-(ev.pageX-sx);el.scrollTop=st-(ev.pageY-sy);}function mu(){el.style.cursor=\'grab\';document.removeEventListener(\'mousemove\',mm);document.removeEventListener(\'mouseup\',mu);}document.addEventListener(\'mousemove\',mm);document.addEventListener(\'mouseup\',mu);})(this,event)">';
+  h+='<table style="width:100%;border-collapse:collapse;font-size:10px;">';
   h+='<thead><tr>';
-  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:center;">#</th>';
-  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:right;">الطالب</th>';
-  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:center;">الدرجة</th>';
-  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:center;">دقة</th>';
-  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:right;">الإدخال</th>';
+  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:5px 8px;text-align:center;position:sticky;top:0;">#</th>';
+  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:5px 8px;text-align:right;position:sticky;top:0;">الاسم</th>';
+  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:5px 8px;text-align:center;position:sticky;top:0;">الدرجة /'+colMax+'</th>';
+  h+='<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:5px 8px;text-align:center;position:sticky;top:0;">الحضور</th>';
   h+='</tr></thead><tbody>';
 
-  // اعرض بترتيب الإدخال (السجل مقلوب — أحدث أولاً — نعكسه)
-  var orderedLog=[].concat(ipLog).reverse();
-  orderedLog.forEach(function(l,i){
-    var isOk=l.status==="ok"||l.status==="weak";
-    var isFail=l.status==="unmatched"||l.status==="error";
-    var rowBg=isFail?'background:rgba(239,68,68,.06);':l.isAbsent?'background:rgba(239,68,68,.04);':'';
+  if(!students.length){
+    h+='<tr><td colspan="4" style="text-align:center;padding:14px;color:#475569;">لا يوجد طلاب</td></tr>';
+  }
+
+  students.forEach(function(s,i){
+    var v=s[colField];
+    var hasGrade=(v!==undefined&&v!==''&&v!=='غ'&&v!=='م');
+    var isGAbs=v==='غ',isGExc=v==='م';
+
+    var absData=getStudentAbsences(cls,s.id);
+    var isAbsentSession=false;
+    absCols.forEach(function(col,ai){
+      if(absData["w"+week+"_ci"+ai]==="abs")isAbsentSession=true;
+    });
+
+    var rowBg=isAbsentSession?'background:rgba(239,68,68,.06);':'';
     h+='<tr style="'+rowBg+'">';
-    h+='<td style="text-align:center;color:#475569;border-bottom:1px solid #1e293b;padding:3px 8px;">'+(i+1)+'</td>';
+    h+='<td style="text-align:center;color:#475569;border-bottom:1px solid #1e293b;padding:4px 8px;">'+(i+1)+'</td>';
+    h+='<td style="text-align:right;border-bottom:1px solid #1e293b;padding:4px 8px;color:#cbd5e1;font-weight:700;">'+esc(s.name)+'</td>';
 
-    // اسم الطالب
-    var nameClr=isFail?'#f87171':l.isAbsent?'#fca5a5':isOk?'#d97706':'#94a3b8';
-    h+='<td style="text-align:right;border-bottom:1px solid #1e293b;padding:3px 8px;color:'+nameClr+';font-weight:700;">'+esc(l.matchedName||(l.error||'؟'))+'</td>';
-
-    // الدرجة
-    h+='<td style="text-align:center;border-bottom:1px solid #1e293b;padding:3px 8px;">';
-    if(l.isAbsent)h+='<span style="background:#7c2d12;color:#fcd34d;padding:1px 9px;border-radius:8px;font-size:9px;font-weight:700;">غ</span>';
-    else if(isFail)h+='<span style="color:#475569;">—</span>';
-    else if(l.grade!=null)h+='<span style="background:#064e3b;color:#6ee7b7;padding:1px 9px;border-radius:8px;font-size:10px;font-weight:900;">'+l.grade+'</span>';
-    else h+='—';
+    h+='<td style="text-align:center;border-bottom:1px solid #1e293b;padding:4px 8px;">';
+    if(isGAbs)h+='<span style="background:#7c2d12;color:#fcd34d;padding:1px 9px;border-radius:8px;font-size:9px;font-weight:700;">غ</span>';
+    else if(isGExc)h+='<span style="background:#3730a3;color:#c7d2fe;padding:1px 9px;border-radius:8px;font-size:9px;font-weight:700;">م</span>';
+    else if(hasGrade)h+='<span style="background:#064e3b;color:#6ee7b7;padding:1px 11px;border-radius:8px;font-size:10px;font-weight:900;">'+esc(String(v))+'</span>';
+    else h+='<span style="color:#334155;">—</span>';
     h+='</td>';
 
-    // الدقة
-    var pctClr=l.byNum?'#c4b5fd':isFail?'#f87171':l.pct>=80?'#34d399':l.pct>=50?'#fcd34d':'#f87171';
-    h+='<td style="text-align:center;border-bottom:1px solid #1e293b;padding:3px 8px;font-weight:700;color:'+pctClr+';">'+(l.byNum?'🔢':l.pct!=null?l.pct+'%':'❌')+'</td>';
+    h+='<td style="text-align:center;border-bottom:1px solid #1e293b;padding:4px 8px;">';
+    if(isAbsentSession)h+='<span style="background:#7f1d1d;color:#fca5a5;padding:1px 9px;border-radius:8px;font-size:9px;font-weight:700;">✗ غائب</span>';
+    else h+='<span style="color:#334155;">—</span>';
+    h+='</td>';
 
-    // نص الإدخال
-    h+='<td style="text-align:right;border-bottom:1px solid #1e293b;padding:3px 8px;color:#475569;font-size:8.5px;direction:rtl;">'+esc(l.inputText||l.nameStr||'')+'</td>';
     h+='</tr>';
-
-    // تحذير التشابه
-    if(l.rivalWarn){
-      h+='<tr><td colspan="5" style="background:#1a0e00;color:#fcd34d;font-size:8.5px;padding:2px 12px;text-align:right;border-bottom:1px solid #7c2d12;direction:rtl;">'+esc(l.rivalWarn)+'</td></tr>';
-    }
   });
-  h+='</tbody></table></div></div>';
 
-  h+='</div>'; // .mb
-  h+='<div class="mf" style="border-top:1px solid #16a34a;background:#0d1117;">';
-  h+='<button class="btn btn-ghost" onclick="document.getElementById(\'wkSessionReportModal\').remove()">إغلاق</button>';
-  h+='<button class="btn" style="background:rgba(16,185,129,.2);border:1px solid #16a34a;color:#6ee7b7;" onclick="wkImSessionReportPrint()">🖨 طباعة</button>';
-  h+='</div>';
-  h+='</div>';
-
-  mo.innerHTML=h;
-  document.body.appendChild(mo);
+  h+='</tbody></table>';
+  h+='</div>'; // scroll area
+  h+='</div>'; // outer box
+  return h;
 }
 
-function wkImSessionReportPrint(){
-  var IP=WKS.imlaaPanel;
-  var ipLog=IP.log||[];
-  if(!ipLog.length)return;
-  var week=WKS.activeWeek||1;
+function wkGradesTablePrint(){
   var cls=WKS.activeClass||(DB.classes[0]||'');
+  var week=WKS.activeWeek||1;
+  var absCols=buildAbsCols(cls,week);
+
   var _selColDef=null;
   (DB.colPages||[]).forEach(function(pg){pg.cols.forEach(function(c){if(c.id===WKS.selectedCol)_selColDef=c;});});
   var _isBehSel=WKS.selectedCol==='__beh__'||/^bw\d+$/.test(WKS.selectedCol);
-  var colLabel=_isBehSel?'السلوك والمواظبة':(_selColDef?_selColDef.label:'الإملاء');
+  var colLabel=_isBehSel?'السلوك والمواظبة':(_selColDef?_selColDef.label:'اختر عموداً');
+  var colMax=_selColDef?_selColDef.max:10;
+  var colField=_isBehSel?('bw'+week):(_selColDef?_selColDef.field:('im'+week));
 
-  var okList=ipLog.filter(function(l){return(l.status==="ok"||l.status==="weak")&&!l.isAbsent;});
-  var absList=ipLog.filter(function(l){return l.isAbsent&&(l.status==="ok"||l.status==="weak");});
-  var failList=ipLog.filter(function(l){return l.status==="unmatched"||l.status==="error";});
-  var grades=okList.map(function(l){return Number(l.grade)||0;});
-  var gradeAvg=grades.length?Math.round((grades.reduce(function(a,b){return a+b;},0)/grades.length)*10)/10:null;
+  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
 
-  var orderedLog=[].concat(ipLog).reverse();
-  var rows=orderedLog.map(function(l,i){
-    return '<tr><td>'+(i+1)+'</td><td style="text-align:right">'+esc(l.matchedName||l.error||'؟')+'</td><td>'+
-      (l.isAbsent?'غ':l.grade!=null?l.grade:'—')+'</td><td>'+(l.byNum?'رقم':l.pct!=null?l.pct+'%':'فشل')+'</td><td style="text-align:right;color:#777;font-size:11px;">'+esc(l.inputText||l.nameStr||'')+'</td></tr>';
+  var rows=students.map(function(s,i){
+    var v=s[colField];
+    var hasGrade=(v!==undefined&&v!==''&&v!=='غ'&&v!=='م');
+    var gradeTxt=v==='غ'?'غ':v==='م'?'م':hasGrade?(v+'/'+colMax):'—';
+
+    var absData=getStudentAbsences(cls,s.id);
+    var isAbsentSession=false;
+    absCols.forEach(function(col,ai){
+      if(absData["w"+week+"_ci"+ai]==="abs")isAbsentSession=true;
+    });
+    var attTxt=isAbsentSession?'✗ غائب':'—';
+
+    return '<tr><td>'+(i+1)+'</td><td style="text-align:right">'+esc(s.name)+'</td><td>'+esc(gradeTxt)+'</td><td>'+attTxt+'</td></tr>';
   }).join('');
 
   var now=new Date();
   var dateStr=now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
   var win=window.open('','_blank');
-  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير الجلسة</title>'
-    +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;color:#111;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#064e3b;color:white;}.stat{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 14px;border-radius:8px;margin:4px;font-size:12px;font-weight:700;}</style>'
+  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>جدول الرصد</title>'
+    +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;color:#111;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#064e3b;color:white;}</style>'
     +'</head><body>'
-    +'<h1>📊 تقرير الجلسة — '+esc(colLabel)+' — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
+    +'<h1>📋 جدول الرصد — '+esc(colLabel)+' — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
     +'<div style="font-size:11px;color:#555;margin-bottom:8px;">تاريخ الطباعة: '+dateStr+'</div>'
-    +'<div><span class="stat">✅ درجات: '+okList.length+'</span><span class="stat">✗ غائب: '+absList.length+'</span><span class="stat">❌ فشل: '+failList.length+'</span>'+(gradeAvg!==null?'<span class="stat">📈 متوسط: '+gradeAvg+'</span>':'')+'</div>'
-    +'<table><thead><tr><th>#</th><th>الطالب</th><th>الدرجة</th><th>دقة</th><th>نص الإدخال</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<table><thead><tr><th>#</th><th>الاسم</th><th>الدرجة /'+colMax+'</th><th>الحضور</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'</body></html>');
   win.document.close();
   win.print();
 }
+
 
 var WSD={open:false,srcCols:[],targets:{assess:true,hw:false,beh:false},scope:'all'};
 
