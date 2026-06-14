@@ -285,6 +285,17 @@ function renderWeeklyAttend(cls, students, week, absCols) {
   h += '</div>';
   h += '</div>'; /* np2-top */
 
+  /* ══ شريط سجل الجلسة ══ */
+  if(presentCount > 0) {
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding:5px 8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:8px;flex-wrap:wrap;">';
+    h += '<span style="font-size:9px;color:#6ee7b7;font-weight:700;">📋 الجلسة:</span>';
+    h += '<span style="font-size:9px;background:rgba(16,185,129,.2);color:#6ee7b7;padding:1px 7px;border-radius:6px;">✅ '+presentCount+'</span>';
+    h += '<span style="font-size:9px;background:rgba(239,68,68,.2);color:#fca5a5;padding:1px 7px;border-radius:6px;">✗ '+absentCount+'</span>';
+    h += '<button onclick="_attendSessionReport()" style="margin-right:auto;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.4);color:#6ee7b7;border-radius:6px;padding:2px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">📊 تقرير الجلسة</button>';
+    h += '<button onclick="if(confirm(\'مسح سجل الجلسة؟ سيتم إلغاء تحديد كل الحاضرين المسجلين\')){_attendClearAll();}" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">\u{1F5D1}</button>';
+    h += '</div>';
+  }
+
   /* ══ عداد + أزرار التحكم السريع — لوحة عائمة مثل الراصد ══ */
   h += '<div class="np2-middle">';
   h += '<div class="np2-middle-content">';
@@ -597,6 +608,17 @@ function renderWeeklyAbsent(cls, students, week, absCols) {
   h += '</div>';
   h += '</div>'; /* np2-top */
 
+  /* ══ شريط سجل الجلسة ══ */
+  if(absentCount > 0) {
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding:5px 8px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;flex-wrap:wrap;">';
+    h += '<span style="font-size:9px;color:#fca5a5;font-weight:700;">📋 الجلسة:</span>';
+    h += '<span style="font-size:9px;background:rgba(239,68,68,.2);color:#fca5a5;padding:1px 7px;border-radius:6px;">✗ '+absentCount+'</span>';
+    h += '<span style="font-size:9px;background:rgba(16,185,129,.2);color:#6ee7b7;padding:1px 7px;border-radius:6px;">✅ '+presentCount+'</span>';
+    h += '<button onclick="_absentSessionReport()" style="margin-right:auto;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:6px;padding:2px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">📊 تقرير الجلسة</button>';
+    h += '<button onclick="if(confirm(\'مسح سجل الجلسة؟ سيتم إلغاء تحديد كل الغائبين المسجلين\')){_absentClearAll();}" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#6ee7b7;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">\u{1F5D1}</button>';
+    h += '</div>';
+  }
+
   /* ══ عداد + أزرار التحكم السريع — لوحة عائمة مثل الراصد ══ */
   h += '<div class="np2-middle">';
   h += '<div class="np2-middle-content">';
@@ -862,6 +884,246 @@ function _absentApply() {
   WKS._attendAbsent = {};
   WKS.npStatus = '';
   renderWeekly();
+}
+
+// ══ تقرير جلسة رصد الحضور ══
+function _attendSessionReport() {
+  var cls = WKS.activeClass;
+  var week = WKS.activeWeek || 1;
+  var students = (DB.data[cls]||[]).filter(function(s){ return s.name; });
+  var presentMap = WKS._attendPresent || {};
+  var presentIds = Object.keys(presentMap);
+  if(!presentIds.length){ showSnack('⚠ لا يوجد سجل لهذه الجلسة'); return; }
+
+  var presentList = [];
+  presentIds.forEach(function(id){
+    var st = students.find(function(s){ return String(s.id)===String(id); });
+    if(st) presentList.push(st);
+  });
+  var absentList = students.filter(function(s){ return !presentMap[s.id]; });
+
+  var total = students.length;
+  var pct = total>0 ? Math.round(presentList.length/total*100) : 0;
+
+  var old = document.getElementById('npSessionReportModal');
+  if(old) old.remove();
+
+  var mo = document.createElement('div');
+  mo.id = 'npSessionReportModal';
+  mo.className = 'mo';
+  mo.style.touchAction = 'pan-y';
+  mo.style.overflowY = 'auto';
+  mo.style.webkitOverflowScrolling = 'touch';
+  mo.onclick = function(e){ if(e.target===mo) mo.remove(); };
+
+  var h = '<div class="md" style="max-width:560px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;background:#0d1117;border:2px solid #16a34a;" onclick="event.stopPropagation()">';
+
+  h += '<div class="mh" style="background:linear-gradient(135deg,#064e3b,#065f46);border-bottom:2px solid #16a34a;position:sticky;top:0;z-index:2;">';
+  h += '<span style="font-size:18px;">📊</span>';
+  h += '<div style="flex:1;">';
+  h += '<h2 style="color:#6ee7b7;margin:0;font-size:13px;">تقرير جلسة رصد الحضور</h2>';
+  h += '<div style="font-size:9px;color:#4ade80;margin-top:2px;">الأسبوع '+week+' — الفصل: <strong>'+esc(cls)+'</strong></div>';
+  h += '</div>';
+  h += '<button class="xbtn" style="color:#6ee7b7;" onclick="document.getElementById(\'npSessionReportModal\').remove()">✕</button>';
+  h += '</div>';
+
+  h += '<div class="mb" style="padding:12px;display:flex;flex-direction:column;gap:12px;">';
+
+  function sCard(icon,val,lbl,bg,clr){
+    return '<div style="background:'+bg+';border:1px solid '+clr+'44;border-radius:10px;padding:8px 6px;text-align:center;">'
+      +'<div style="font-size:18px;font-weight:900;color:'+clr+';">'+val+'</div>'
+      +'<div style="font-size:8.5px;color:'+clr+'99;margin-top:2px;">'+icon+' '+lbl+'</div></div>';
+  }
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;">';
+  h += sCard('✅',''+presentList.length,'حاضر','rgba(16,185,129,.12)','#6ee7b7');
+  h += sCard('✗',''+absentList.length,'غائب','rgba(239,68,68,.12)','#fca5a5');
+  h += sCard('👥',''+total,'الكل','rgba(99,102,241,.12)','#a5b4fc');
+  h += sCard('📊',''+pct+'%','نسبة الحضور','rgba(251,191,36,.12)','#fcd34d');
+  h += '</div>';
+
+  if(presentList.length){
+    h += '<div style="background:#03140d;border:1px solid #065f46;border-radius:8px;padding:8px 12px;">';
+    h += '<div style="font-size:9px;font-weight:700;color:#6ee7b7;margin-bottom:6px;">✅ الحاضرون ('+presentList.length+')</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+    presentList.forEach(function(s){
+      h += '<span style="background:#064e3b;color:#6ee7b7;padding:2px 10px;border-radius:8px;font-size:9.5px;font-weight:700;">'+esc(s.name)+'</span>';
+    });
+    h += '</div></div>';
+  }
+
+  if(absentList.length){
+    h += '<div style="background:#1a0000;border:1px solid #7f1d1d;border-radius:8px;padding:8px 12px;">';
+    h += '<div style="font-size:9px;font-weight:700;color:#fca5a5;margin-bottom:6px;">✗ الغائبون — متبقي ('+absentList.length+')</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+    absentList.forEach(function(s){
+      h += '<span style="background:#7f1d1d;color:#fca5a5;padding:2px 10px;border-radius:8px;font-size:9.5px;font-weight:700;">'+esc(s.name)+'</span>';
+    });
+    h += '</div></div>';
+  }
+
+  h += '</div>'; // .mb
+  h += '<div class="mf" style="border-top:1px solid #16a34a;background:#0d1117;">';
+  h += '<button class="btn btn-ghost" onclick="document.getElementById(\'npSessionReportModal\').remove()">إغلاق</button>';
+  h += '<button class="btn" style="background:rgba(16,185,129,.2);border:1px solid #16a34a;color:#6ee7b7;" onclick="_attendSessionReportPrint()">🖨 طباعة</button>';
+  if(absentList.length){
+    h += '<button class="btn" style="background:rgba(220,38,38,.2);border:1px solid #dc2626;color:#fca5a5;" onclick="document.getElementById(\'npSessionReportModal\').remove();_attendApplyAbsence();">⚡ تطبيق الغياب الآن</button>';
+  }
+  h += '</div>';
+  h += '</div>';
+
+  mo.innerHTML = h;
+  document.body.appendChild(mo);
+}
+
+function _attendSessionReportPrint() {
+  var cls = WKS.activeClass;
+  var week = WKS.activeWeek || 1;
+  var students = (DB.data[cls]||[]).filter(function(s){ return s.name; });
+  var presentMap = WKS._attendPresent || {};
+  var presentList = students.filter(function(s){ return !!presentMap[s.id]; });
+  var absentList  = students.filter(function(s){ return !presentMap[s.id]; });
+  var total = students.length;
+  var pct = total>0 ? Math.round(presentList.length/total*100) : 0;
+
+  var rows = students.map(function(s,i){
+    var isPresent = !!presentMap[s.id];
+    return '<tr><td>'+(i+1)+'</td><td style="text-align:right">'+esc(s.name)+'</td>'
+      +'<td>'+(isPresent?'✅ حاضر':'✗ غائب')+'</td></tr>';
+  }).join('');
+
+  var now = new Date();
+  var dateStr = now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
+  var win = window.open('','_blank');
+  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير جلسة رصد الحضور</title>'
+    +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#064e3b;color:white;}.stat{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 14px;border-radius:8px;margin:4px;font-size:12px;font-weight:700;}</style>'
+    +'</head><body>'
+    +'<h1>📊 تقرير جلسة رصد الحضور — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
+    +'<div style="font-size:11px;color:#555;margin-bottom:8px;">تاريخ الطباعة: '+dateStr+'</div>'
+    +'<div><span class="stat">✅ حاضر: '+presentList.length+'</span><span class="stat">✗ غائب: '+absentList.length+'</span><span class="stat">👥 الكل: '+total+'</span><span class="stat">📊 نسبة الحضور: '+pct+'%</span></div>'
+    +'<table><thead><tr><th>#</th><th>الطالب</th><th>الحالة</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</body></html>');
+  win.document.close();
+  win.print();
+}
+
+// ══ تقرير جلسة رصد الغياب ══
+function _absentSessionReport() {
+  var cls = WKS.activeClass;
+  var week = WKS.activeWeek || 1;
+  var students = (DB.data[cls]||[]).filter(function(s){ return s.name; });
+  var absentMap = WKS._attendAbsent || {};
+  var absentIds = Object.keys(absentMap);
+  if(!absentIds.length){ showSnack('⚠ لا يوجد سجل لهذه الجلسة'); return; }
+
+  var absentList = [];
+  absentIds.forEach(function(id){
+    var st = students.find(function(s){ return String(s.id)===String(id); });
+    if(st) absentList.push(st);
+  });
+  var presentList = students.filter(function(s){ return !absentMap[s.id]; });
+
+  var total = students.length;
+  var pct = total>0 ? Math.round(absentList.length/total*100) : 0;
+
+  var old = document.getElementById('npSessionReportModal');
+  if(old) old.remove();
+
+  var mo = document.createElement('div');
+  mo.id = 'npSessionReportModal';
+  mo.className = 'mo';
+  mo.style.touchAction = 'pan-y';
+  mo.style.overflowY = 'auto';
+  mo.style.webkitOverflowScrolling = 'touch';
+  mo.onclick = function(e){ if(e.target===mo) mo.remove(); };
+
+  var h = '<div class="md" style="max-width:560px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;background:#0d1117;border:2px solid #dc2626;" onclick="event.stopPropagation()">';
+
+  h += '<div class="mh" style="background:linear-gradient(135deg,#7f1d1d,#991b1b);border-bottom:2px solid #dc2626;position:sticky;top:0;z-index:2;">';
+  h += '<span style="font-size:18px;">📊</span>';
+  h += '<div style="flex:1;">';
+  h += '<h2 style="color:#fca5a5;margin:0;font-size:13px;">تقرير جلسة رصد الغياب</h2>';
+  h += '<div style="font-size:9px;color:#fb7185;margin-top:2px;">الأسبوع '+week+' — الفصل: <strong>'+esc(cls)+'</strong></div>';
+  h += '</div>';
+  h += '<button class="xbtn" style="color:#fca5a5;" onclick="document.getElementById(\'npSessionReportModal\').remove()">✕</button>';
+  h += '</div>';
+
+  h += '<div class="mb" style="padding:12px;display:flex;flex-direction:column;gap:12px;">';
+
+  function sCard(icon,val,lbl,bg,clr){
+    return '<div style="background:'+bg+';border:1px solid '+clr+'44;border-radius:10px;padding:8px 6px;text-align:center;">'
+      +'<div style="font-size:18px;font-weight:900;color:'+clr+';">'+val+'</div>'
+      +'<div style="font-size:8.5px;color:'+clr+'99;margin-top:2px;">'+icon+' '+lbl+'</div></div>';
+  }
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;">';
+  h += sCard('✗',''+absentList.length,'غائب','rgba(239,68,68,.12)','#fca5a5');
+  h += sCard('✅',''+presentList.length,'حاضر','rgba(16,185,129,.12)','#6ee7b7');
+  h += sCard('👥',''+total,'الكل','rgba(99,102,241,.12)','#a5b4fc');
+  h += sCard('📊',''+pct+'%','نسبة الغياب','rgba(251,191,36,.12)','#fcd34d');
+  h += '</div>';
+
+  if(absentList.length){
+    h += '<div style="background:#1a0000;border:1px solid #7f1d1d;border-radius:8px;padding:8px 12px;">';
+    h += '<div style="font-size:9px;font-weight:700;color:#fca5a5;margin-bottom:6px;">✗ الغائبون ('+absentList.length+')</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+    absentList.forEach(function(s){
+      h += '<span style="background:#7f1d1d;color:#fca5a5;padding:2px 10px;border-radius:8px;font-size:9.5px;font-weight:700;">'+esc(s.name)+'</span>';
+    });
+    h += '</div></div>';
+  }
+
+  if(presentList.length){
+    h += '<div style="background:#03140d;border:1px solid #065f46;border-radius:8px;padding:8px 12px;">';
+    h += '<div style="font-size:9px;font-weight:700;color:#6ee7b7;margin-bottom:6px;">✅ الحاضرون — متبقي ('+presentList.length+')</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+    presentList.forEach(function(s){
+      h += '<span style="background:#064e3b;color:#6ee7b7;padding:2px 10px;border-radius:8px;font-size:9.5px;font-weight:700;">'+esc(s.name)+'</span>';
+    });
+    h += '</div></div>';
+  }
+
+  h += '</div>'; // .mb
+  h += '<div class="mf" style="border-top:1px solid #dc2626;background:#0d1117;">';
+  h += '<button class="btn btn-ghost" onclick="document.getElementById(\'npSessionReportModal\').remove()">إغلاق</button>';
+  h += '<button class="btn" style="background:rgba(220,38,38,.2);border:1px solid #dc2626;color:#fca5a5;" onclick="_absentSessionReportPrint()">🖨 طباعة</button>';
+  if(absentList.length){
+    h += '<button class="btn" style="background:rgba(220,38,38,.2);border:1px solid #dc2626;color:#fca5a5;" onclick="document.getElementById(\'npSessionReportModal\').remove();_absentApply();">⚡ تطبيق الغياب الآن</button>';
+  }
+  h += '</div>';
+  h += '</div>';
+
+  mo.innerHTML = h;
+  document.body.appendChild(mo);
+}
+
+function _absentSessionReportPrint() {
+  var cls = WKS.activeClass;
+  var week = WKS.activeWeek || 1;
+  var students = (DB.data[cls]||[]).filter(function(s){ return s.name; });
+  var absentMap = WKS._attendAbsent || {};
+  var absentList  = students.filter(function(s){ return !!absentMap[s.id]; });
+  var presentList = students.filter(function(s){ return !absentMap[s.id]; });
+  var total = students.length;
+  var pct = total>0 ? Math.round(absentList.length/total*100) : 0;
+
+  var rows = students.map(function(s,i){
+    var isAbsent = !!absentMap[s.id];
+    return '<tr><td>'+(i+1)+'</td><td style="text-align:right">'+esc(s.name)+'</td>'
+      +'<td>'+(isAbsent?'✗ غائب':'✅ حاضر')+'</td></tr>';
+  }).join('');
+
+  var now = new Date();
+  var dateStr = now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
+  var win = window.open('','_blank');
+  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير جلسة رصد الغياب</title>'
+    +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#7f1d1d;color:white;}.stat{display:inline-block;background:#fef2f2;border:1px solid #fecaca;padding:5px 14px;border-radius:8px;margin:4px;font-size:12px;font-weight:700;}</style>'
+    +'</head><body>'
+    +'<h1>📊 تقرير جلسة رصد الغياب — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
+    +'<div style="font-size:11px;color:#555;margin-bottom:8px;">تاريخ الطباعة: '+dateStr+'</div>'
+    +'<div><span class="stat">✗ غائب: '+absentList.length+'</span><span class="stat">✅ حاضر: '+presentList.length+'</span><span class="stat">👥 الكل: '+total+'</span><span class="stat">📊 نسبة الغياب: '+pct+'%</span></div>'
+    +'<table><thead><tr><th>#</th><th>الطالب</th><th>الحالة</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</body></html>');
+  win.document.close();
+  win.print();
 }
 
 /* ── ربط المايك بـ _attendSubmit عند وضع الحضور ── */
@@ -2589,6 +2851,9 @@ function _npSessionReport() {
   var mo = document.createElement('div');
   mo.id = 'npSessionReportModal';
   mo.className = 'mo';
+  mo.style.touchAction = 'pan-y';
+  mo.style.overflowY = 'auto';
+  mo.style.webkitOverflowScrolling = 'touch';
   mo.onclick = function(e){ if(e.target===mo) mo.remove(); };
 
   var total = log.length;
@@ -2601,7 +2866,7 @@ function _npSessionReport() {
   var colLabel = fldNames[dominantField]||dominantField;
   var maxVal = okList.length ? (okList[0].maxVal||20) : 20;
 
-  var h = '<div class="md" style="max-width:560px;max-height:90vh;overflow-y:auto;background:#0d1117;border:2px solid #16a34a;" onclick="event.stopPropagation()">';
+  var h = '<div class="md" style="max-width:560px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;background:#0d1117;border:2px solid #16a34a;" onclick="event.stopPropagation()">';
 
   // رأس
   h += '<div class="mh" style="background:linear-gradient(135deg,#064e3b,#065f46);border-bottom:2px solid #16a34a;position:sticky;top:0;z-index:2;">';
@@ -2654,6 +2919,20 @@ function _npSessionReport() {
     }
   }
 
+  // الطلاب المرصودة درجاتهم
+  if(okList.length > 0){
+    h += '<div style="background:#03140d;border:1px solid #065f46;border-radius:8px;padding:8px 12px;">';
+    h += '<div style="font-size:9px;font-weight:700;color:#6ee7b7;margin-bottom:6px;">✅ الطلاب المرصودة درجاتهم ('+okList.length+')</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+    okList.forEach(function(l){
+      h += '<span style="background:#064e3b;color:#6ee7b7;padding:2px 10px;border-radius:8px;font-size:9.5px;font-weight:700;display:inline-flex;align-items:center;gap:5px;">'
+        +esc(l.matchedName||'؟')
+        +'<span style="background:rgba(110,231,183,.18);border-radius:6px;padding:0 6px;font-weight:900;">'+esc(String(l.grade))+'</span>'
+        +'</span>';
+    });
+    h += '</div></div>';
+  }
+
   // الغائبون
   if(absList.length > 0){
     h += '<div style="background:#1a0000;border:1px solid #7f1d1d;border-radius:8px;padding:8px 12px;">';
@@ -2681,7 +2960,7 @@ function _npSessionReport() {
   h += '<div style="background:#0d2a1f;padding:7px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e293b;">';
   h += '<div style="font-size:9px;font-weight:700;color:#6ee7b7;">📋 سجل الرصد الكامل — بترتيب الإدخال</div>';
   h += '<div style="font-size:9px;color:#4ade80;">'+total+' إدخال</div></div>';
-  h += '<div style="overflow-x:auto;">';
+  h += '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;">';
   h += '<table style="width:100%;border-collapse:collapse;font-size:9.5px;">';
   h += '<thead><tr>';
   h += '<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:center;">#</th>';
