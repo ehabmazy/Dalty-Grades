@@ -945,21 +945,32 @@ function _repBuildNav() {
   var nl = document.getElementById('repNavList');
   if (!nl) return;
   var html = '';
-  html += '<div class="app-nav-section-lbl">🏫 الفصول</div>';
-  DB.classes.forEach(function(c) {
-    html += '<button class="app-nav-btn' + (c === _REP.cls ? ' anb-active' : '') + '" onclick="_REP.cls=\'' + esc(c) + '\';_repRender();repNavClose();">';
-    html += '<span>📚</span>' + esc(c);
+
+  html += '<div class="app-nav-section-lbl">📱 صفحات التطبيق</div>';
+  [
+    { p: 'home',    icon: '🏠', lbl: 'الرئيسية',       extra: '' },
+    { p: 'grades',  icon: '📝', lbl: 'الدرجات',        extra: '' },
+    { p: 'weekly',  icon: '🎯', lbl: 'الراصد',         extra: "setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);" },
+    { p: 'sched',   icon: '🗓', lbl: 'الجدول',          extra: '' },
+    { p: 'absence', icon: '📋', lbl: 'الغياب',          extra: '' },
+    { p: 'sick',    icon: '🤒', lbl: 'المرضى',          extra: '' },
+    { p: 'dict',    icon: '🎤', lbl: 'الإملاء',         extra: '' },
+    { p: 'stats',   icon: '📊', lbl: 'إحصائيات',        extra: '' },
+    { p: 'curric',  icon: '📖', lbl: 'توزيع المنهج',     extra: '' },
+    { p: 'settings',icon: '⚙️', lbl: 'الإعدادات',        extra: '' },
+    { p: 'backup',  icon: '💾', lbl: 'النسخ الاحتياطي', extra: '' },
+    { p: 'report',  icon: '📄', lbl: 'كشف الدرجات',     extra: '' },
+    { p: 'tafrigh', icon: '📋', lbl: 'كشف التفريغ',     extra: '' },
+    { p: 'witness', icon: '✍️', lbl: 'توقيع المتابع',    extra: '' },
+    { p: 'notifs',  icon: '🔔', lbl: 'الإشعارات',       extra: '' },
+  ].forEach(function(item) {
+    html += '<button class="app-nav-btn" onclick="portalShow(0);switchPage(\'' + item.p + '\');' +
+      (typeof bnSetActive === 'function' ? "bnSetActive('" + item.p + "');" : '') +
+      item.extra + 'repNavClose();">';
+    html += '<span>' + item.icon + '</span>' + item.lbl;
     html += '</button>';
   });
-  html += '<div class="app-nav-sep"></div>';
-  html += '<div class="app-nav-section-lbl">العرض</div>';
-  [
-    { v: 'summary', lbl: '📋 ملخص الفصل' },
-    { v: 'students', lbl: '👤 تفصيل الطلاب' },
-    { v: 'absence', lbl: '📊 الغياب' },
-  ].forEach(function(item) {
-    html += '<button class="app-nav-btn' + (_REP.view === item.v ? ' anb-active' : '') + '" onclick="_REP.view=\'' + item.v + '\';_repRender();repNavClose();">' + item.lbl + '</button>';
-  });
+
   nl.innerHTML = html;
 }
 
@@ -973,9 +984,29 @@ function _repRender() {
   var students = (DB.data[cls] || []).filter(function(s) { return s.name; });
   var subject = (DB.meta || {}).subject || 'العلوم';
 
-  // Header actions
+  // Header actions: class + view selectors moved here from the sidebar
   var acts = document.getElementById('repTopActions');
-  if (acts) acts.innerHTML = '<span style="font-size:11px;color:#60a5fa;font-weight:700;">' + esc(cls) + ' — ' + esc(subject) + '</span>';
+  if (acts) {
+    var html = '';
+    html += '<select class="ns-select" style="font-size:10px;padding:3px 6px;" onchange="_REP.cls=this.value;_repRender();">';
+    DB.classes.forEach(function(c) {
+      html += '<option value="' + esc(c) + '"' + (c === cls ? ' selected' : '') + '>📚 ' + esc(c) + '</option>';
+    });
+    html += '</select>';
+
+    html += '<select class="ns-select" style="font-size:10px;padding:3px 6px;" onchange="_REP.view=this.value;_repRender();">';
+    [
+      { v: 'summary', lbl: '📋 ملخص الفصل' },
+      { v: 'students', lbl: '👤 تفصيل الطلاب' },
+      { v: 'absence', lbl: '📊 الغياب' },
+    ].forEach(function(item) {
+      html += '<option value="' + item.v + '"' + (item.v === _REP.view ? ' selected' : '') + '>' + item.lbl + '</option>';
+    });
+    html += '</select>';
+
+    html += '<span style="font-size:11px;color:#60a5fa;font-weight:700;">' + esc(subject) + '</span>';
+    acts.innerHTML = html;
+  }
 
   if (_REP.view === 'summary') {
     _repSummary(body, cls, students);
@@ -1087,19 +1118,20 @@ function _repStudents(body, cls, students) {
     var sc=pct>=85?'#059669':pct>=70?'#1d4ed8':pct>=55?'#d97706':pct>=40?'#ea580c':'#dc2626';
     var absCnt=countStudentAbsencePeriods(cls,s.id);
     var even=i%2===0;
-    html+='<tr style="background:'+(even?'#1e293b':'#162032')+'">';
-    html+='<td style="padding:5px 4px;border:1px solid #334155;color:#64748b;text-align:center;">'+(i+1)+'</td>';
-    html+='<td style="padding:5px 8px;border:1px solid #334155;font-weight:600;color:#e2e8f0;">'+esc(s.name)+'</td>';
+    var rowBg=even?'#1e293b':'#162032';
+    html+='<tr style="background:'+rowBg+'">';
+    html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';color:#64748b;text-align:center;">'+(i+1)+'</td>';
+    html+='<td style="padding:5px 8px;border:1px solid #334155;background:'+rowBg+';font-weight:600;color:#e2e8f0;">'+esc(s.name)+'</td>';
     if(isAbs){
-      html+='<td colspan="5" style="padding:5px;border:1px solid #334155;color:#ef4444;text-align:center;font-weight:700;">غائب كلي</td>';
+      html+='<td colspan="5" style="padding:5px;border:1px solid #334155;background:'+rowBg+';color:#ef4444;text-align:center;font-weight:700;">غائب كلي</td>';
     } else {
-      html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;">'+avgA+'</td>';
-      html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;">'+avgH+'</td>';
-      html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;">'+beh+'</td>';
-      html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;">'+ex+'</td>';
-      html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;font-weight:900;color:'+sc+';">'+total+'</td>';
+      html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:#cbd5e1;">'+avgA+'</td>';
+      html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:#cbd5e1;">'+avgH+'</td>';
+      html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:#cbd5e1;">'+beh+'</td>';
+      html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:#cbd5e1;">'+ex+'</td>';
+      html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;font-weight:900;color:'+sc+';">'+total+'</td>';
     }
-    html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;color:'+(absCnt>5?'#ef4444':'#94a3b8')+';">'+absCnt+'</td>';
+    html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:'+(absCnt>5?'#ef4444':'#94a3b8')+';">'+absCnt+'</td>';
     html+='</tr>';
   });
   html+='</tbody></table></div>';
@@ -1125,15 +1157,16 @@ function _repAbsence(body, cls, students) {
     var sick=countStudentSickPeriods(cls,s.id);
     var total=abs+sick;
     var even=i%2===0;
+    var rowBg=even?'#1e293b':'#162032';
     var status=total>15?'⚠️ تحذير':total>8?'🟡 متابعة':'✅ طبيعي';
     var stColor=total>15?'#ef4444':total>8?'#f59e0b':'#10b981';
-    html+='<tr style="background:'+(even?'#1e293b':'#162032')+'">';
-    html+='<td style="padding:5px 4px;border:1px solid #334155;color:#64748b;text-align:center;">'+(i+1)+'</td>';
-    html+='<td style="padding:5px 8px;border:1px solid #334155;font-weight:600;color:#e2e8f0;">'+esc(s.name)+'</td>';
-    html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;color:'+(abs>10?'#ef4444':'#94a3b8')+';">'+abs+'</td>';
-    html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;color:'+(sick>5?'#f59e0b':'#94a3b8')+';">'+sick+'</td>';
-    html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;font-weight:700;color:'+(total>10?'#ef4444':'#94a3b8')+';">'+total+'</td>';
-    html+='<td style="padding:5px 4px;border:1px solid #334155;text-align:center;color:'+stColor+';">'+status+'</td>';
+    html+='<tr style="background:'+rowBg+'">';
+    html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';color:#64748b;text-align:center;">'+(i+1)+'</td>';
+    html+='<td style="padding:5px 8px;border:1px solid #334155;background:'+rowBg+';font-weight:600;color:#e2e8f0;">'+esc(s.name)+'</td>';
+    html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:'+(abs>10?'#ef4444':'#94a3b8')+';">'+abs+'</td>';
+    html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:'+(sick>5?'#f59e0b':'#94a3b8')+';">'+sick+'</td>';
+    html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;font-weight:700;color:'+(total>10?'#ef4444':'#94a3b8')+';">'+total+'</td>';
+    html+='<td style="padding:5px 4px;border:1px solid #334155;background:'+rowBg+';text-align:center;color:'+stColor+';">'+status+'</td>';
     html+='</tr>';
   });
   html+='</tbody></table></div>';

@@ -148,7 +148,7 @@ function renderGrades(){
           html+='<td style="padding:1px;">';
           if(!isAA&&!isAM){
             html+='<div class="gs-tbl-cell'+(_gsSelA?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+aField+'\','+aMax+',\''+_gsCellIdA+'\',\'assess_w'+w+'\')">';
-            html+='<span style="font-size:11px;font-weight:700;color:'+(_gsSelA?'#fbbf24':(av!==''&&av!==undefined?'#93c5fd':'#334155'))+';">';
+            html+='<span class="gv '+(_gsSelA?'gv-sel':(av!==''&&av!==undefined?'gv-assess':'gv-empty'))+'">';
             html+=(_gsSelA&&GS._gsInput!==''?GS._gsInput:(av!==''&&av!==undefined?av:'—'))+'</span>';
             html+='</div>';
           } else if(isAA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+aField+'\',\'\');renderGrades();">غ</span>';
@@ -162,7 +162,7 @@ function renderGrades(){
           html+='<td style="padding:1px;">';
           if(!isHA&&!isHM){
             html+='<div class="gs-tbl-cell'+(_gsSelH?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+hField+'\','+hMax+',\''+_gsCellIdH+'\',\'hw_w'+w+'\')">';
-            html+='<span style="font-size:11px;font-weight:700;color:'+(_gsSelH?'#fbbf24':(hv!==''&&hv!==undefined?'#6ee7b7':'#334155'))+';">';
+            html+='<span class="gv '+(_gsSelH?'gv-sel':(hv!==''&&hv!==undefined?'gv-hw':'gv-empty'))+'">';
             html+=(_gsSelH&&GS._gsInput!==''?GS._gsInput:(hv!==''&&hv!==undefined?hv:'—'))+'</span>';
             html+='</div>';
           } else if(isHA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+hField+'\',\'\');renderGrades();">غ</span>';
@@ -178,7 +178,7 @@ function renderGrades(){
           html+='<td style="padding:1px;background:rgba(124,58,237,0.07);">';
           if(!isBA&&!isBM){
             html+='<div class="gs-tbl-cell'+(_gsSelB?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+bField+'\','+bMax+',\''+_gsCellIdB+'\',\'beh_w'+w+'\')">';
-            html+='<span style="font-size:11px;font-weight:700;color:'+(_gsSelB?'#fbbf24':(bv!==''&&bv!==undefined?'#c4b5fd':'#334155'))+';">';
+            html+='<span class="gv '+(_gsSelB?'gv-sel':(bv!==''&&bv!==undefined?'gv-beh':'gv-empty'))+'">';
             html+=(_gsSelB&&GS._gsInput!==''?GS._gsInput:(bv!==''&&bv!==undefined?bv:'—'))+'</span>';
             html+='</div>';
           } else if(isBA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+bField+'\',\'\');renderGrades();">غ</span>';
@@ -186,18 +186,18 @@ function renderGrades(){
           html+='</td>';
         }
       });
-      var avgBeh=behCnt>0?(Math.round(behSum/behCnt*10)/10):'—';
+      var avgBeh=behCnt>0?Math.round(behSum/behCnt):'—';
       if(_showAvgAssess)html+='<td class="avg-cell">'+res.avgAssess+'</td>';
       if(_showAvgHw)html+='<td class="avg-cell">'+res.avgHw+'</td>';
       if(_showAvgBeh)html+='<td class="avg-cell" style="color:#000000;">'+avgBeh+'</td>';
-      html+='<td class="avg-cell" style="color:#fbbf24;font-weight:700;">'+res.exTotal+'</td>';
+      html+='<td class="avg-cell gv-exam">'+res.exTotal+'</td>';
       if(_showTotal)html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gc(tot)+'22;color:'+gc(tot)+';border:1.5px solid '+gc(tot)+'">'+tot+'</span></td>';
       if(_showDist){
         var _gsDistId='gs_dist_'+idx;
         var _gsDistSel=(GS._gsCell&&GS._gsCell.cellId===_gsDistId);
         html+='<td>';
         html+='<div class="gs-tbl-cell'+(_gsDistSel?' gs-tbl-sel':'')+'" onclick="_gsSelectDistCell('+idx+',\'dih'+s.id+'\','+tmax+',\''+_gsDistId+'\')" style="min-width:36px;">';
-        html+='<span style="font-size:11px;font-weight:700;color:'+(_gsDistSel?'#fbbf24':'#a78bfa')+';"> '+(_gsDistSel&&GS._gsInput!==''?GS._gsInput:'مج')+'</span>';
+        html+='<span class="gv '+(_gsDistSel?'gv-sel':'gv-dist')+'"> '+(_gsDistSel&&GS._gsInput!==''?GS._gsInput:'مج')+'</span>';
         html+='</div>';
         html+='</td>';
       }
@@ -277,7 +277,7 @@ function renderGrades(){
         html+='<td>';
         if(!isA&&!isM){
           html+='<div class="gs-tbl-cell'+(_gsSel?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+c.field+'\','+c.max+',\''+_gsCellId+'\',\'pg_'+c.id+'\')">';
-          html+='<span style="font-size:11px;font-weight:700;color:'+(_gsSel?'#fbbf24':(v!==''&&v!==undefined?'#93c5fd':'#334155'))+';">';
+          html+='<span class="gv '+(_gsSel?'gv-sel':(v!==''&&v!==undefined?'gv-assess':'gv-empty'))+'">';
           html+=(_gsSel&&GS._gsInput!==''?GS._gsInput:(v!==''&&v!==undefined?v:'—'))+'</span>';
           html+='</div>';
         } else if(isA){html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+c.field+'\',\'\');renderGrades();">غ</span>';}
@@ -288,7 +288,7 @@ function renderGrades(){
     html+='<td class="avg-cell" style="'+(res.avgAssess==="غ"?"color:#b45309":"")+'">'+res.avgAssess+'</td>';
     html+='<td class="avg-cell" style="'+(res.avgHw==="غ"?"color:#b45309":"")+'">'+res.avgHw+'</td>';
     html+='<td class="avg-cell" style="'+(res.avgBeh==="غ"?"color:#b45309":"")+'">'+res.avgBeh+'</td>';
-    html+='<td class="avg-cell" style="color:#fbbf24;font-weight:700;">'+res.exTotal+'</td>';
+    html+='<td class="avg-cell gv-exam">'+res.exTotal+'</td>';
     // Total
     var tot=res.total;
     html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gc(tot)+'22;color:'+gc(tot)+';border:1.5px solid '+gc(tot)+'">'+tot+'</span></td>';
@@ -302,7 +302,7 @@ function renderGrades(){
     var _gsDistSel2=(GS._gsCell&&GS._gsCell.cellId===_gsDistId2);
     html+='<td><div style="display:flex;flex-direction:column;gap:2px;align-items:center;">';
     html+='<div class="gs-tbl-cell'+(_gsDistSel2?' gs-tbl-sel':'')+'" onclick="_gsSelectDistCell('+idx+',\'di'+s.id+'\','+tmax+',\''+_gsDistId2+'\')" style="min-width:38px;">';
-    html+='<span style="font-size:11px;font-weight:700;color:'+(_gsDistSel2?'#fbbf24':'#a78bfa')+';"> '+(_gsDistSel2&&GS._gsInput!==''?GS._gsInput:'مج')+'</span>';
+    html+='<span class="gv '+(_gsDistSel2?'gv-sel':'gv-dist')+'"> '+(_gsDistSel2&&GS._gsInput!==''?GS._gsInput:'مج')+'</span>';
     html+='</div>';
     html+='<button style="background:'+(s._totalAbsent?'#fee2e2':'#fef3c7')+';border:1px solid '+(s._totalAbsent?'#ef4444':'#f59e0b')+';border-radius:2px;font-size:7.5px;color:'+(s._totalAbsent?'#dc2626':'#b45309')+';cursor:pointer;padding:1px 3px;" onclick="gradesSetAllAbsent('+idx+')">'+(s._totalAbsent?'↩ تراجع':'غ كامل')+'</button>';
     html+='</div></td>';

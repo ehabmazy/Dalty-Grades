@@ -35,6 +35,7 @@ if(!WKS.numpadStudent) WKS.numpadStudent = null;
 if(!WKS.numpadInput)   WKS.numpadInput   = '';
 if(!WKS.numpadField)   WKS.numpadField   = 'assess'; // assess | hw | beh
 if(!WKS.npTextInput)   WKS.npTextInput   = ''; // نص منطقة الإدخال
+if(!WKS.npSessionLog)  WKS.npSessionLog  = []; // سجل جلسة الإدخال
 
 function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, hF, assessMax, hwMax) {
   var s   = WKS.numpadStudent;
@@ -69,6 +70,21 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '<button class="np2-ftab'+(fld==='ex2'?' on':'')+'" onclick="_npSetField(\'ex2\');renderWeekly();" style="flex:1;touch-action:manipulation;">اختبار2<span class="np2-ftab-max">/15</span></button>';
   h += '</div>';
   h += '</div>'; /* np2-top */
+
+  /* ══ شريط سجل الجلسة ══ */
+  if(WKS.npSessionLog && WKS.npSessionLog.length > 0) {
+    var _npOk   = WKS.npSessionLog.filter(function(l){return l.status==='ok';}).length;
+    var _npFail = WKS.npSessionLog.filter(function(l){return l.status==='fail';}).length;
+    var _npAbs  = WKS.npSessionLog.filter(function(l){return l.isAbsent;}).length;
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-top:6px;padding:5px 8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:8px;flex-wrap:wrap;">';
+    h += '<span style="font-size:9px;color:#6ee7b7;font-weight:700;">\u{1F4CB} \u0627\u0644\u062c\u0644\u0633\u0629:</span>';
+    h += '<span style="font-size:9px;background:rgba(16,185,129,.2);color:#6ee7b7;padding:1px 7px;border-radius:6px;">\u2705 '+_npOk+'</span>';
+    h += (_npAbs>0?'<span style="font-size:9px;background:rgba(239,68,68,.2);color:#fca5a5;padding:1px 7px;border-radius:6px;">\u2717 '+_npAbs+'</span>':'');
+    h += (_npFail>0?'<span style="font-size:9px;background:rgba(251,191,36,.2);color:#fcd34d;padding:1px 7px;border-radius:6px;">\u274c '+_npFail+'</span>':'');
+    h += '<button onclick="_npSessionReport()" style="margin-right:auto;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.4);color:#6ee7b7;border-radius:6px;padding:2px 10px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">\u{1F4CA} \u062a\u0642\u0631\u064a\u0631 \u0627\u0644\u062c\u0644\u0633\u0629</button>';
+    h += '<button onclick="if(confirm(\'\u0645\u0633\u062d \u0633\u062c\u0644 \u0627\u0644\u062c\u0644\u0633\u0629\u061f\')){WKS.npSessionLog=[];renderWeekly();}" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;">\u{1F5D1}</button>';
+    h += '</div>';
+  }
 
   /* ══ اللوحة العائمة: بطاقة الطالب + أزرار الحقل ══ */
   h += '<div id="np2FloatPanel" class="np2-float-panel" style="'
@@ -939,6 +955,43 @@ function _npClear() {
   _npRefreshDisplay();
 }
 
+/* ══ تسجيل/إزالة إدخال "مباشر" (نقر بطاقة + لوحة أرقام) في سجل جلسة الراصد ══
+   نفس WKS.npSessionLog المستخدم في تقرير الجلسة، بحيث تظهر فيه أيضاً
+   الدرجات المُدخلة مباشرة (لا فقط عبر الإملاء الصوتي/النصي) بترتيب الإدخال */
+function _npLogDirectSet(st, fld, val, maxVal, isAbsent) {
+  if(!st) return;
+  if(!WKS.npSessionLog) WKS.npSessionLog = [];
+  var existing = null;
+  for(var i=0;i<WKS.npSessionLog.length;i++){
+    var l = WKS.npSessionLog[i];
+    if(l.direct && l.matchedName===st.name && l.field===fld){ existing=l; break; }
+  }
+  if(existing){
+    existing.grade    = val;
+    existing.maxVal   = maxVal;
+    existing.isAbsent = !!isAbsent;
+  } else {
+    WKS.npSessionLog.unshift({
+      inputText:  '⌨ إدخال مباشر',
+      matchedName: st.name,
+      grade:      val,
+      field:      fld,
+      maxVal:     maxVal,
+      isAbsent:   !!isAbsent,
+      status:     'ok',
+      byNum:      false,
+      direct:     true
+    });
+    if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
+  }
+}
+function _npLogDirectRemove(st, fld) {
+  if(!st || !WKS.npSessionLog || !WKS.npSessionLog.length) return;
+  WKS.npSessionLog = WKS.npSessionLog.filter(function(l){
+    return !(l.direct && l.matchedName===st.name && l.field===fld);
+  });
+}
+
 function _npToggleAbs(colIndex) {
   if(!WKS.numpadStudent) return;
   var cls=WKS.activeClass, week=WKS.activeWeek;
@@ -962,6 +1015,10 @@ function _npToggleAbs(colIndex) {
         saveDB();
         st=DB.data[cls][stuIdx];
         WKS.numpadStudent=st;
+        /* تسجيل في سجل جلسة الراصد */
+        var _npAbsMaxVal = fld==='hw' ? _getNpMax('hw',week) : _getNpMax('assess',week);
+        if(st[fField]==='غ'||st[fField]==='م') _npLogDirectSet(st, fld, st[fField], _npAbsMaxVal, true);
+        else _npLogDirectRemove(st, fld);
       }
     }
   }
@@ -983,6 +1040,9 @@ function _npSetExamAbs(val) {
   /* تحديث كائن الطالب في WKS */
   var st = (DB.data[cls]||[]).find(function(s){ return s.id == WKS.numpadStudent.id; });
   if(st){ WKS.numpadStudent = st; }
+  /* تسجيل في سجل جلسة الراصد */
+  if(newVal !== '') _npLogDirectSet(st, fld, newVal, 15, true);
+  else _npLogDirectRemove(st, fld);
   WKS.npStatus = newVal === '' ? '🗑 تم المسح' : (newVal === 'غ' ? '🚫 غائب في الاختبار' : '✅ معفى من الاختبار');
   WKS.npStatusType = newVal === 'غ' ? 'err' : newVal === 'م' ? 'info' : 'ok';
   renderWeekly();
@@ -1347,9 +1407,12 @@ function _npKeyPress(ch) {
       /* حفظ البيانات مباشرة بدون تشغيل timer الـ render */
       var activeCls = WKS.activeClass;
       if(DB.data[activeCls] && DB.data[activeCls][WKS.numpadStudentIdx]) {
-        DB.data[activeCls][WKS.numpadStudentIdx][curField] = clamp(Number(next),0,maxVal);
+        var _npVal = clamp(Number(next),0,maxVal);
+        DB.data[activeCls][WKS.numpadStudentIdx][curField] = _npVal;
         saveDB();
         _gradesUpdateTotCell(activeCls, WKS.numpadStudentIdx);
+        /* تسجيل في سجل جلسة الراصد */
+        _npLogDirectSet(WKS.numpadStudent, fld, _npVal, maxVal, false);
       }
     }
     _npRefreshDisplay();
@@ -1366,6 +1429,7 @@ function _npKeyReset() {
     WKS.numpadInput='';
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
     gradesSetField(WKS.numpadStudentIdx, fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2', '');
+    _npLogDirectRemove(WKS.numpadStudent, fld);
     WKS._npDirectMode=false; WKS.numpadStudent=null; WKS.npStatus='';
     renderWeekly();
   } else {
@@ -1467,6 +1531,10 @@ function _npSubmit() {
       WKS.npTextInput = '';
       WKS._npDirectMode = false;
       WKS.numpadInput   = '';
+      /* تسجيل في سجل الجلسة */
+      if(!WKS.npSessionLog) WKS.npSessionLog = [];
+      WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:val,field:fld,maxVal:maxVal,isAbsent:false,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0});
+      if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
     } else {
       /* لا توجد درجة — سجّل غائباً حسب نوع الحقل */
       var absCols = buildAbsCols(cls, week);
@@ -1484,6 +1552,9 @@ function _npSubmit() {
         var _exLabel = fld === 'ex1' ? 'اختبار 1' : 'اختبار 2';
         WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _exLabel + (absCols[targetCi] ? ' + ' + absCols[targetCi].label : '') + ')';
         WKS.npStatusType = 'warn';
+        if(!WKS.npSessionLog) WKS.npSessionLog = [];
+        WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:'غ',field:fld,isAbsent:true,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0});
+        if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
       } else {
         /* تقييم / واجب / سلوك — السلوك الافتراضي */
         var targetCi2 = WKS.npAbsTarget!==undefined ? WKS.npAbsTarget : 0;
@@ -1498,6 +1569,9 @@ function _npSubmit() {
         gradesSetField(stuIdx2, _absField, 'غ');
         WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _absLabel + (absCols[targetCi2] ? ' + ' + absCols[targetCi2].label : '') + ')';
         WKS.npStatusType = 'warn';
+        if(!WKS.npSessionLog) WKS.npSessionLog = [];
+        WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:'غ',field:fld,isAbsent:true,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0});
+        if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
       }
       if(ta) ta.value = '';
       WKS.npTextInput  = '';
@@ -1509,6 +1583,9 @@ function _npSubmit() {
   if(matched.length === 0) {
     WKS.npStatus     = '❌ لم يُعثر على: ' + nameStr;
     WKS.npStatusType = 'err';
+    if(!WKS.npSessionLog) WKS.npSessionLog = [];
+    WKS.npSessionLog.unshift({inputText:raw,matchedName:null,grade:gradeStr,field:fld,isAbsent:false,status:'fail',error:'لم يُعثر على: '+nameStr});
+    if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
     renderWeekly();
     return;
   }
@@ -1612,6 +1689,7 @@ function _npDel() {
       DB.data[cls][WKS.numpadStudentIdx][curField] = '';
       saveDB();
       _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
+      _npLogDirectRemove(WKS.numpadStudent, fld);
     }
   }
 }
@@ -1626,6 +1704,7 @@ function _npClear() {
     DB.data[cls][WKS.numpadStudentIdx][curField] = '';
     saveDB();
     _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
+    _npLogDirectRemove(WKS.numpadStudent, fld);
   }
   _npRefreshDisplay();
 }
@@ -2475,3 +2554,201 @@ var _origGsFnpKey = window._gsFnpKey || function(){};
     }
   };
 })();
+
+// ══ تقرير جلسة الـ Numpad ══
+function _npSessionReport() {
+  var log = WKS.npSessionLog || [];
+  if (!log.length) { showSnack('⚠ لا يوجد سجل لهذه الجلسة'); return; }
+
+  var week = WKS.activeWeek || 1;
+  var cls  = WKS.activeClass || (DB.classes[0] || '');
+  var fldNames = { assess:'تقييم', hw:'واجب', beh:'سلوك', ex1:'اختبار 1', ex2:'اختبار 2' };
+
+  var okList   = log.filter(function(l){ return l.status==='ok' && !l.isAbsent; });
+  var absList  = log.filter(function(l){ return l.isAbsent; });
+  var failList = log.filter(function(l){ return l.status==='fail'; });
+  var grades   = okList.map(function(l){ return Number(l.grade)||0; });
+  var gradeSum = grades.reduce(function(a,b){return a+b;},0);
+  var gradeAvg = grades.length ? Math.round((gradeSum/grades.length)*10)/10 : null;
+  var gradeMax = grades.length ? Math.max.apply(null,grades) : null;
+  var gradeMin = grades.length ? Math.min.apply(null,grades) : null;
+  var byNumCnt = log.filter(function(l){return l.byNum;}).length;
+
+  // توزيع الدرجات
+  var dist = {};
+  okList.forEach(function(l) {
+    var g = Number(l.grade)||0;
+    var b = Math.floor(g/2)*2;
+    var key = b+'-'+(b+1);
+    dist[key] = (dist[key]||0)+1;
+  });
+
+  var old = document.getElementById('npSessionReportModal');
+  if (old) old.remove();
+
+  var mo = document.createElement('div');
+  mo.id = 'npSessionReportModal';
+  mo.className = 'mo';
+  mo.onclick = function(e){ if(e.target===mo) mo.remove(); };
+
+  var total = log.length;
+  var recogPct = total>0 ? Math.round((total-failList.length)/total*100) : 0;
+
+  // تحديد اسم الحقل المستخدم في الجلسة
+  var fieldCounts = {};
+  log.forEach(function(l){ if(l.field) fieldCounts[l.field]=(fieldCounts[l.field]||0)+1; });
+  var dominantField = Object.keys(fieldCounts).sort(function(a,b){return fieldCounts[b]-fieldCounts[a];})[0]||'assess';
+  var colLabel = fldNames[dominantField]||dominantField;
+  var maxVal = okList.length ? (okList[0].maxVal||20) : 20;
+
+  var h = '<div class="md" style="max-width:560px;max-height:90vh;overflow-y:auto;background:#0d1117;border:2px solid #16a34a;" onclick="event.stopPropagation()">';
+
+  // رأس
+  h += '<div class="mh" style="background:linear-gradient(135deg,#064e3b,#065f46);border-bottom:2px solid #16a34a;position:sticky;top:0;z-index:2;">';
+  h += '<span style="font-size:18px;">📊</span>';
+  h += '<div style="flex:1;">';
+  h += '<h2 style="color:#6ee7b7;margin:0;font-size:13px;">تقرير الجلسة — '+esc(colLabel)+'</h2>';
+  h += '<div style="font-size:9px;color:#4ade80;margin-top:2px;">الأسبوع '+week+' — الفصل: <strong>'+esc(cls)+'</strong> — '+total+' إدخال</div>';
+  h += '</div>';
+  h += '<button class="xbtn" style="color:#6ee7b7;" onclick="document.getElementById(\'npSessionReportModal\').remove()">✕</button>';
+  h += '</div>';
+
+  h += '<div class="mb" style="padding:12px;display:flex;flex-direction:column;gap:12px;">';
+
+  // بطاقات الإحصاء
+  function sCard(icon,val,lbl,bg,clr){
+    return '<div style="background:'+bg+';border:1px solid '+clr+'44;border-radius:10px;padding:8px 6px;text-align:center;">'
+      +'<div style="font-size:18px;font-weight:900;color:'+clr+';">'+val+'</div>'
+      +'<div style="font-size:8.5px;color:'+clr+'99;margin-top:2px;">'+icon+' '+lbl+'</div></div>';
+  }
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px;">';
+  h += sCard('✅',''+okList.length,'درجات مُرصدة','rgba(16,185,129,.12)','#6ee7b7');
+  h += sCard('✗',''+absList.length,'غائب','rgba(239,68,68,.12)','#fca5a5');
+  h += sCard('❌',''+failList.length,'لم يُعرف','rgba(251,191,36,.12)','#fcd34d');
+  h += sCard('🎯',''+recogPct+'%','دقة التعرف','rgba(99,102,241,.12)','#a5b4fc');
+  if(gradeAvg!==null) h += sCard('📈',''+gradeAvg,'متوسط الدرجات','rgba(249,115,22,.12)','#fdba74');
+  if(gradeMax!==null) h += sCard('🏆',''+gradeMax+'/'+maxVal,'أعلى درجة','rgba(16,185,129,.08)','#34d399');
+  if(gradeMin!==null) h += sCard('📉',''+gradeMin+'/'+maxVal,'أدنى درجة','rgba(239,68,68,.08)','#f87171');
+  if(byNumCnt>0)      h += sCard('🔢',''+byNumCnt,'بالرقم','rgba(124,58,237,.12)','#c4b5fd');
+  h += '</div>';
+
+  // شريط التوزيع
+  if(okList.length > 0) {
+    var buckets=[];
+    for(var b=0; b<=Math.ceil(maxVal/2)*2; b+=2){
+      var bk=b+'-'+(b+1);
+      if(dist[bk]) buckets.push({label:b+'–'+(Math.min(b+1,maxVal)),cnt:dist[bk],pct:Math.round((dist[bk]||0)/okList.length*100)});
+    }
+    if(buckets.length){
+      h += '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:10px 12px;">';
+      h += '<div style="font-size:9px;font-weight:700;color:#6ee7b7;margin-bottom:8px;">📊 توزيع الدرجات</div>';
+      h += '<div style="display:flex;flex-direction:column;gap:5px;">';
+      buckets.forEach(function(bk){
+        h += '<div style="display:flex;align-items:center;gap:8px;">';
+        h += '<div style="font-size:9px;color:#94a3b8;width:36px;text-align:left;flex-shrink:0;">'+bk.label+'</div>';
+        h += '<div style="flex:1;background:#1e293b;border-radius:3px;overflow:hidden;height:12px;">';
+        h += '<div style="width:'+bk.pct+'%;height:100%;background:linear-gradient(90deg,#065f46,#16a34a);border-radius:3px;"></div></div>';
+        h += '<div style="font-size:9px;color:#6ee7b7;width:20px;text-align:right;flex-shrink:0;">'+bk.cnt+'</div></div>';
+      });
+      h += '</div></div>';
+    }
+  }
+
+  // الغائبون
+  if(absList.length > 0){
+    h += '<div style="background:#1a0000;border:1px solid #7f1d1d;border-radius:8px;padding:8px 12px;">';
+    h += '<div style="font-size:9px;font-weight:700;color:#fca5a5;margin-bottom:6px;">✗ الغائبون ('+absList.length+')</div>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
+    absList.forEach(function(l){
+      h += '<span style="background:#7f1d1d;color:#fca5a5;padding:2px 10px;border-radius:8px;font-size:9.5px;font-weight:700;">'+esc(l.matchedName||'؟')+'</span>';
+    });
+    h += '</div></div>';
+  }
+
+  // الإدخالات الفاشلة
+  if(failList.length > 0){
+    h += '<div style="background:#1a1200;border:1px solid #78350f;border-radius:8px;padding:8px 12px;">';
+    h += '<div style="font-size:9px;font-weight:700;color:#fcd34d;margin-bottom:6px;">⚠ لم يُعرف ('+failList.length+')</div>';
+    failList.forEach(function(l){
+      h += '<div style="font-size:9px;color:#fb923c;background:rgba(249,115,22,.08);border-radius:5px;padding:3px 8px;margin-bottom:3px;">'+esc(l.error||l.inputText||'؟')+'</div>';
+    });
+    h += '</div>';
+  }
+
+  // السجل الكامل بترتيب الإدخال
+  var orderedLog = [].concat(log).reverse();
+  h += '<div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;overflow:hidden;">';
+  h += '<div style="background:#0d2a1f;padding:7px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e293b;">';
+  h += '<div style="font-size:9px;font-weight:700;color:#6ee7b7;">📋 سجل الرصد الكامل — بترتيب الإدخال</div>';
+  h += '<div style="font-size:9px;color:#4ade80;">'+total+' إدخال</div></div>';
+  h += '<div style="overflow-x:auto;">';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:9.5px;">';
+  h += '<thead><tr>';
+  h += '<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:center;">#</th>';
+  h += '<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:right;">الطالب</th>';
+  h += '<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:center;">الدرجة</th>';
+  h += '<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:center;">الحقل</th>';
+  h += '<th style="background:#0d2a1f;color:#6ee7b7;border-bottom:1px solid #1e293b;padding:4px 8px;text-align:right;">الإدخال</th>';
+  h += '</tr></thead><tbody>';
+
+  orderedLog.forEach(function(l,i){
+    var isFail = l.status==='fail';
+    var rowBg  = isFail?'background:rgba(239,68,68,.06);':l.isAbsent?'background:rgba(239,68,68,.04);':'';
+    var nameClr= isFail?'#f87171':l.isAbsent?'#fca5a5':'#d97706';
+    h += '<tr style="'+rowBg+'">';
+    h += '<td style="text-align:center;color:#475569;border-bottom:1px solid #1e293b;padding:3px 8px;">'+(i+1)+'</td>';
+    h += '<td style="text-align:right;border-bottom:1px solid #1e293b;padding:3px 8px;color:'+nameClr+';font-weight:700;">'+esc(l.matchedName||(l.error||'؟'))+'</td>';
+    h += '<td style="text-align:center;border-bottom:1px solid #1e293b;padding:3px 8px;">';
+    if(l.isAbsent) h += '<span style="background:#7c2d12;color:#fcd34d;padding:1px 9px;border-radius:8px;font-size:9px;font-weight:700;">غ</span>';
+    else if(isFail) h += '<span style="color:#475569;">—</span>';
+    else h += '<span style="background:#064e3b;color:#6ee7b7;padding:1px 9px;border-radius:8px;font-size:10px;font-weight:900;">'+l.grade+'</span>';
+    h += '</td>';
+    h += '<td style="text-align:center;border-bottom:1px solid #1e293b;padding:3px 8px;font-size:8.5px;color:#6b7280;">'+esc(fldNames[l.field]||l.field||'')+(l.byNum?' 🔢':'')+'</td>';
+    h += '<td style="text-align:right;border-bottom:1px solid #1e293b;padding:3px 8px;color:#475569;font-size:8.5px;direction:rtl;">'+esc(l.inputText||'')+'</td>';
+    h += '</tr>';
+  });
+  h += '</tbody></table></div></div>';
+
+  h += '</div>'; // .mb
+  h += '<div class="mf" style="border-top:1px solid #16a34a;background:#0d1117;">';
+  h += '<button class="btn btn-ghost" onclick="document.getElementById(\'npSessionReportModal\').remove()">إغلاق</button>';
+  h += '<button class="btn" style="background:rgba(16,185,129,.2);border:1px solid #16a34a;color:#6ee7b7;" onclick="_npSessionReportPrint()">🖨 طباعة</button>';
+  h += '</div>';
+  h += '</div>';
+
+  mo.innerHTML = h;
+  document.body.appendChild(mo);
+}
+
+function _npSessionReportPrint() {
+  var log = WKS.npSessionLog || [];
+  if(!log.length) return;
+  var week = WKS.activeWeek||1;
+  var cls  = WKS.activeClass||(DB.classes[0]||'');
+  var fldNames = {assess:'تقييم',hw:'واجب',beh:'سلوك',ex1:'اختبار 1',ex2:'اختبار 2'};
+  var okList  = log.filter(function(l){return l.status==='ok'&&!l.isAbsent;});
+  var absList = log.filter(function(l){return l.isAbsent;});
+  var failList= log.filter(function(l){return l.status==='fail';});
+  var grades  = okList.map(function(l){return Number(l.grade)||0;});
+  var gradeAvg= grades.length?Math.round((grades.reduce(function(a,b){return a+b;},0)/grades.length)*10)/10:null;
+  var orderedLog=[].concat(log).reverse();
+  var rows=orderedLog.map(function(l,i){
+    return '<tr><td>'+(i+1)+'</td><td style="text-align:right">'+esc(l.matchedName||l.error||'؟')+'</td>'
+      +'<td>'+(l.isAbsent?'غ':l.grade!=null?l.grade:'—')+'</td>'
+      +'<td>'+esc(fldNames[l.field]||l.field||'')+'</td>'
+      +'<td style="text-align:right;color:#777;font-size:11px;">'+esc(l.inputText||'')+'</td></tr>';
+  }).join('');
+  var now=new Date();
+  var dateStr=now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
+  var win=window.open('','_blank');
+  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير الجلسة</title>'
+    +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#064e3b;color:white;}.stat{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 14px;border-radius:8px;margin:4px;font-size:12px;font-weight:700;}</style>'
+    +'</head><body>'
+    +'<h1>📊 تقرير الجلسة — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
+    +'<div style="font-size:11px;color:#555;margin-bottom:8px;">تاريخ الطباعة: '+dateStr+'</div>'
+    +'<div><span class="stat">✅ درجات: '+okList.length+'</span><span class="stat">✗ غائب: '+absList.length+'</span><span class="stat">❌ فشل: '+failList.length+'</span>'+(gradeAvg!==null?'<span class="stat">📈 متوسط: '+gradeAvg+'</span>':'')+'</div>'
+    +'<table><thead><tr><th>#</th><th>الطالب</th><th>الدرجة</th><th>الحقل</th><th>نص الإدخال</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</body></html>');
+  win.document.close();
+  win.print();
+}
