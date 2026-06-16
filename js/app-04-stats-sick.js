@@ -208,6 +208,10 @@ function sickExport(){
 }
 
 var DS={dictDate:"",
+  dictNumpad:false,
+  dnStudent:null,
+  dnStudentIdx:-1,
+  dnInput:"",
   activeClass:"",
   selectedCol:"",
   scope:"class",
@@ -717,6 +721,21 @@ function renderDict(){
       addBtn.style.background=DS.addStudentMode?"#0e7490":"#0e7490";
       addBtn.style.outline=DS.addStudentMode?"2px solid #38bdf8":"none";
     }
+    var npBtn=document.getElementById("tbDictNumpadBtn");
+    if(!npBtn){
+      // أنشئ الزر إن لم يكن موجوداً
+      var tbDict=document.getElementById("tbDictBtns");
+      if(tbDict){
+        npBtn=document.createElement("button");
+        npBtn.id="tbDictNumpadBtn";
+        npBtn.title="لوحة الأرقام";
+        npBtn.innerHTML="🔢";
+        npBtn.style.cssText="background:transparent;border:1px solid #1e3a5f;color:#64748b;border-radius:8px;padding:4px 9px;cursor:pointer;font-size:13px;font-family:inherit;transition:all .15s;";
+        npBtn.onclick=function(){DS.dictNumpad=!DS.dictNumpad;if(DS.dictNumpad&&!DS.dnStudent){var _s=dClsStudents(DS.activeClass);if(_s.length){DS.dnStudent=_s[0];DS.dnStudentIdx=0;}}renderDict();};
+        tbDict.appendChild(npBtn);
+      }
+    }
+    if(npBtn){npBtn.style.background=DS.dictNumpad?"#1d4ed8":"transparent";npBtn.style.color=DS.dictNumpad?"white":"#64748b";npBtn.style.borderColor=DS.dictNumpad?"#3b82f6":"#1e3a5f";}
   })();
   var sts=dClsStudents(cls);
   var now=Date.now();
@@ -887,7 +906,105 @@ function renderDict(){
   });
   html+='</div></div></div>';
   html+='</div></div>'; // d-wrap, dict-page
+
+  // ── لوحة الأرقام العائمة ──
+  if(DS.dictNumpad){
+    /* ── لوحة الأرقام — تكتب مباشرة في dInput ── */
+    var _dInpVal2=DS.dnInput||"";
+    /* موضع اللوحة المحفوظ */
+    var _npLeft=DS.dnPanelLeft!==undefined?DS.dnPanelLeft:null;
+    var _npTop=DS.dnPanelTop!==undefined?DS.dnPanelTop:null;
+    var _posStyle=(_npLeft!==null&&_npTop!==null)
+      ?'left:'+_npLeft+'px;top:'+_npTop+'px;transform:none;bottom:auto;'
+      :'left:50%;top:auto;bottom:70px;transform:translateX(-50%);';
+    var _btnBase='background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:10px;padding:11px;font-size:20px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
+    html+='<div id="dictNumpadPanel" style="position:fixed;'+_posStyle+'z-index:9000;background:linear-gradient(160deg,#0f1e3a,#0a1428);border:2px solid #1e4a8a;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.7);width:min(300px,95vw);padding:0;overflow:hidden;user-select:none;-webkit-user-select:none;">';
+    /* header — شريط السحب */
+    html+='<div id="dnDragBar" style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:rgba(30,74,138,.3);border-bottom:1px solid #1e3a5f;cursor:grab;touch-action:none;">';
+    html+='<span style="font-size:11px;font-weight:900;color:#60a5fa;">⠿ 🔢 لوحة الأرقام</span>';
+    html+='<span style="font-size:9px;color:#64748b;">رقم ثم مسافة ثم درجة</span>';
+    html+='<button onclick="DS.dictNumpad=false;renderDict();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;line-height:1;padding:2px 5px;touch-action:manipulation;">✕</button>';
+    html+='</div>';
+    /* شاشة العرض */
+    html+='<div style="padding:8px 12px 6px;">';
+    html+='<div style="min-height:44px;background:#0f172a;border:2px solid '+(_dInpVal2?'#3b82f6':'#1e3a5f')+';border-radius:10px;padding:6px 14px;font-size:22px;font-weight:900;color:white;letter-spacing:3px;text-align:center;display:flex;align-items:center;justify-content:center;word-break:break-all;">'+esc(_dInpVal2||'—')+'</div>';
+    html+='</div>';
+    /* مفاتيح 7 8 9 / 4 5 6 / 1 2 3 */
+    html+='<div style="padding:4px 12px 2px;display:grid;grid-template-columns:repeat(3,1fr);gap:5px;">';
+    [7,8,9,4,5,6,1,2,3].forEach(function(n){
+      html+='<button onclick="_dnKey('+n+')" style="'+_btnBase+'">'+n+'</button>';
+    });
+    /* صف: مسح — 0 — حذف */
+    html+='<button onclick="_dnClear();" style="'+_btnBase+'color:#f87171;font-size:14px;">✕ مسح</button>';
+    html+='<button onclick="_dnKey(0)" style="'+_btnBase+'">0</button>';
+    html+='<button onclick="_dnBackspace();" style="'+_btnBase+'color:#fbbf24;font-size:16px;">⌫</button>';
+    html+='</div>';
+    /* صف: مسافة — غياب — تأكيد */
+    html+='<div style="padding:5px 12px 10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;">';
+    html+='<button onclick="_dnSpace();" style="background:#1e3a5f;border:1px solid #334155;color:#94a3b8;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">⎵ مسافة</button>';
+    html+='<button onclick="_dnMarkAbsent();" style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#f87171;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">غ غائب</button>';
+    html+='<button onclick="_dnConfirm();" style="background:rgba(29,78,216,.5);border:1px solid #3b82f6;color:white;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">✓ إدخال</button>';
+    html+='</div>';
+    html+='</div>'; // panel
+  }
+
   root.innerHTML=html;
+
+  /* ── تفعيل السحب على لوحة الأرقام بعد رسم الـ DOM ── */
+  (function(){
+    var panel=document.getElementById("dictNumpadPanel");
+    var drag=document.getElementById("dnDragBar");
+    if(!panel||!drag)return;
+    var startX,startY,startL,startT,dragging=false;
+    function getPos(){
+      var r=panel.getBoundingClientRect();
+      return{left:r.left,top:r.top};
+    }
+    function applyPos(l,t){
+      var pw=panel.offsetWidth,ph=panel.offsetHeight;
+      var ww=window.innerWidth,wh=window.innerHeight;
+      l=Math.max(0,Math.min(ww-pw,l));
+      t=Math.max(0,Math.min(wh-ph,t));
+      panel.style.left=l+'px';
+      panel.style.top=t+'px';
+      panel.style.bottom='auto';
+      panel.style.transform='none';
+      DS.dnPanelLeft=l;
+      DS.dnPanelTop=t;
+    }
+    /* Mouse */
+    drag.addEventListener('mousedown',function(e){
+      if(e.target.tagName==='BUTTON')return;
+      dragging=true;
+      var pos=getPos();
+      startL=pos.left;startT=pos.top;
+      startX=e.clientX;startY=e.clientY;
+      drag.style.cursor='grabbing';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove',function(e){
+      if(!dragging)return;
+      applyPos(startL+(e.clientX-startX),startT+(e.clientY-startY));
+    });
+    document.addEventListener('mouseup',function(){
+      dragging=false;drag.style.cursor='grab';
+    });
+    /* Touch */
+    drag.addEventListener('touchstart',function(e){
+      if(e.target.tagName==='BUTTON')return;
+      dragging=true;
+      var pos=getPos();
+      startL=pos.left;startT=pos.top;
+      startX=e.touches[0].clientX;startY=e.touches[0].clientY;
+      e.preventDefault();
+    },{passive:false});
+    drag.addEventListener('touchmove',function(e){
+      if(!dragging)return;
+      applyPos(startL+(e.touches[0].clientX-startX),startT+(e.touches[0].clientY-startY));
+      e.preventDefault();
+    },{passive:false});
+    drag.addEventListener('touchend',function(){dragging=false;});
+  })();
 
   // Attach events
   var dInp=document.getElementById("dInput");
@@ -896,6 +1013,66 @@ function renderDict(){
 
 
 
+function _dnGetInput(){return document.getElementById("dInput");}
+function _dnKey(n){
+  var newVal=(DS.dnInput||"")+String(n);
+  /* تحقق من الحد الأقصى للعمود — فقط إذا كان الإدخال رقماً خالصاً (بدون مسافة بعد) */
+  /* الصيغة: "رقم_طالب مسافة درجة" — نطبق الحد على الجزء الثاني (الدرجة) */
+  var parts=newVal.split(" ");
+  if(parts.length>=2){
+    /* الجزء الثاني هو الدرجة */
+    var gradeStr=parts.slice(1).join("");
+    if(/^\d+$/.test(gradeStr)){
+      var gradeNum=Number(gradeStr);
+      var colDef=null;allCols().forEach(function(c){if(c.id===DS.selectedCol)colDef=c;});
+      var maxG=colDef?colDef.max:(typeof totalMax==="function"?totalMax():100);
+      if(gradeNum>maxG){
+        newVal=parts[0]+" "+String(maxG);
+        showSnack("⚠ الحد الأقصى للعمود: "+maxG);
+      }
+    }
+  } else if(parts.length===1&&/^\d+$/.test(newVal)){
+    /* رقم واحد فقط — قد يكون رقم طالب أو درجة مباشرة، لا نقيّد هنا */
+  }
+  DS.dnInput=newVal;
+  var el=_dnGetInput();if(el)el.value=DS.dnInput;
+  renderDict();
+}
+function _dnSpace(){
+  var cur=DS.dnInput||"";
+  if(cur===""||cur.slice(-1)===" ")return;
+  DS.dnInput=cur+" ";
+  var el=_dnGetInput();if(el)el.value=DS.dnInput;
+  renderDict();
+}
+function _dnClear(){
+  DS.dnInput="";
+  var el=_dnGetInput();if(el)el.value="";
+  renderDict();
+}
+function _dnBackspace(){
+  DS.dnInput=(DS.dnInput||"").slice(0,-1);
+  var el=_dnGetInput();if(el)el.value=DS.dnInput;
+  renderDict();
+}
+function _dnConfirm(){
+  var raw=(DS.dnInput||"").trim();
+  if(!raw)return;
+  var el=_dnGetInput();
+  if(el)el.value=raw;
+  dOnKey({key:"Enter",preventDefault:function(){},target:el||{value:raw}});
+  DS.dnInput="";
+  renderDict();
+}
+function _dnMarkAbsent(){
+  var raw=(DS.dnInput||"").trim();
+  if(!raw){showSnack("⚠ اكتب رقم الطالب أولاً");return;}
+  var el=_dnGetInput();
+  if(el)el.value=raw;
+  dOnKey({key:"Enter",preventDefault:function(){},target:el||{value:raw}});
+  DS.dnInput="";
+  renderDict();
+}
 function dExport(){
   try{
     var wb=XLSX.utils.book_new();

@@ -1656,6 +1656,8 @@ function _npMicToggle() {
 
 
 function _npKeyPress(ch) {
+  /* دائماً: اكتب الحرف/الرقم في صندوق الإملاء */
+  _npPressToInput(ch);
   if(WKS._npDirectMode && WKS.numpadStudent) {
     var cls=WKS.activeClass, week=WKS.activeWeek, fld=WKS.numpadField||'assess';
     var aF='a'+week, hF='h'+week, bF='bw'+week;
@@ -1678,15 +1680,16 @@ function _npKeyPress(ch) {
       }
     }
     _npRefreshDisplay();
-  } else {
-    _npPressToInput(ch);
   }
 }
 function _npKeyBackspace() {
+  /* دائماً: احذف من صندوق الإملاء */
+  _npDelFromInput();
   if(WKS._npDirectMode && WKS.numpadStudent) _npDel();
-  else _npDelFromInput();
 }
 function _npKeyReset() {
+  /* دائماً: امسح صندوق الإملاء */
+  _npClearInput();
   if(WKS._npDirectMode && WKS.numpadStudent) {
     WKS.numpadInput='';
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
@@ -1694,8 +1697,6 @@ function _npKeyReset() {
     _npLogDirectRemove(WKS.numpadStudent, fld);
     WKS._npDirectMode=false; WKS.numpadStudent=null; WKS.npStatus='';
     renderWeekly();
-  } else {
-    _npClearInput();
   }
 }
 

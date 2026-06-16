@@ -122,6 +122,28 @@ function toggleSickCol(cls,studentId,week,colIndex){
   saveDB();
   _refreshCurrentAndRelated();
 }
+function clearAbsenceCol(cls,week,colIndex){
+  if(!confirm('مسح غياب هذا العمود لجميع الطلاب؟'))return;
+  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
+  students.forEach(function(s){
+    var abs=getStudentAbsences(cls,s.id);
+    var k="w"+week+"_ci"+colIndex;
+    if(abs[k])delete abs[k];
+  });
+  saveDB();
+  _refreshCurrentAndRelated();
+}
+function markAllAbsenceCol(cls,week,colIndex){
+  if(!confirm('تسجيل كل الطلاب غائبين في هذا العمود؟'))return;
+  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
+  students.forEach(function(s){
+    var abs=getStudentAbsences(cls,s.id);
+    var k="w"+week+"_ci"+colIndex;
+    abs[k]="abs";
+  });
+  saveDB();
+  _refreshCurrentAndRelated();
+}
 function toggleSick(cls,studentId,week,periodId,dayIdx,dateStr){
   // Toggles SICK only. Two states: حضور ↔ مريض
   var abs=getStudentAbsences(cls,studentId);
@@ -645,7 +667,11 @@ function renderSched(){
   html+='</div>';
 
   html+='</div></div>';
+  var _absBody=root.querySelector('.abs-body');
+  var _scrollTop=_absBody?_absBody.scrollTop:0;
   root.innerHTML=html;
+  var _newBody=root.querySelector('.abs-body');
+  if(_newBody&&_scrollTop)_newBody.scrollTop=_scrollTop;
 }
 
 // ── Unified schedule helpers ──────────────────────────
@@ -1110,6 +1136,10 @@ function renderAbsence(){
       html+='<div style="font-size:8px;line-height:1.3;'+(col.isScheduled?"color:#60a5fa;font-weight:700;":"")+'">';
       html+=esc(col.period.label||col.period.id)+'<br/>'+DAYS_SHORT[col.dayIdx];
       if(col.period.time)html+='<br/><span style="font-size:7px;color:#475569;">'+esc(col.period.time)+'</span>';
+      html+='<br/><div style="display:flex;gap:2px;margin-top:3px;justify-content:center;">';
+      html+='<button onclick="clearAbsenceCol(\''+esc(cls)+'\','+week+','+col._ci+')" title="مسح كل العمود" style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:5px;cursor:pointer;font-size:9px;padding:1px 5px;font-family:inherit;line-height:1.4;" onmouseover="this.style.background=\'rgba(239,68,68,.3)\'" onmouseout="this.style.background=\'rgba(239,68,68,.15)\'">🗑</button>';
+      html+='<button onclick="markAllAbsenceCol(\''+esc(cls)+'\','+week+','+col._ci+')" title="تسجيل الكل غائب" style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:5px;cursor:pointer;font-size:9px;padding:1px 5px;font-family:inherit;line-height:1.4;" onmouseover="this.style.background=\'rgba(239,68,68,.3)\'" onmouseout="this.style.background=\'rgba(239,68,68,.15)\'">✗</button>';
+      html+='</div>';
       html+='</div>';
     });
     html+='<div>غياب</div>';
@@ -1158,7 +1188,11 @@ function renderAbsence(){
   html+='</div>';
 
   html+='</div></div>';
+  var _absBody=root.querySelector('.abs-body');
+  var _scrollTop=_absBody?_absBody.scrollTop:0;
   root.innerHTML=html;
+  var _newBody=root.querySelector('.abs-body');
+  if(_newBody&&_scrollTop)_newBody.scrollTop=_scrollTop;
 }
 
 function absExport(){
