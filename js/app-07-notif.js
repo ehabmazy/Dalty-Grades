@@ -1940,6 +1940,7 @@ function _homeTick(){
       });
     }
     cardsEl.innerHTML=cardsHtml;
+    cardsEl.style.display=cardsHtml?'flex':'none';
   }
   // Update upcoming strip (only once per minute to avoid flicker)
   if(_homeTickCount%60===0||_homeTickCount===1){
@@ -2190,6 +2191,14 @@ function renderHomePage(){
   if(!root)return;
   if(_homeTimer)clearInterval(_homeTimer);
 
+  /* ── تصحيح CSS الشريط السفلي وأيقوناته ── */
+  if(!document.getElementById('_bnFixStyle')){
+    var _bnSt=document.createElement('style');
+    _bnSt.id='_bnFixStyle';
+    _bnSt.textContent='.home-bottom-nav,.hbn,#homeBottomNav{height:56px!important;padding-bottom:env(safe-area-inset-bottom,0)!important;}'+'  .hbn button,.home-bottom-nav button,#homeBottomNav button{font-size:11px!important;gap:2px!important;padding:4px 0!important;min-width:48px!important;}'+'  .hbn button span:first-child,.hbn-icon,.bn-icon{font-size:20px!important;line-height:1.1!important;}'+'  .hbn button span:last-child,.hbn-label,.bn-label{font-size:9px!important;}'+'  #h-cards-scroll{display:flex!important;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}'+'  #h-cards-scroll::-webkit-scrollbar{display:none;}'+'  .home-body{padding-bottom:72px!important;}';
+    document.head.appendChild(_bnSt);
+  }
+
   var teacherName = (DB&&DB.meta&&DB.meta.teacherName) ? DB.meta.teacherName : (sessionStorage.getItem('ln')||'المعلم').replace(/^أ(ستاذة?)?\/\s*/,'');
   var schoolName  = (DB&&DB.meta&&DB.meta.schoolName)  ? DB.meta.schoolName  : 'Dalty Grades';
   var gender      = (DB&&DB.meta&&DB.meta.teacherGender)? DB.meta.teacherGender : 'male';
@@ -2261,7 +2270,7 @@ function renderHomePage(){
     +'<div class="home-ring-next-when" id="h-ring-next-when">—</div>'
     +'</div>'
     +'</div></div>'
-    +'<div id="h-cards-scroll" style="display:none;"></div>'
+    +'<div id="h-cards-scroll" style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0;"></div>'
     // Alarm card
     +'<div id="homeAlarmCard" style="display:none;margin:0 16px 12px;background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;padding:12px 16px;cursor:pointer;" onclick="switchPage(\'notifs\');bnSetActive(\'notifs\');">'
     +'<div style="display:flex;align-items:center;gap:12px;">'
