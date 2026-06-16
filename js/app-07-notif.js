@@ -18,7 +18,7 @@ var _notifSettings={
   soundTone:'chime_short',
   // global defaults
   globalBefore:5, globalOnStart:true, globalOnEnd:false,
-  notifyDays:[0,1,2,3,4,5],
+  notifyDays:[0,1,2,3,4,5,6],
   // per-period: { "cls||periodId": { enabled:true, beforeMins:5, onStart:true, onEnd:false } }
   perPeriod:{}
 };
@@ -537,12 +537,12 @@ function _getAllScheduledPeriods(){
   (shared.periods||[]).forEach(function(per){
     // For each period, find which days have a class assigned
     var days=[];
-    for(var di=0;di<6;di++){
+    for(var di=0;di<7;di++){
       if(slots[per.id+'_d'+di]) days.push(di);
     }
     // For home page: create one item per unique class in this period's days
     var clsForDays={};
-    for(var di2=0;di2<6;di2++){
+    for(var di2=0;di2<7;di2++){
       var cls=slots[per.id+'_d'+di2]||"";
       if(cls){
         if(!clsForDays[cls])clsForDays[cls]=[];
@@ -579,7 +579,7 @@ function _parseTimeStr(str){
 function _notifCheckSchedule(){
   if(!_notifSettings.enabled) return;
   var now=new Date();
-  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5};
+  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5,5:6};
   var ourDay=jsToOur[now.getDay()];
   if(ourDay===undefined||_notifSettings.notifyDays.indexOf(ourDay)<0) return;
   var nowM=now.getHours()*60+now.getMinutes();
@@ -764,11 +764,11 @@ function notifClearLog(){_notifLog=[];_notifSave();_notifUpdateBadge();renderNot
 function _getNextPeriod(){
   if(!DB||!DB.schedule) return null;
   var now=new Date();
-  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5};
+  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5,5:6};
   var ourDay=jsToOur[now.getDay()];
   if(ourDay===undefined) return null;
   var nowM=now.getHours()*60+now.getMinutes();
-  var DAYS_FULL=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس'];
+  var DAYS_FULL=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
   var best=null, bestTotalMin=Infinity;
   // Check currently running first
   _getAllScheduledPeriods().forEach(function(item){
@@ -781,9 +781,9 @@ function _getNextPeriod(){
     }
   });
   if(best) return best;
-  // Search upcoming: today first, then next 6 days
-  for(var ahead=0;ahead<=6;ahead++){
-    var checkDay=(ourDay+ahead)%6;
+  // Search upcoming: today first, then next 7 days
+  for(var ahead=0;ahead<=7;ahead++){
+    var checkDay=(ourDay+ahead)%7;
     var checkDate=new Date(now);
     checkDate.setDate(now.getDate()+ahead);
     _getAllScheduledPeriods().forEach(function(item){
@@ -1120,7 +1120,7 @@ function renderNotifsPage(){
   var allPeriods=_getAllScheduledPeriods();
   // Sort by real minutes until next occurrence across all days
   var now=new Date();
-  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5};
+  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5,5:6};
   var ourDay=jsToOur[now.getDay()];
   var nowM=now.getHours()*60+now.getMinutes();
   function _periodSortKey(item){
@@ -1135,8 +1135,8 @@ function renderNotifsPage(){
     item.days.forEach(function(d){
       if(ourDay===undefined){minMin=Math.min(minMin,startM);return;}
       // days ahead until this weekday
-      var ahead=(d-ourDay+6)%6;
-      if(ahead===0&&startM<=nowM) ahead=6; // same day but passed → next week
+      var ahead=(d-ourDay+7)%7;
+      if(ahead===0&&startM<=nowM) ahead=7; // same day but passed → next week
       var minsUntil=ahead*1440+(startM-nowM);
       if(minsUntil<minMin) minMin=minsUntil;
     });
@@ -1154,8 +1154,8 @@ function renderNotifsPage(){
     noSched.textContent='لا توجد فترات — أضف فترات من صفحة الجدول أولاً';
     perCard.appendChild(noSched);
   } else {
-    var DAYS_NAMES=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس'];
-    var jsToOurP={6:0,0:1,1:2,2:3,3:4,4:5};
+    var DAYS_NAMES=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
+    var jsToOurP={6:0,0:1,1:2,2:3,3:4,4:5,5:6};
     var nowP=new Date();
     var ourDayP=jsToOurP[nowP.getDay()];
     var nowMP=nowP.getHours()*60+nowP.getMinutes();
@@ -1167,8 +1167,8 @@ function renderNotifsPage(){
       var endM=endStr?_parseTimeStr(endStr):null;
       if(ourDayP!==undefined&&item.days.indexOf(ourDayP)>=0&&startM<=nowMP&&endM!==null&&nowMP<endM)
         return {running:true,startM:startM,endM:endM,minsUntil:-1,daysAhead:0,dayName:'اليوم',date:new Date(nowP)};
-      for(var ahead=0;ahead<=6;ahead++){
-        var checkDay=(ourDayP!==undefined)?(ourDayP+ahead)%6:ahead%6;
+      for(var ahead=0;ahead<=7;ahead++){
+        var checkDay=(ourDayP!==undefined)?(ourDayP+ahead)%7:ahead%7;
         if(item.days.indexOf(checkDay)<0) continue;
         var minsUntil=ahead*1440+(startM-nowMP);
         if(minsUntil<=0) continue;
@@ -1241,10 +1241,10 @@ function renderNotifsPage(){
       timeTag.style.cssText='font-size:12px;font-weight:700;color:#60a5fa;background:#0f172a;border:1px solid #334155;border-radius:6px;padding:4px 10px;';
       timeTag.textContent='🕐 '+(per.time||'—');
       row2.appendChild(timeTag);
-      for(var di=0;di<6;di++){
+      for(var di=0;di<7;di++){
         var isActive=item.days.indexOf(di)>=0;
         var isToday=(di===ourDayP);
-        var isNext=(occ&&!occ.running&&ourDayP!==undefined&&((ourDayP+occ.daysAhead)%6)===di&&occ.daysAhead>0);
+        var isNext=(occ&&!occ.running&&ourDayP!==undefined&&((ourDayP+occ.daysAhead)%7)===di&&occ.daysAhead>0);
         var chip=document.createElement('span');
         var cs='font-size:11px;border-radius:6px;padding:3px 8px;font-weight:700;';
         if(isActive&&isToday)      cs+='background:#1e3a5f;color:#f1f5f9;border:2px solid #60a5fa;';
@@ -1339,7 +1339,7 @@ function _alarmNextId(){
 // ── Check alarms every 30s ────────────────────────────
 function _alarmCheck(){
   var now=new Date();
-  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5};
+  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5,5:6};
   var ourDay=jsToOur[now.getDay()];
   var nowM=now.getHours()*60+now.getMinutes();
   var today=now.toDateString();
@@ -1373,7 +1373,7 @@ function _alarmTimeStr(alm){
 }
 function _alarmDaysLabel(alm){
   if(!alm.days||alm.days.length===0) return 'يومياً';
-  if(alm.days.length===6) return 'يومياً';
+  if(alm.days.length===7) return 'يومياً';
   return alm.days.map(function(d){return DAYS_AR[d];}).join(' - ');
 }
 
@@ -1627,7 +1627,7 @@ function _alarmUpdateHomeCard(){
 }
 function _alarmNextUpcoming(){
   var now=new Date();
-  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5};
+  var jsToOur={6:0,0:1,1:2,2:3,3:4,4:5,5:6};
   var ourDay=jsToOur[now.getDay()];
   var nowM=now.getHours()*60+now.getMinutes();
   var best=null, bestMins=999999;
@@ -1636,8 +1636,8 @@ function _alarmNextUpcoming(){
     var almM=alm.hour*60+alm.minute;
     var days=alm.days&&alm.days.length?alm.days:[0,1,2,3,4,5];
     days.forEach(function(d){
-      var ahead=(d-ourDay+6)%6;
-      if(ahead===0&&almM<=nowM) ahead=6;
+      var ahead=(d-ourDay+7)%7;
+      if(ahead===0&&almM<=nowM) ahead=7;
       var minsUntil=ahead*1440+(almM-nowM);
       if(minsUntil<bestMins){bestMins=minsUntil;best={alm:alm,minsUntil:minsUntil};}
     });
@@ -1681,7 +1681,7 @@ function _homeGetAllPeriods(){
   var slots=shared.slots||{};
   (shared.periods||[]).forEach(function(per){
     var clsForDays={};
-    for(var d=0;d<6;d++){
+    for(var d=0;d<7;d++){
       var cls=slots[per.id+'_d'+d]||"";
       if(cls){if(!clsForDays[cls])clsForDays[cls]=[];clsForDays[cls].push(d);}
     }
@@ -1701,7 +1701,7 @@ function _homeParseMins(s){
   return isNaN(h)?null:h*60+m;
 }
 
-function _homeJsToOurDay(d){return({6:0,0:1,1:2,2:3,3:4,4:5})[d];}
+function _homeJsToOurDay(d){return({6:0,0:1,1:2,2:3,3:4,4:5,5:6})[d];}
 
 function _homeGetCurrent(all){
   var now=new Date(),ourDay=_homeJsToOurDay(now.getDay());
@@ -1728,7 +1728,7 @@ function _homeGetCurrent(all){
 function _homeGetUpcoming(all,curItem){
   var now=new Date(),ourDay=_homeJsToOurDay(now.getDay());
   var nowM=now.getHours()*60+now.getMinutes();
-  var DAYS_AR_H=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس'];
+  var DAYS_AR_H=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
   var res=[];
   all.forEach(function(item){
     if(curItem&&item===curItem.item)return;
@@ -1736,8 +1736,8 @@ function _homeGetUpcoming(all,curItem){
     var sM=_homeParseMins(item.per.time.split('-')[0]);
     if(sM===null)return;
     var bestTotal=999999,bestAhead=-1;
-    for(var ahead=0;ahead<=6;ahead++){
-      var checkDay=(ourDay+ahead)%6;
+    for(var ahead=0;ahead<=7;ahead++){
+      var checkDay=(ourDay+ahead)%7;
       if(item.days.indexOf(checkDay)<0)continue;
       if(ahead===0&&sM<=nowM)continue;
       var total=ahead*1440+(sM-nowM);
@@ -1745,7 +1745,7 @@ function _homeGetUpcoming(all,curItem){
       break;
     }
     if(bestAhead>=0){
-      var dayName=bestAhead===0?'اليوم':bestAhead===1?'غداً':DAYS_AR_H[(ourDay+bestAhead)%6];
+      var dayName=bestAhead===0?'اليوم':bestAhead===1?'غداً':DAYS_AR_H[(ourDay+bestAhead)%7];
       res.push({item:item,totalMins:bestTotal,daysAhead:bestAhead,dayName:dayName,startM:_homeParseMins(item.per.time.split('-')[0])});
     }
   });
@@ -1797,7 +1797,7 @@ function _homeTick(){
 
   var now=new Date();
   var ourDay=_homeJsToOurDay(now.getDay());
-  var DAYS_AR_H=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس'];
+  var DAYS_AR_H=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
   var MONTHS=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 
   var hh=now.getHours(),mm=now.getMinutes(),ss=now.getSeconds();
@@ -1999,7 +1999,7 @@ function _buildCurricStrip(){
   var isCurrentWeek=autoWeek===w;
 
   // Build today's day + date string — same mapping as schedule (Sat=0)
-  var DAYS_AR_SCHED=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس'];
+  var DAYS_AR_SCHED=['السبت','الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة'];
   var MONTHS_AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
   var now=new Date();
   var _todayOurDay=_homeJsToOurDay(now.getDay());

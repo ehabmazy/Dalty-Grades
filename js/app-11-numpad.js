@@ -165,7 +165,7 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
     h += '</div>';
 
     /* أزرار الغياب */
-    h += '<div style="display:flex;gap:4px;flex-wrap:wrap;">';
+    h += '<div class="np2-abs-row" style="flex-wrap:wrap;margin-top:8px;">';
     absCols.forEach(function(col, ci) {
       var absState = getAbsenceState(cls, s.id, week, ci);
       var lbl = col.label || ('ف'+(ci+1));

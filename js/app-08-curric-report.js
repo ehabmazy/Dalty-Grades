@@ -1215,7 +1215,7 @@ function curricWeekDateRange(weekNum){
     d.setDate(d.getDate()+diff-(weekNum>1?0:0));
     // just use the computed start
     var start=new Date(d);
-    var end=new Date(d); end.setDate(end.getDate()+4);
+    var end=new Date(d); end.setDate(end.getDate()+6);
     return fmtDate(start)+' – '+fmtDate(end);
   }catch(e){return '';}
 }

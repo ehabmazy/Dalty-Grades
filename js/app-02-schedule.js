@@ -42,6 +42,18 @@ function dateToStr(d){
   var day=String(d.getDate()).padStart(2,"0");
   return y+"-"+m+"-"+day;
 }
+// إرجاع تاريخ أقرب حدوث (اليوم أو القادم) لرقم يوم الأسبوع dayIdx (0=السبت..6=الجمعة)
+function _nextOccurrenceDate(dayIdx,fromDate){
+  var from=fromDate?new Date(fromDate):new Date();
+  from.setHours(0,0,0,0);
+  // dayIdx: 0=السبت=JS6, 1=الأحد=JS0, 2=الإثنين=JS1 ... 6=الجمعة=JS5
+  var jsTarget=(dayIdx===0)?6:(dayIdx-1);
+  var cur=from.getDay();
+  var diff=(jsTarget-cur+7)%7;
+  var res=new Date(from);
+  res.setDate(res.getDate()+diff);
+  return res;
+}
 
 function getStudentAbsences(cls,studentId){
   if(!DB.absences[cls])DB.absences[cls]={};
@@ -188,7 +200,7 @@ function buildAbsCols(cls,week){
       cols.push(scheduledCols[pi]);
     } else {
       // لا يوجد في الجدول — أنشئ عموداً وهمياً
-      cols.push({period:{id:"g"+pi,label:"ف"+(pi+1)},dayIdx:pi%6,label:"ف"+(pi+1)});
+      cols.push({period:{id:"g"+pi,label:"ف"+(pi+1)},dayIdx:pi%7,label:"ف"+(pi+1)});
     }
   }
   return cols;
@@ -235,10 +247,81 @@ var CLASS_COLORS=[
   {bg:"#3b1818",text:"#fca5a5",border:"#ef4444",light:"rgba(59,24,24,.25)"},
 ];
 
+// ── دالة عامة: هل هذه الخانة مشغولة (فصل أو مهمة)؟ تُستخدم في الرئيسية/الإشعارات/الأسبوعي ──
+function isSlotFilled(val){
+  return !!(val&&val.trim());
+}
+// إرجاع معلومات العرض لقيمة الخانة (فصل أو مهمة) — للاستخدام في الحلقة/العد التنازلي/الإشعارات
+function getSlotDisplay(val){
+  val=(val||"").trim();
+  if(!val)return null;
+  var isTask=DB.classes.indexOf(val)<0;
+  var col=getClassColor(val);
+  return{
+    name:val,
+    isTask:isTask,
+    icon:isTask?"📝":"",
+    color:col
+  };
+}
+// نص جاهز للعرض في الحلقة/الإشعارات: يضيف 📝 إن كانت القيمة مهمة وليست فصلاً
+function getSlotLabel(val){
+  val=(val||"").trim();
+  if(!val)return val;
+  return DB.classes.indexOf(val)<0?("📝 "+val):val;
+}
+// إرجاع كل عناصر اليوم (فصول + مهام) لفترة معينة عبر كل الأيام — يجمع من الجدول الموحّد
+function getTodaySchedule(dayIdx){
+  var shared=(DB.schedule&&DB.schedule._shared)||{periods:[],slots:{}};
+  var periods=shared.periods||[];
+  var items=[];
+  periods.forEach(function(p){
+    var val=getUnifiedSlot(p.id,dayIdx);
+    var disp=getSlotDisplay(val);
+    if(disp)items.push({period:p,item:disp});
+  });
+  return items;
+}
+
 function getClassColor(cls){
   var idx=DB.classes.indexOf(cls);
-  if(idx<0)idx=0;
+  if(idx<0){
+    // عنصر غير فصل (مهمة) — لون مميز ثابت
+    return {bg:"#374151",text:"#e5e7eb",border:"#6b7280",light:"rgba(55,65,81,.25)"};
+  }
   return CLASS_COLORS[idx%CLASS_COLORS.length];
+}
+
+// ── المهام (عناصر يمكن وضعها في الجدول وقد لا تكون فصلاً) ──
+function getSchedTasks(){
+  if(!DB.schedule._shared)DB.schedule._shared={periods:[],slots:{},notes:""};
+  if(!DB.schedule._shared.tasks)DB.schedule._shared.tasks=[];
+  return DB.schedule._shared.tasks;
+}
+function schedAddTask(){
+  var name=prompt("اسم المهمة (مثال: مناقشة، احتياط، اجتماع):");
+  if(name===null)return;
+  name=name.trim();
+  if(!name){showSnack("⚠️ أدخل اسماً للمهمة");return;}
+  var tasks=getSchedTasks();
+  if(tasks.indexOf(name)>=0||DB.classes.indexOf(name)>=0){showSnack("⚠️ هذا الاسم موجود مسبقاً");return;}
+  tasks.push(name);
+  saveDB();renderSched();
+  showSnack("✅ تمت إضافة المهمة: "+name);
+}
+function schedDelTask(name){
+  var tasks=getSchedTasks();
+  var idx=tasks.indexOf(name);
+  if(idx<0)return;
+  if(!confirm('حذف المهمة "'+name+'"؟ سيتم إزالتها من أي خلايا تستخدمها.'))return;
+  tasks.splice(idx,1);
+  var shared=DB.schedule._shared||{};
+  var once=shared.onceSlots||{};
+  Object.keys(shared.slots||{}).forEach(function(k){
+    if(shared.slots[k]===name){shared.slots[k]="";delete once[k];}
+  });
+  saveDB();renderSched();
+  showSnack("✅ تم حذف المهمة");
 }
 
 // Get shared periods (unified across all classes)
@@ -260,12 +343,52 @@ function setUnifiedSlot(pid,di,val){
   saveDB();
 }
 
+// ── تكرار المهام: أسبوعي (دائم) أو مرة واحدة فقط ──
+function _getOnceSlots(){
+  if(!DB.schedule._shared)DB.schedule._shared={periods:[],slots:{},notes:""};
+  if(!DB.schedule._shared.onceSlots)DB.schedule._shared.onceSlots={};
+  return DB.schedule._shared.onceSlots;
+}
+function setUnifiedSlotOnce(pid,di,val){
+  setUnifiedSlot(pid,di,val);
+  var once=_getOnceSlots();
+  var targetDate=_nextOccurrenceDate(di);
+  once[pid+"_d"+di]=dateToStr(targetDate);
+  saveDB();
+}
+function clearOnceFlag(pid,di){
+  var once=_getOnceSlots();
+  delete once[pid+"_d"+di];
+  saveDB();
+}
+function isSlotOnce(pid,di){
+  var once=_getOnceSlots();
+  return!!once[pid+"_d"+di];
+}
+function _schedCleanupOnceSlots(){
+  if(!DB.schedule._shared)return;
+  var once=_getOnceSlots();
+  var slots=DB.schedule._shared.slots||{};
+  var today=new Date();today.setHours(0,0,0,0);
+  var changed=false;
+  Object.keys(once).forEach(function(k){
+    var target=new Date(once[k]);
+    if(today>target){
+      if(slots[k])slots[k]="";
+      delete once[k];
+      changed=true;
+    }
+  });
+  if(changed)saveDB();
+}
+
 function renderSched(){
   var root=document.getElementById("schedRoot");
   if(!root)return;
 
   // Migrate old per-class schedules to unified format if needed
   _schedMigrateToUnified();
+  _schedCleanupOnceSlots();
 
   var shared=DB.schedule._shared||(DB.schedule._shared={periods:[],slots:{},notes:""});
   var periods=getSharedPeriods();
@@ -294,6 +417,7 @@ function renderSched(){
   html+='</div>';
   html+='<div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">';
   html+='<button class="btn btn-success btn-sm" onclick="schedAddPeriodUnified()">＋ حصة</button>';
+  html+='<button class="btn btn-sm" onclick="schedAddTask()" style="background:linear-gradient(135deg,#374151,#4b5563);color:#e5e7eb;">📝 ＋ مهمة</button>';
   html+='<button onclick="schedToggleSpecial(\'assembly\')" style="background:'+(shared.specialPeriods&&shared.specialPeriods.assembly&&shared.specialPeriods.assembly.enabled?'linear-gradient(135deg,#065f46,#059669)':'#1e293b')+';border:1px solid '+(shared.specialPeriods&&shared.specialPeriods.assembly&&shared.specialPeriods.assembly.enabled?'#059669':'#334155')+';color:'+(shared.specialPeriods&&shared.specialPeriods.assembly&&shared.specialPeriods.assembly.enabled?'#6ee7b7':'#64748b')+';padding:3px 10px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;">🟢 طابور</button>';
   html+='<button onclick="schedToggleSpecial(\'break\')" style="background:'+(shared.specialPeriods&&shared.specialPeriods.break&&shared.specialPeriods.break.enabled?'linear-gradient(135deg,#92400e,#d97706)':'#1e293b')+';border:1px solid '+(shared.specialPeriods&&shared.specialPeriods.break&&shared.specialPeriods.break.enabled?'#d97706':'#334155')+';color:'+(shared.specialPeriods&&shared.specialPeriods.break&&shared.specialPeriods.break.enabled?'#fbbf24':'#64748b')+';padding:3px 10px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;">☕ فسحة</button>';
   html+='<button class="btn btn-teal btn-sm" onclick="switchPage(\'settings\')">⚙️ المواعيد</button>';
@@ -321,6 +445,13 @@ function renderSched(){
     var col=getClassColor(c);
     html+='<span class="sched-legend-item" style="background:'+col.bg+';color:'+col.text+';border:1px solid '+col.border+';">'+esc(c)+'</span>';
   });
+  var _tasks=getSchedTasks();
+  if(_tasks.length){
+    html+='<span style="font-size:9px;color:#475569;align-self:center;margin-right:8px;">المهام: </span>';
+    _tasks.forEach(function(t){
+      html+='<span class="sched-legend-item" style="background:#374151;color:#e5e7eb;border:1px solid #6b7280;cursor:pointer;" title="حذف المهمة" onclick="schedDelTask(\''+esc(t).replace(/'/g,"\\'")+'\')">📝 '+esc(t)+' ✕</span>';
+    });
+  }
   html+='</div>';
 
   // ── Unified grid table ──
@@ -332,7 +463,7 @@ function renderSched(){
   // Determine which days have at least one class slot filled
   function daysWithSlots(){
     var d={};
-    for(var di=0;di<6;di++){
+    for(var di=0;di<7;di++){
       var has=periods.some(function(p){return(shared.slots||{})[p.id+'_d'+di];});
       d[di]=has;
     }
@@ -436,7 +567,7 @@ function renderSched(){
       var hasCls=val.trim().length>0;
       var col=hasCls?getClassColor(val):null;
       var cellStyle=hasCls?'background:'+col.light+';':'';
-      html+='<td class="slot '+rowCls+(hasCls?" has-cls":"")+'" style="'+cellStyle+'">';
+      html+='<td class="slot '+rowCls+(hasCls?" has-cls":"")+'" style="'+cellStyle+'position:relative;">';
       // Colored select
       var selBg=hasCls?col.bg:"#0f172a";
       var selColor=hasCls?col.text:"#64748b";
@@ -450,10 +581,20 @@ function renderSched(){
         html+='<option value="'+esc(c)+'"'+(val===c?" selected":"")
           +' style="background:'+cc.bg+';color:'+cc.text+';">'+esc(c)+'</option>';
       });
-      if(val&&!DB.classes.includes(val)){
+      var _tasks=getSchedTasks();
+      if(_tasks.length){
+        _tasks.forEach(function(t){
+          html+='<option value="'+esc(t)+'"'+(val===t?" selected":"")
+            +' style="background:#374151;color:#e5e7eb;">📝 '+esc(t)+'</option>';
+        });
+      }
+      if(val&&!DB.classes.includes(val)&&_tasks.indexOf(val)<0){
         html+='<option value="'+esc(val)+'" selected style="background:#1e293b;">'+esc(val)+'</option>';
       }
       html+='</select>';
+      if(hasCls&&isSlotOnce(period.id,di)){
+        html+='<span title="مرة واحدة فقط" style="position:absolute;top:1px;left:2px;font-size:8px;line-height:1;pointer-events:none;">🔂</span>';
+      }
       html+='</td>';
     });
 
@@ -544,7 +685,19 @@ function _schedInitUnifiedPeriods(){
 }
 
 function schedSetSlotUnified(pid,di,val){
-  setUnifiedSlot(pid,di,val);
+  var isTask=val&&val.trim()&&DB.classes.indexOf(val)<0;
+  if(isTask){
+    var once=confirm('📝 "'+val+'"\n\nهل تريد تكرار هذه المهمة أسبوعياً (دائم)؟\n\n— اضغط "موافق" للتكرار كل أسبوع\n— اضغط "إلغاء" لمرة واحدة فقط (أقرب يوم قادم)');
+    if(once){
+      clearOnceFlag(pid,di);
+      setUnifiedSlot(pid,di,val);
+    }else{
+      setUnifiedSlotOnce(pid,di,val);
+    }
+  }else{
+    clearOnceFlag(pid,di);
+    setUnifiedSlot(pid,di,val);
+  }
   renderSched();
   // Refresh home page ring if it is currently visible
   var homeRoot=document.getElementById("homeRoot");
@@ -571,6 +724,7 @@ function schedDelPeriodUnified(pid){
   if(!shared)return;
   shared.periods=(shared.periods||[]).filter(function(p){return p.id!==pid;});
   Object.keys(shared.slots||{}).forEach(function(k){if(k.startsWith(pid+"_"))delete shared.slots[k];});
+  Object.keys(shared.onceSlots||{}).forEach(function(k){if(k.startsWith(pid+"_"))delete shared.onceSlots[k];});
   saveDB();renderSched();
 }
 
@@ -651,7 +805,7 @@ function _getSpecialPeriodItems(){
   // Determine which days have at least one class slot (active days)
   function getActiveDays(){
     var d=[];
-    for(var di=0;di<6;di++){
+    for(var di=0;di<7;di++){
       var has=(shared.periods||[]).some(function(p){return(shared.slots||{})[p.id+'_d'+di];});
       if(has)d.push(di);
     }
@@ -664,7 +818,7 @@ function _getSpecialPeriodItems(){
     if(!cfg||!cfg.enabled)return;
     // Determine effective days
     var days=[];
-    for(var di=0;di<6;di++){
+    for(var di=0;di<7;di++){
       var ovr=(cfg.overrides&&cfg.overrides[di])||0;
       var on=(ovr===1)||(ovr===0&&activeDays.indexOf(di)>=0);
       var off=(ovr===2);
@@ -940,7 +1094,7 @@ function renderAbsence(){
     // Only show columns where any slot has content OR all (show all for full control)
     // Actually show all period×day combos but mark scheduled ones
     var colCount=activePeriodDays.length;
-    var gridCols="170px repeat("+colCount+",minmax(36px,1fr)) 60px";
+    var gridCols="28px 36px 240px repeat("+colCount+",minmax(36px,1fr)) 60px";
 
     // Header
     html+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">';
@@ -949,6 +1103,8 @@ function renderAbsence(){
     html+='</div>';
     html+='<div class="abs-grid">';
     html+='<div class="abs-grid-hdr" style="display:grid;grid-template-columns:'+gridCols+';">';
+    html+='<div style="padding:5px 3px;text-align:center;font-size:8px;color:#475569;">م</div>';
+    html+='<div style="padding:5px 3px;text-align:center;font-size:8px;color:#475569;">📷</div>';
     html+='<div style="padding:5px 7px;border-left:none;">الطالب — أسبوع '+week+weekStartStr+'</div>';
     activePeriodDays.forEach(function(col){
       html+='<div style="font-size:8px;line-height:1.3;'+(col.isScheduled?"color:#60a5fa;font-weight:700;":"")+'">';
@@ -960,23 +1116,30 @@ function renderAbsence(){
     html+='</div>';
 
     // Student rows
-    filtered.forEach(function(s){
+    filtered.forEach(function(s,rowIdx){
       var abs=getStudentAbsences(cls,s.id);
       var weekAbsCnt=0;
       activePeriodDays.forEach(function(col){var k="w"+week+"_ci"+col._ci;if(abs[k])weekAbsCnt++;});
       var totalAbs=countStudentAbsencePeriods(cls,s.id);
 
       html+='<div class="abs-student-row" style="grid-template-columns:'+gridCols+';">';
+      html+='<div style="display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#475569;">'+(rowIdx+1)+'</div>';
+      var _photo=s.photo||(DB.meta&&DB.meta.defaultStudentPhoto?DB.meta.defaultStudentPhoto:'');
+      html+='<div style="display:flex;align-items:center;justify-content:center;padding:2px;">';
+      if(_photo){
+        html+='<img src="'+_photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid #1e3a5f;flex-shrink:0;" onerror="this.style.display=\'none\'">';
+      }else{
+        html+='<div style="width:28px;height:28px;border-radius:50%;background:#1e293b;border:1px solid #334155;display:flex;align-items:center;justify-content:center;font-size:10px;color:#475569;">👤</div>';
+      }
+      html+='</div>';
       html+='<div class="abs-student-name" title="'+esc(s.name)+'">'+esc(s.name)+'</div>';
       activePeriodDays.forEach(function(col){
         var k="w"+week+"_ci"+col._ci;
-        var absSt=abs[k]; // "abs", "sick", or undefined
+        var absSt=abs[k];
         var isAbs=absSt==="abs", isSick=absSt==="sick";
-        var cellBg=isAbs?"background:rgba(239,68,68,.3);color:#f87171;font-weight:700;"
-                  :isSick?"background:rgba(245,158,11,.25);color:#fbbf24;font-weight:700;"
-                  :col.isScheduled?"background:rgba(29,78,216,.08);color:#60a5fa;":"";
+        var cellClass="abs-period-cell"+(isAbs?" is-abs":isSick?" is-sick":col.isScheduled?" scheduled":"");
         var clickHandler=col._ci>=0?'onclick="toggleAbsence(\''+esc(cls)+'\','+s.id+','+week+','+col._ci+')"':'';
-        html+='<div class="abs-period-cell" style="'+cellBg+'" '+clickHandler+' title="'+esc(col.period.label)+" — "+DAYS_AR[col.dayIdx]+(isSick?" (مريض)":isAbs?" (غائب)":"")+'">';
+        html+='<div class="'+cellClass+'" '+clickHandler+' title="'+esc(col.period.label)+" — "+DAYS_AR[col.dayIdx]+(isSick?" (مريض)":isAbs?" (غائب)":"")+'">';
         html+=isAbs?"✗":isSick?"م":(col.isScheduled?"·":"");
         html+='</div>';
       });
