@@ -821,9 +821,10 @@ function renderDict(){
   var ph=isAttendMode
     ?'اكتب اسم الطالب الحاضر ثم Enter&#10;مثال: محمد أحمد&#10;✅ يُعلَّم الطالب فوراً كحاضر'
     :'مثال: محمد أحمد، خمسة وخمسين&#10;اسم فقط = غائب تلقائياً&#10;فاصل: ، / - | طلاب: '+esc(DS.sep)+' أو سطر جديد';
-  // عند تفعيل لوحة الأرقام: نمنع ظهور لوحة المفاتيح بـ inputmode=none
+  // لوحة المفاتيح مخفية دائماً إلا عند الضغط على زر ⌨️
   var _npActive=DS.dictNumpad;
-  var _taExtra=_npActive?' inputmode="none"':'';
+  // inputmode=none دائماً — يُزال فقط عند تفعيل DS.dictKbOpen عبر _dictToggleKB()
+  var _taExtra=DS.dictKbOpen?'':' inputmode="none"';
   html+='<div style="display:flex;gap:6px;align-items:flex-start;">';
   html+='<textarea id="dInput" class="dict-input" rows="3" placeholder="'+ph+'"'+_taExtra+' onkeydown="dOnKey(event)" style="flex:1;min-width:0;"></textarea>';
   // أزرار جانبية — دائماً ظاهرة
@@ -1192,9 +1193,9 @@ function _dictToggleKB(){
     }
     if(kbBtn){kbBtn.style.background='#1d4ed8';kbBtn.style.borderColor='#3b82f6';kbBtn.style.color='#fff';}
   } else {
-    // أغلق لوحة المفاتيح
+    // أغلق لوحة المفاتيح — أعد inputmode=none دائماً
     if(dInp){
-      if(DS.dictNumpad) dInp.setAttribute('inputmode','none');
+      dInp.setAttribute('inputmode','none');
       dInp.blur();
     }
     if(kbBtn){kbBtn.style.background='#0f172a';kbBtn.style.borderColor='#1e3a5f';kbBtn.style.color='#64748b';}
@@ -1248,18 +1249,33 @@ function _dnBackspace(){
 function _dnConfirm(){
   var raw=(DS.dnInput||"").trim();
   if(!raw)return;
-  var el=_dnGetInput();
-  if(el)el.value=raw;
-  dOnKey({key:"Enter",preventDefault:function(){},target:el||{value:raw}});
+  // تحقق من تحديد العمود (في وضع الغياب)
+  if(!DS.nameOnly&&!DS.selectedCol){showSnack("⚠ اختر العمود المستهدف أولاً");return;}
+  var pool=dPool();
+  var results=DS.nameOnly?dNameOnlyProcess(raw):dProcess(raw);
+  var ok=results.filter(function(r){return r.status==="ok"||r.status==="weak";}).length;
+  var fail=results.filter(function(r){return r.status==="unmatched"||r.status==="error";}).length;
+  var box=document.getElementById("dStatusBox");
+  if(box){
+    if(ok){box.className="status-box sb-ok";box.innerHTML='<span>✅</span><span>رُصد '+ok+'</span>';box.style.display="";}
+    else if(fail){box.className="status-box sb-err";box.innerHTML='<span>❌</span><span>لم يُعرف الطالب</span>';box.style.display="";}
+  }
+  // مسح الإدخال
+  var el=_dnGetInput();if(el)el.value="";
   DS.dnInput="";
   renderDict();
 }
 function _dnMarkAbsent(){
   var raw=(DS.dnInput||"").trim();
   if(!raw){showSnack("⚠ اكتب رقم الطالب أولاً");return;}
-  var el=_dnGetInput();
-  if(el)el.value=raw;
-  dOnKey({key:"Enter",preventDefault:function(){},target:el||{value:raw}});
+  if(!DS.nameOnly&&!DS.selectedCol){showSnack("⚠ اختر العمود المستهدف أولاً");return;}
+  // أضف علامة الغياب للمدخل
+  var absentRaw=raw+" غ";
+  var results=DS.nameOnly?dNameOnlyProcess(absentRaw):dProcess(absentRaw);
+  var ok=results.filter(function(r){return r.status==="ok"||r.status==="weak";}).length;
+  var box=document.getElementById("dStatusBox");
+  if(box&&ok){box.className="status-box sb-warn";box.innerHTML='<span>غ</span><span>غياب رُصد '+ok+'</span>';box.style.display="";}
+  var el=_dnGetInput();if(el)el.value="";
   DS.dnInput="";
   renderDict();
 }
