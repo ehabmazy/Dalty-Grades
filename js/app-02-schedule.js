@@ -407,6 +407,9 @@ function _schedCleanupOnceSlots(){
 function renderSched(){
   var root=document.getElementById("schedRoot");
   if(!root)return;
+  // حفظ موضع التمرير قبل إعادة البناء
+  var _sb=root.querySelector('.sched-body');
+  window._schedBodyScroll=_sb?_sb.scrollTop:0;
 
   // Migrate old per-class schedules to unified format if needed
   _schedMigrateToUnified();
@@ -667,11 +670,16 @@ function renderSched(){
   html+='</div>';
 
   html+='</div></div>';
+  var _schedBody=root.querySelector('.sched-body');
+  var _schedScroll=_schedBody?_schedBody.scrollTop:0;
   var _absBody=root.querySelector('.abs-body');
-  var _scrollTop=_absBody?_absBody.scrollTop:0;
+  var _absScroll=_absBody?_absBody.scrollTop:0;
   root.innerHTML=html;
-  var _newBody=root.querySelector('.abs-body');
-  if(_newBody&&_scrollTop)_newBody.scrollTop=_scrollTop;
+  // استعادة موضع التمرير
+  requestAnimationFrame(function(){
+    var _nb=root.querySelector('.sched-body');
+    if(_nb&&window._schedBodyScroll)_nb.scrollTop=window._schedBodyScroll;
+  });
 }
 
 // ── Unified schedule helpers ──────────────────────────
@@ -896,14 +904,17 @@ function schedTimeDropOpen(pid){
   var top=rect.bottom+4;
   var left=rect.left;
   // Keep within viewport
-  var portalW=Math.max(170,rect.width);
-  if(left+portalW>window.innerWidth-8) left=window.innerWidth-portalW-8;
-  if(left<4) left=4;
+  // عرض القائمة يتكيف مع المحتوى تلقائياً
   portal.style.top=top+'px';
   portal.style.left=left+'px';
   portal.style.right='unset';
-  portal.style.minWidth=portalW+'px';
+  portal.style.minWidth='0';
+  portal.style.width='max-content';
   portal.style.display='block';
+  // تصحيح إذا خرجت عن الشاشة
+  var portalRect=portal.getBoundingClientRect();
+  if(portalRect.right>window.innerWidth-8) portal.style.left=(window.innerWidth-portalRect.width-8)+'px';
+  if(parseFloat(portal.style.left)<4) portal.style.left='4px';
   portal._pid=pid;
 }
 function schedTimeDropClose(pid){
@@ -1188,11 +1199,11 @@ function renderAbsence(){
   html+='</div>';
 
   html+='</div></div>';
-  var _absBody=root.querySelector('.abs-body');
-  var _scrollTop=_absBody?_absBody.scrollTop:0;
   root.innerHTML=html;
-  var _newBody=root.querySelector('.abs-body');
-  if(_newBody&&_scrollTop)_newBody.scrollTop=_scrollTop;
+  requestAnimationFrame(function(){
+    var _nb2=root.querySelector('.sched-body');
+    if(_nb2&&window._schedBodyScroll)_nb2.scrollTop=window._schedBodyScroll;
+  });
 }
 
 function absExport(){

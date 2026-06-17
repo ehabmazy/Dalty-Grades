@@ -2465,9 +2465,9 @@ function _buildHomeNavCards(){
     st.id = '_hncCSS';
     st.textContent =
       '.hnc-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;'+
-        'background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);'+
+        'background:transparent;border:none;'+
         'border-radius:13px;padding:11px 4px 9px;cursor:pointer;font-family:inherit;'+
-        'transition:background .15s,border-color .15s,transform .1s;}'+
+        'transition:background .15s,transform .1s;}'+
       '.hnc-btn:active{transform:scale(.93);background:rgba(29,78,216,.2);}'+
       '.hnc-btn.hnc-active{background:rgba(29,78,216,.2);border-color:rgba(96,165,250,.4);}'+
       '.hnc-icon{font-size:22px;line-height:1;position:relative;display:block;}'+
