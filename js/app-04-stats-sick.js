@@ -209,6 +209,10 @@ function sickExport(){
 
 var DS={dictDate:"",
   dictNumpad:false,
+  dictKbOpen:false,
+  dictMicOn:false,
+  addMicOn:false,
+  addKbOpen:false,
   dnStudent:null,
   dnStudentIdx:-1,
   dnInput:"",
@@ -706,6 +710,11 @@ function dAddNewStudents(){
 function renderDict(){
   var root=document.getElementById("dictRoot");
   if(!root)return;
+  // إيقاف الميكروفون عند مغادرة الصفحة
+  if(!root.offsetParent&&DS.dictMicOn){
+    if(_dictRecognition){try{_dictRecognition.stop();}catch(e){}}
+    _dictRecognition=null; DS.dictMicOn=false;
+  }
   if(!DS.activeClass&&DB.classes.length)DS.activeClass=DB.classes[0];
   var cls=DS.activeClass;
   // ── تحديث أزرار الشريط العلوي ──
@@ -721,21 +730,7 @@ function renderDict(){
       addBtn.style.background=DS.addStudentMode?"#0e7490":"#0e7490";
       addBtn.style.outline=DS.addStudentMode?"2px solid #38bdf8":"none";
     }
-    var npBtn=document.getElementById("tbDictNumpadBtn");
-    if(!npBtn){
-      // أنشئ الزر إن لم يكن موجوداً
-      var tbDict=document.getElementById("tbDictBtns");
-      if(tbDict){
-        npBtn=document.createElement("button");
-        npBtn.id="tbDictNumpadBtn";
-        npBtn.title="لوحة الأرقام";
-        npBtn.innerHTML="🔢";
-        npBtn.style.cssText="background:transparent;border:1px solid #1e3a5f;color:#64748b;border-radius:8px;padding:4px 9px;cursor:pointer;font-size:13px;font-family:inherit;transition:all .15s;";
-        npBtn.onclick=function(){DS.dictNumpad=!DS.dictNumpad;if(DS.dictNumpad&&!DS.dnStudent){var _s=dClsStudents(DS.activeClass);if(_s.length){DS.dnStudent=_s[0];DS.dnStudentIdx=0;}}renderDict();};
-        tbDict.appendChild(npBtn);
-      }
-    }
-    if(npBtn){npBtn.style.background=DS.dictNumpad?"#1d4ed8":"transparent";npBtn.style.color=DS.dictNumpad?"white":"#64748b";npBtn.style.borderColor=DS.dictNumpad?"#3b82f6":"#1e3a5f";}
+    // زر لوحة الأرقام انتقل بجانب حقل الإدخال
   })();
   var sts=dClsStudents(cls);
   var now=Date.now();
@@ -774,7 +769,10 @@ function renderDict(){
     html+='<textarea id="dNewStuArea" rows="4" placeholder="مثال: محمد أحمد التالي علي حسن التالي عمر خالد&#10;أو اكتب كل اسم في سطر جديد" style="width:100%;background:#0f172a;border:1.5px solid #0e7490;color:#f1f5f9;padding:7px 10px;border-radius:7px;font-size:12px;outline:none;font-family:inherit;resize:vertical;margin-bottom:7px;"></textarea>';
     html+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
     html+='<button class="btn btn-sm" style="background:#0e7490;color:white;padding:5px 16px;" onclick="DS.addSep=document.getElementById(\'dAddSepInp\').value.trim()||\' التالي\';dAddNewStudents()">✅ إضافة الكل</button>';
-    html+='<button class="btn btn-ghost btn-sm" onclick="DS.addStudentMode=false;renderDict();">✕ إلغاء</button>';
+    html+='<button class="btn btn-ghost btn-sm" onclick="_dPasteStudents()" title="لصق من الحافظة">📋 لصق</button>';
+    html+='<button class="btn btn-ghost btn-sm" onclick="_dAddToggleMic()" id="dAddMicBtn" title="إدخال صوتي">'+(DS.addMicOn?'🔴':'🎤')+'</button>';
+    html+='<button class="btn btn-ghost btn-sm" onclick="_dAddToggleKB()" id="dAddKbBtn" title="لوحة المفاتيح" style="background:'+(DS.addKbOpen?'#1d4ed8':'')+';">⌨️</button>';
+    html+='<button class="btn btn-ghost btn-sm" onclick="DS.addStudentMode=false;DS.addMicOn=false;DS.addKbOpen=false;if(_addRecognition){try{_addRecognition.stop();}catch(e){}_addRecognition=null;}renderDict();">✕ إلغاء</button>';
     html+='<span style="font-size:8.5px;color:#64748b;">💡 افصل الأسماء بكلمة الفاصل أو بسطر جديد</span>';
     html+='</div></div>';
   }
@@ -823,7 +821,22 @@ function renderDict(){
   var ph=isAttendMode
     ?'اكتب اسم الطالب الحاضر ثم Enter&#10;مثال: محمد أحمد&#10;✅ يُعلَّم الطالب فوراً كحاضر'
     :'مثال: محمد أحمد، خمسة وخمسين&#10;اسم فقط = غائب تلقائياً&#10;فاصل: ، / - | طلاب: '+esc(DS.sep)+' أو سطر جديد';
-  html+='<textarea id="dInput" class="dict-input" rows="3" placeholder="'+ph+'" onkeydown="dOnKey(event)"></textarea>';
+  // لوحة المفاتيح مخفية دائماً إلا عند الضغط على زر ⌨️
+  var _npActive=DS.dictNumpad;
+  // inputmode=none دائماً — يُزال فقط عند تفعيل DS.dictKbOpen عبر _dictToggleKB()
+  var _taExtra=DS.dictKbOpen?'':' inputmode="none"';
+  html+='<div style="display:flex;gap:6px;align-items:flex-start;">';
+  html+='<textarea id="dInput" class="dict-input" rows="3" placeholder="'+ph+'"'+_taExtra+' onkeydown="dOnKey(event)" style="flex:1;min-width:0;"></textarea>';
+  // أزرار جانبية — دائماً ظاهرة
+  html+='<div style="flex-shrink:0;display:flex;flex-direction:column;gap:5px;align-self:flex-start;margin-top:2px;">';
+  // زر لوحة الأرقام 🔢
+  html+='<button onclick="DS.dictNumpad=!DS.dictNumpad;if(!DS.dictNumpad)DS.dictKbOpen=false;if(DS.dictNumpad&&!DS.dnStudent){var _s=dClsStudents(DS.activeClass);if(_s.length){DS.dnStudent=_s[0];DS.dnStudentIdx=0;}}renderDict();" title="لوحة الأرقام" style="background:'+(_npActive?'#1d4ed8':'#0f172a')+';border:1.5px solid '+(_npActive?'#3b82f6':'#1e3a5f')+';color:'+(_npActive?'#fff':'#64748b')+';border-radius:8px;padding:7px 10px;cursor:pointer;font-size:16px;line-height:1;touch-action:manipulation;">🔢</button>';
+  // زر لوحة المفاتيح ⌨️ — دائماً ظاهر
+  html+='<button onclick="_dictToggleKB()" id="dictKbBtn" title="إظهار لوحة المفاتيح" style="background:'+(DS.dictKbOpen?'#1d4ed8':'#0f172a')+';border:1.5px solid '+(DS.dictKbOpen?'#3b82f6':'#1e3a5f')+';color:'+(DS.dictKbOpen?'#fff':'#64748b')+';border-radius:8px;padding:7px 10px;cursor:pointer;font-size:16px;line-height:1;touch-action:manipulation;">⌨️</button>';
+  // زر الميكروفون 🎤
+  html+='<button onclick="_dictToggleMic()" id="dictMicBtn" title="إدخال صوتي" style="background:'+(DS.dictMicOn?'#dc2626':'#0f172a')+';border:1.5px solid '+(DS.dictMicOn?'#f87171':'#1e3a5f')+';color:'+(DS.dictMicOn?'#fff':'#64748b')+';border-radius:8px;padding:7px 10px;cursor:pointer;font-size:16px;line-height:1;touch-action:manipulation;">'+(DS.dictMicOn?'🔴':'🎤')+'</button>';
+  html+='</div>';
+  html+='</div>';
   html+='</div>';
 
   // ── صندوق الحالة ──
@@ -923,7 +936,7 @@ function renderDict(){
     html+='<div id="dnDragBar" style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;background:rgba(30,74,138,.3);border-bottom:1px solid #1e3a5f;cursor:grab;touch-action:none;">';
     html+='<span style="font-size:11px;font-weight:900;color:#60a5fa;">⠿ 🔢 لوحة الأرقام</span>';
     html+='<span style="font-size:9px;color:#64748b;">رقم ثم مسافة ثم درجة</span>';
-    html+='<button onclick="DS.dictNumpad=false;renderDict();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;line-height:1;padding:2px 5px;touch-action:manipulation;">✕</button>';
+    html+='<button onclick="DS.dictNumpad=false;DS.dictKbOpen=false;renderDict();" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;line-height:1;padding:2px 5px;touch-action:manipulation;">✕</button>';
     html+='</div>';
     /* شاشة العرض */
     html+='<div style="padding:8px 12px 6px;">';
@@ -1008,7 +1021,185 @@ function renderDict(){
 
   // Attach events
   var dInp=document.getElementById("dInput");
-  if(dInp){dInp.focus();} // keydown handled inline via onkeydown
+  if(dInp){
+    if(!DS.dictNumpad){
+      // وضع عادي — فعّل التركيز مباشرة
+      dInp.focus();
+    } else if(DS.dictKbOpen){
+      // لوحة المفاتيح مفتوحة بالزر — أزل readonly وفعّل
+      dInp.removeAttribute('inputmode');
+      dInp.removeAttribute('readonly');
+      dInp.focus();
+    }
+    // وضع لوحة الأرقام بدون فتح KB: لا نفعّل focus لمنع ظهور لوحة المفاتيح
+  }
+}
+
+// ── لصق في حقل إضافة الطلاب ──
+function _dPasteStudents(){
+  var area=document.getElementById('dNewStuArea');
+  if(!area){showSnack('⚠️ افتح لوحة إضافة الطلاب أولاً');return;}
+  if(navigator.clipboard&&navigator.clipboard.readText){
+    navigator.clipboard.readText().then(function(txt){
+      area.value=(area.value?area.value+'\n':'')+txt.trim();
+      area.focus();
+      showSnack('✅ تم اللصق');
+    }).catch(function(){
+      area.focus();
+      document.execCommand('paste');
+      showSnack('📋 استخدم Ctrl+V للصق');
+    });
+  } else {
+    area.focus();
+    document.execCommand('paste');
+  }
+}
+
+
+// ── ميكروفون ولوحة مفاتيح حقل إضافة الطلاب ──
+var _addRecognition=null;
+function _dAddToggleMic(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){showSnack('⚠️ المتصفح لا يدعم الإدخال الصوتي');return;}
+  if(DS.addMicOn){
+    if(_addRecognition){try{_addRecognition.stop();}catch(e){}}
+    _addRecognition=null; DS.addMicOn=false;
+    var btn=document.getElementById('dAddMicBtn');
+    if(btn){btn.innerHTML='🎤';btn.style.color='';}
+    return;
+  }
+  var rec=new SR();
+  rec.lang='ar-SA'; rec.continuous=true; rec.interimResults=false;
+  rec.onstart=function(){
+    DS.addMicOn=true;
+    var btn=document.getElementById('dAddMicBtn');
+    if(btn){btn.innerHTML='🔴';btn.style.color='#ef4444';}
+  };
+  rec.onresult=function(e){
+    var txt=e.results[e.results.length-1][0].transcript.trim();
+    if(!txt)return;
+    var area=document.getElementById('dNewStuArea');
+    if(area) area.value=(area.value?area.value+'\n':'')+txt;
+  };
+  rec.onerror=function(e){
+    showSnack('⚠️ خطأ: '+e.error);
+    DS.addMicOn=false;
+    var btn=document.getElementById('dAddMicBtn');
+    if(btn){btn.innerHTML='🎤';btn.style.color='';}
+  };
+  rec.onend=function(){
+    if(DS.addMicOn){try{rec.start();}catch(e){DS.addMicOn=false;}}
+  };
+  try{rec.start();_addRecognition=rec;}catch(e){showSnack('⚠️ تعذر تشغيل الميكروفون');}
+}
+
+function _dAddToggleKB(){
+  DS.addKbOpen=!DS.addKbOpen;
+  var area=document.getElementById('dNewStuArea');
+  var btn=document.getElementById('dAddKbBtn');
+  if(DS.addKbOpen){
+    if(area){area.removeAttribute('inputmode');area.focus();}
+    if(btn){btn.style.background='#1d4ed8';btn.style.color='#fff';}
+  } else {
+    if(area){area.blur();}
+    if(btn){btn.style.background='';btn.style.color='';}
+  }
+}
+
+
+// ── إدخال صوتي (Web Speech API) ──
+var _dictRecognition=null;
+function _dictToggleMic(){
+  // تحقق من دعم المتصفح
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ showSnack('⚠️ المتصفح لا يدعم الإدخال الصوتي'); return; }
+
+  if(DS.dictMicOn){
+    // إيقاف التسجيل
+    if(_dictRecognition){ try{_dictRecognition.stop();}catch(e){} }
+    _dictRecognition=null;
+    DS.dictMicOn=false;
+    _dictMicUpdateBtn();
+    return;
+  }
+
+  // بدء التسجيل
+  var rec=new SR();
+  rec.lang='ar-SA';
+  rec.continuous=true;
+  rec.interimResults=false;
+  rec.maxAlternatives=1;
+
+  rec.onstart=function(){
+    DS.dictMicOn=true;
+    _dictMicUpdateBtn();
+  };
+
+  rec.onresult=function(e){
+    var transcript=e.results[e.results.length-1][0].transcript.trim();
+    if(!transcript) return;
+    // أضف النص لحقل الإدخال
+    var inp=document.getElementById('dInput');
+    if(inp){
+      inp.value=(inp.value?inp.value+'\n':'')+transcript;
+      // شغّل حدث الإدخال لمعالجة النص
+      var ev=new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true});
+      inp.dispatchEvent(ev);
+    }
+  };
+
+  rec.onerror=function(e){
+    showSnack('⚠️ خطأ في الميكروفون: '+e.error);
+    DS.dictMicOn=false;
+    _dictMicUpdateBtn();
+  };
+
+  rec.onend=function(){
+    // أعد التشغيل تلقائياً إذا لا يزال مفعّلاً
+    if(DS.dictMicOn){
+      try{ rec.start(); }catch(e){ DS.dictMicOn=false; _dictMicUpdateBtn(); }
+    }
+  };
+
+  try{
+    rec.start();
+    _dictRecognition=rec;
+  }catch(e){
+    showSnack('⚠️ تعذر تشغيل الميكروفون');
+    DS.dictMicOn=false;
+  }
+}
+
+function _dictMicUpdateBtn(){
+  var btn=document.getElementById('dictMicBtn');
+  if(!btn) return;
+  btn.innerHTML=DS.dictMicOn?'🔴':'🎤';
+  btn.style.background=DS.dictMicOn?'#dc2626':'#0f172a';
+  btn.style.borderColor=DS.dictMicOn?'#f87171':'#1e3a5f';
+  btn.style.color=DS.dictMicOn?'#fff':'#64748b';
+}
+
+// دالة تبديل لوحة المفاتيح عند تفعيل لوحة الأرقام
+function _dictToggleKB(){
+  DS.dictKbOpen=!DS.dictKbOpen;
+  var dInp=document.getElementById("dInput");
+  var kbBtn=document.getElementById("dictKbBtn");
+  if(DS.dictKbOpen){
+    // افتح لوحة المفاتيح — أزل inputmode=none سواء كانت لوحة الأرقام مفعلة أم لا
+    if(dInp){
+      dInp.removeAttribute('inputmode');
+      dInp.removeAttribute('readonly');
+      dInp.focus();
+    }
+    if(kbBtn){kbBtn.style.background='#1d4ed8';kbBtn.style.borderColor='#3b82f6';kbBtn.style.color='#fff';}
+  } else {
+    // أغلق لوحة المفاتيح — أعد inputmode=none دائماً
+    if(dInp){
+      dInp.setAttribute('inputmode','none');
+      dInp.blur();
+    }
+    if(kbBtn){kbBtn.style.background='#0f172a';kbBtn.style.borderColor='#1e3a5f';kbBtn.style.color='#64748b';}
+  }
 }
 
 
@@ -1058,18 +1249,37 @@ function _dnBackspace(){
 function _dnConfirm(){
   var raw=(DS.dnInput||"").trim();
   if(!raw)return;
-  var el=_dnGetInput();
-  if(el)el.value=raw;
-  dOnKey({key:"Enter",preventDefault:function(){},target:el||{value:raw}});
+  // تحقق من تحديد العمود (في وضع الغياب)
+  if(!DS.nameOnly&&!DS.selectedCol){showSnack("⚠ اختر العمود المستهدف أولاً");return;}
+  // إذا كان الإدخال رقماً فقط بدون درجة (لا توجد مسافة) → غائب تلقائياً
+  if(!DS.nameOnly&&/^\d+$/.test(raw)){
+    raw=raw+" غ";
+  }
+  var pool=dPool();
+  var results=DS.nameOnly?dNameOnlyProcess(raw):dProcess(raw);
+  var ok=results.filter(function(r){return r.status==="ok"||r.status==="weak";}).length;
+  var fail=results.filter(function(r){return r.status==="unmatched"||r.status==="error";}).length;
+  var box=document.getElementById("dStatusBox");
+  if(box){
+    if(ok){box.className="status-box sb-ok";box.innerHTML='<span>✅</span><span>رُصد '+ok+'</span>';box.style.display="";}
+    else if(fail){box.className="status-box sb-err";box.innerHTML='<span>❌</span><span>لم يُعرف الطالب</span>';box.style.display="";}
+  }
+  // مسح الإدخال
+  var el=_dnGetInput();if(el)el.value="";
   DS.dnInput="";
   renderDict();
 }
 function _dnMarkAbsent(){
   var raw=(DS.dnInput||"").trim();
   if(!raw){showSnack("⚠ اكتب رقم الطالب أولاً");return;}
-  var el=_dnGetInput();
-  if(el)el.value=raw;
-  dOnKey({key:"Enter",preventDefault:function(){},target:el||{value:raw}});
+  if(!DS.nameOnly&&!DS.selectedCol){showSnack("⚠ اختر العمود المستهدف أولاً");return;}
+  // أضف علامة الغياب للمدخل
+  var absentRaw=raw+" غ";
+  var results=DS.nameOnly?dNameOnlyProcess(absentRaw):dProcess(absentRaw);
+  var ok=results.filter(function(r){return r.status==="ok"||r.status==="weak";}).length;
+  var box=document.getElementById("dStatusBox");
+  if(box&&ok){box.className="status-box sb-warn";box.innerHTML='<span>غ</span><span>غياب رُصد '+ok+'</span>';box.style.display="";}
+  var el=_dnGetInput();if(el)el.value="";
   DS.dnInput="";
   renderDict();
 }

@@ -1910,8 +1910,42 @@ function _homeTick(){
     if(ringNextRow)ringNextRow.style.display='none';
   }
 
+  // ── حقن CSS الكروت مرة واحدة ───────────────────────────
+  if(!document.getElementById('_hpcCSS')){
+    var _hpcSt=document.createElement('style');
+    _hpcSt.id='_hpcCSS';
+    _hpcSt.textContent=
+      // أنيميشن الإطار المضيء
+      '@keyframes hpcGlow{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,0),0 0 8px rgba(56,189,248,.25);}50%{box-shadow:0 0 0 3px rgba(56,189,248,.3),0 0 20px rgba(56,189,248,.5);}}'
+      +'@keyframes hpcBorder{0%,100%{border-color:#38bdf8;}50%{border-color:#93c5fd;}}'
+      +'@keyframes hpcDot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.65);}}'
+      // البطاقة الأساسية
+      +'.home-period-card{flex-shrink:0;border-radius:14px;padding:10px 12px;border:1.5px solid #1e3a5f;background:#0d1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:80px;cursor:pointer;transition:opacity .3s;}'
+      // الفترة الجارية — إطار مضيء + خط أكبر
+      +'.hpc-active{border:2px solid #38bdf8!important;background:rgba(56,189,248,.1)!important;animation:hpcGlow 2s ease-in-out infinite,hpcBorder 2s ease-in-out infinite;min-width:120px!important;padding:12px 16px!important;}'
+      // الفترة المنتظرة (التالية)
+      +'.hpc-next{border-color:#fbbf24!important;background:rgba(251,191,36,.07)!important;}'
+      // رقم الفترة (ف 6) — ثانوي أصغر
+      +'.hpc-name{font-weight:600;color:#64748b;line-height:1.1;font-size:10px;}'
+      +'.hpc-active .hpc-name{font-size:12px!important;color:#7dd3fc!important;}'
+      +'.hpc-next .hpc-name{font-size:10px;color:#fbbf2499;}'
+      +'.home-period-card:not(.hpc-active):not(.hpc-next) .hpc-name{font-size:9px;color:#475569;}'
+      // اسم الفصل — رئيسي وأبرز
+      +'.hpc-class{font-size:15px;font-weight:900;color:#f1f5f9;margin-top:2px;line-height:1.2;}'
+      +'.hpc-active .hpc-class{font-size:22px!important;color:#e0f2fe!important;margin-top:3px;}'
+      +'.hpc-next .hpc-class{font-size:16px!important;color:#fde68a!important;}'
+      // badge الحالة
+      +'.hpc-badge{font-size:8px;font-weight:800;border-radius:7px;padding:2px 7px;margin-bottom:5px;}'
+      +'.hpc-badge-now{background:rgba(56,189,248,.2);color:#38bdf8;border:1px solid #38bdf844;}'
+      +'.hpc-badge-next{background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid #fbbf2440;}'
+      // النقطة الوامضة
+      +'.hpc-dot{width:7px;height:7px;border-radius:50%;margin:0 auto 4px;}'
+      +'.hpc-dot-now{background:#38bdf8;animation:hpcDot 1.2s ease-in-out infinite;box-shadow:0 0 5px #38bdf8;}'
+      +'.hpc-dot-next{background:#fbbf24;}';
+    document.head.appendChild(_hpcSt);
+  }
+
   // Period cards
-  var EMOJIS=['📐','📚','🔬','🎨','📖','✏️','🧮','🌍'];
   var cardsEl=el('h-cards-scroll');
   if(cardsEl){
     var cardsHtml='';
@@ -1919,28 +1953,50 @@ function _homeTick(){
       cardsHtml='<div style="color:#334155;padding:16px;font-size:11px;white-space:nowrap;">أضف فترات من الجدول</div>';
     } else {
       var shown=[];
+      // الترتيب المنطقي: جارية أولاً، ثم التالية، ثم الباقي
       if(cur)shown.push({type:'cur',data:cur,item:cur.item});
-      upcoming.slice(0,5).forEach(function(u){shown.push({type:'up',data:u,item:u.item});});
+      upcoming.filter(function(u){return u.daysAhead===0&&u.item.cls&&u.item.cls.trim();}).slice(0,4).forEach(function(u){shown.push({type:'up',data:u,item:u.item});});
+      var nextIdx=cur?1:0;
       shown.forEach(function(s,idx){
         var isCur=s.type==='cur';
-        var isNext=!isCur&&idx===(cur?1:0);
+        var isNext=!isCur&&idx===nextIdx;
         var isAssembly=s.item.isSpecial&&s.item.specialType==='assembly';
         var isBreak=s.item.isSpecial&&s.item.specialType==='break';
+
+        // إخفاء أي فترة بدون فصل مخصص تمامًا
+        if(!isCur&&(!s.item.cls||!s.item.cls.trim()))return;
+
         var cardCls='home-period-card'+(isCur?' hpc-active':isNext?' hpc-next':'');
-        var extraStyle='';
-        if(isAssembly)extraStyle='border-color:#059669!important;background:rgba(16,185,129,.1)!important;';
-        if(isBreak)extraStyle='border-color:#d97706!important;background:rgba(251,191,36,.07)!important;';
-        var emoji=isAssembly?'🟢':isBreak?'☕':EMOJIS[idx%EMOJIS.length];
-        var perIdx=all.indexOf(s.item);var perNum=perIdx>=0?perIdx+1:(parseInt((s.item.per.id||'').replace(/\D/g,''))||0);var whenTxt=perNum?('ف '+perNum):esc(s.item.per.label||'');
+        var assemblyStyle=isAssembly?'border-color:#059669!important;background:rgba(16,185,129,.1)!important;':'';
+        var breakStyle=isBreak?'border-color:#d97706!important;background:rgba(251,191,36,.07)!important;':'';
+        var extraStyle=assemblyStyle||breakStyle;
+
+        var perIdx=all.indexOf(s.item);
+        var perNum=perIdx>=0?perIdx+1:(parseInt((s.item.per.id||'').replace(/\D/g,''))||0);
+        var whenTxt=perNum?('ف '+perNum):esc(s.item.per.label||'');
+        var clsTxt=s.item.cls||'';
         var nameColor=isAssembly?'#34d399':isBreak?'#fbbf24':'';
-        cardsHtml+='<div class="'+cardCls+'" style="'+extraStyle+'">'
-          +'<div class="hpc-name" style="font-size:13px;font-weight:900;'+(nameColor?'color:'+nameColor+';':'')+'">'+whenTxt+'</div>'
-          +'<div class="hpc-class" style="'+(nameColor?'color:'+nameColor+'88;':'')+'">'+esc(s.item.cls)+'</div>'
+
+        var badgeHtml='';
+        var dotHtml='';
+        if(isCur){
+          badgeHtml='<div class="hpc-badge hpc-badge-now">🟢 جارية الآن</div>';
+          dotHtml='<div class="hpc-dot hpc-dot-now"></div>';
+        } else if(isNext){
+          badgeHtml='<div class="hpc-badge hpc-badge-next">⏰ التالية</div>';
+          dotHtml='<div class="hpc-dot hpc-dot-next"></div>';
+        }
+
+        cardsHtml+='<div class="'+cardCls+'" style="'+extraStyle+'" onclick="switchPage(\'sched\')">'
+          +badgeHtml
+          +dotHtml
+          +'<div class="hpc-name" style="'+(nameColor?'color:'+nameColor+';':'')+'">'+whenTxt+'</div>'
+          +'<div class="hpc-class" style="'+(nameColor?'color:'+nameColor+'88;':'')+'">'+esc(clsTxt)+'</div>'
           +'</div>';
       });
     }
     cardsEl.innerHTML=cardsHtml;
-    cardsEl.style.display=cardsHtml?'flex':'none';
+    cardsEl.style.display='flex'; // مرئي الآن
   }
   // Update upcoming strip (only once per minute to avoid flicker)
   if(_homeTickCount%60===0||_homeTickCount===1){
@@ -2136,47 +2192,110 @@ function closeCurricPopup(){
   if(ov)ov.remove();
 }
 
-function _buildUpcomingStrip(){
+function _buildUpcomingStrip(){ return ""; // مُعطَّل — الكروت تظهر في h-cards-scroll
+  // ── حقن CSS الأنيميشن مرة واحدة ──────────────────────
+  if(!document.getElementById('_upcomingStripCSS')){
+    var st=document.createElement('style');
+    st.id='_upcomingStripCSS';
+    st.textContent=
+      '@keyframes chipGlow{0%,100%{box-shadow:0 0 0 0 rgba(56,189,248,.0),0 0 10px rgba(56,189,248,.3);}50%{box-shadow:0 0 0 3px rgba(56,189,248,.35),0 0 22px rgba(56,189,248,.55);}}'
+      +'@keyframes chipBorderPulse{0%,100%{border-color:#38bdf8;}50%{border-color:#7dd3fc;}}'
+      +'@keyframes dotBlink{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.7);}}'
+      +'.home-upcoming-strip{position:fixed;bottom:60px;right:0;left:0;z-index:120;background:linear-gradient(to top,rgba(10,15,30,.98) 80%,rgba(10,15,30,0));padding:10px 14px 8px;direction:rtl;}'
+      +'.home-upcoming-inner{display:flex;align-items:stretch;gap:7px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px;}'
+      +'.home-upcoming-inner::-webkit-scrollbar{display:none;}'
+      +'.home-upcoming-lbl{font-size:10px;font-weight:800;color:#475569;white-space:nowrap;align-self:center;flex-shrink:0;padding-left:4px;}'
+      /* بطاقة عادية (منتهية) — مخفية */
+      +'.home-cls-chip{display:none!important;}'
+      /* الفترة الجارية */
+      +'.home-cls-chip.chip-now{display:flex!important;flex-direction:column;align-items:center;justify-content:center;min-width:130px;padding:10px 14px;background:rgba(56,189,248,.13);border:2px solid #38bdf8;border-radius:16px;cursor:pointer;text-align:center;animation:chipGlow 2s ease-in-out infinite,chipBorderPulse 2s ease-in-out infinite;position:relative;overflow:hidden;}'
+      +'.home-cls-chip.chip-now::before{content:"";position:absolute;inset:0;border-radius:14px;background:linear-gradient(135deg,rgba(56,189,248,.08),rgba(99,102,241,.05));pointer-events:none;}'
+      /* الفترة التالية / المنتظرة */
+      +'.home-cls-chip.chip-next{display:flex!important;flex-direction:column;align-items:center;justify-content:center;min-width:100px;padding:8px 12px;background:rgba(251,191,36,.08);border:1.5px solid rgba(251,191,36,.4);border-radius:14px;cursor:pointer;text-align:center;}'
+      /* نقطة الحالة */
+      +'.chip-dot{width:8px;height:8px;border-radius:50%;margin-bottom:5px;flex-shrink:0;}'
+      +'.chip-dot-now{background:#38bdf8;animation:dotBlink 1.2s ease-in-out infinite;box-shadow:0 0 6px #38bdf8;}'
+      +'.chip-dot-next{background:#fbbf24;}'
+      /* اسم الفصل */
+      +'.chip-cls-name-now{font-size:20px!important;font-weight:900;color:#f1f5f9;letter-spacing:.5px;line-height:1.1;}'
+      +'.chip-cls-name-next{font-size:15px;font-weight:700;color:#e2e8f0;}'
+      /* التوقيت */
+      +'.chip-time-now{font-size:11px;color:#7dd3fc;font-weight:700;margin-top:3px;}'
+      +'.chip-time-next{font-size:10px;color:#fbbf2488;margin-top:3px;}'
+      /* badge حالة */
+      +'.chip-badge{font-size:9px;border-radius:8px;padding:2px 8px;font-weight:800;margin-bottom:4px;}'
+      +'.chip-badge-now{background:rgba(56,189,248,.2);color:#38bdf8;border:1px solid #38bdf844;}'
+      +'.chip-badge-next{background:rgba(251,191,36,.15);color:#fbbf24;border:1px solid #fbbf2433;}';
+    document.head.appendChild(st);
+  }
+
   var all=_homeGetAllPeriods();
   var now=new Date();
   var ourDay=_homeJsToOurDay(now.getDay());
-  // Filter to today's periods only
-  var todayAll=all.filter(function(item){return item.days.indexOf(ourDay)>=0&&item.per.time;});
-  if(!todayAll.length)return '';
+
+  // فلترة فترات اليوم التي لها وقت وفصل مخصص (إزالة الفارغة)
+  var todayAll=all.filter(function(item){
+    return item.days.indexOf(ourDay)>=0 && item.per.time && item.cls && item.cls.trim();
+  });
+  if(!todayAll.length)return '<div id="homeUpcomingStrip"></div>';
 
   var nowM=now.getHours()*60+now.getMinutes();
 
-  // Sort by start time
+  // ترتيب حسب وقت البداية
   todayAll.sort(function(a,b){
     var sA=_homeParseMins(a.per.time.split('-')[0]);
     var sB=_homeParseMins(b.per.time.split('-')[0]);
     return (sA||0)-(sB||0);
   });
 
-  // Build chips
+  // تحديد أول فترة تالية فقط
+  var foundNext=false;
   var chips='';
+
   todayAll.forEach(function(item){
     var sM=_homeParseMins(item.per.time.split('-')[0]);
     var eM=item.per.time.indexOf('-')>-1?_homeParseMins(item.per.time.split('-')[1]):null;
     if(sM===null)return;
+
     var isNow=(eM!==null)?sM<=nowM&&nowM<eM:sM===Math.floor(nowM);
-    var isNext=!isNow&&sM>nowM;
+    var isPast=(eM!==null)?nowM>=eM:sM<nowM;
 
-    // Only show: currently running OR coming later today
-    var chipCls='home-cls-chip'+(isNow?' chip-now':isNext?' chip-next chip-soonest':'');
-    var dotCls='chip-dot'+(isNow?' chip-dot-now':isNext?' chip-dot-next':' chip-dot-soon');
-    var badgeClass=isNow?'chip-badge-now':isNext?'chip-badge-next':'chip-badge-soon';
-    var badgeTxt=isNow?'🟢 جارية':isNext?'⏰ التالية':item.per.time.split('-')[0];
+    // إخفاء الفترات المنتهية
+    if(isPast&&!isNow)return;
 
-    chips+='<div class="'+chipCls+'" onclick="switchPage(\'sched\')">'
-      +'<div class="'+dotCls+'"></div>'
-      +'<div class="chip-cls-name">'+esc(item.cls)+'</div>'
-      +'<div class="chip-time">'+esc(item.per.time)+'</div>'
-      +'<span class="chip-badge '+badgeClass+'">'+badgeTxt+'</span>'
-      +'</div>';
+    var isNext=false;
+    if(!isNow&&sM>nowM&&!foundNext){
+      isNext=true;
+      foundNext=true;
+    } else if(!isNow&&sM>nowM){
+      // فترات لاحقة — عرضها عادية صغيرة
+    }
+
+    var perIdx=all.indexOf(item);
+    var perNum=perIdx>=0?perIdx+1:(parseInt((item.per.id||'').replace(/\D/g,''))||0);
+    var perLabel=perNum?('ف '+perNum):esc(item.per.label||'');
+
+    if(isNow){
+      chips+='<div class="home-cls-chip chip-now" onclick="switchPage(\'sched\')">'
+        +'<div class="chip-badge chip-badge-now">🟢 جارية الآن</div>'
+        +'<div class="chip-dot chip-dot-now"></div>'
+        +'<div class="chip-cls-name-now">'+esc(item.cls)+'</div>'
+        +'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">'+perLabel+'</div>'
+        +'<div class="chip-time-now">'+esc(item.per.time)+'</div>'
+        +'</div>';
+    } else if(isNext){
+      chips+='<div class="home-cls-chip chip-next" onclick="switchPage(\'sched\')">'
+        +'<div class="chip-badge chip-badge-next">⏰ التالية</div>'
+        +'<div class="chip-dot chip-dot-next"></div>'
+        +'<div class="chip-cls-name-next">'+esc(item.cls)+'</div>'
+        +'<div style="font-size:9px;color:#94a3b8;margin-top:1px;">'+perLabel+'</div>'
+        +'<div class="chip-time-next">'+esc(item.per.time)+'</div>'
+        +'</div>';
+    }
+    // الفترات اللاحقة لا تُعرض (تقليل الفوضى)
   });
 
-  if(!chips)return '';
+  if(!chips)return '<div id="homeUpcomingStrip"></div>';
 
   return '<div id="homeUpcomingStrip" class="home-upcoming-strip">'
     +'<div class="home-upcoming-inner">'
@@ -2195,7 +2314,7 @@ function renderHomePage(){
   if(!document.getElementById('_bnFixStyle')){
     var _bnSt=document.createElement('style');
     _bnSt.id='_bnFixStyle';
-    _bnSt.textContent='.home-bottom-nav,.hbn,#homeBottomNav{height:56px!important;padding-bottom:env(safe-area-inset-bottom,0)!important;}'+'  .hbn button,.home-bottom-nav button,#homeBottomNav button{font-size:11px!important;gap:2px!important;padding:4px 0!important;min-width:48px!important;}'+'  .hbn button span:first-child,.hbn-icon,.bn-icon{font-size:20px!important;line-height:1.1!important;}'+'  .hbn button span:last-child,.hbn-label,.bn-label{font-size:9px!important;}'+'  #h-cards-scroll{display:flex!important;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}'+'  #h-cards-scroll::-webkit-scrollbar{display:none;}'+'  .home-body{padding-bottom:72px!important;}';
+    _bnSt.textContent='.home-bottom-nav,.hbn,#homeBottomNav{height:56px!important;padding-bottom:env(safe-area-inset-bottom,0)!important;}'+'  .hbn button,.home-bottom-nav button,#homeBottomNav button{font-size:11px!important;gap:2px!important;padding:4px 0!important;min-width:48px!important;}'+'  .hbn button span:first-child,.hbn-icon,.bn-icon{font-size:20px!important;line-height:1.1!important;}'+'  .hbn button span:last-child,.hbn-label,.bn-label{font-size:9px!important;}'+'  #h-cards-scroll{display:flex!important;flex-direction:row!important;direction:rtl!important;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}'+'  #h-cards-scroll::-webkit-scrollbar{display:none;}'+'  .home-body{padding-bottom:72px!important;}';
     document.head.appendChild(_bnSt);
   }
 
@@ -2270,7 +2389,7 @@ function renderHomePage(){
     +'<div class="home-ring-next-when" id="h-ring-next-when">—</div>'
     +'</div>'
     +'</div></div>'
-    +'<div id="h-cards-scroll" style="display:flex;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0;"></div>'
+    +'<div id="h-cards-scroll" style="display:none;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0;"></div>'
     // Alarm card
     +'<div id="homeAlarmCard" style="display:none;margin:0 16px 12px;background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;padding:12px 16px;cursor:pointer;" onclick="switchPage(\'notifs\');bnSetActive(\'notifs\');">'
     +'<div style="display:flex;align-items:center;gap:12px;">'
@@ -2290,6 +2409,11 @@ function renderHomePage(){
     +'</div>'
     +'</div>'
     +'<div style="height:16px;"></div>'
+    // ── شبكة التنقل الكاملة — تظهر دائماً أسفل المنبه ──
+    +'<div id="h-nav-grid-wrap" style="flex-shrink:0;padding:0 12px 12px;direction:rtl;">'
+    +'<div style="font-size:9px;color:#334155;font-weight:800;letter-spacing:.6px;margin-bottom:8px;padding-right:2px;">⚡ التنقل السريع</div>'
+    +'<div id="h-nav-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;"></div>'
+    +'</div>'
     +'</div>'// end home-body
     +_buildUpcomingStrip()
     +'</div>';// end home-page
@@ -2305,7 +2429,90 @@ function renderHomePage(){
   setTimeout(_notifUpdateBadge,0);
   // Update alarm card
   setTimeout(_alarmUpdateHomeCard,0);
+  // بناء كروت التنقل السريع
+  setTimeout(_buildHomeNavCards, 0);
 }
+
+// ══ كروت التنقل السريع — نفس نمط كروت الفترات ══
+// ══ شبكة التنقل الكاملة في الصفحة الرئيسية ══
+var _HNG_ALL = [
+  { id:'grades',   icon:'📝', lbl:'الدرجات',         fn:function(){ switchPage('grades');  bnSetActive('grades');  } },
+  { id:'weekly',   icon:'🎯', lbl:'الراصد',           fn:function(){ switchPage('weekly');  setTimeout(function(){ WKS.viewMode='numpad'; WKS.numpadStudent=null; WKS.numpadInput=''; renderWeekly(); renderViewBar(); },80); bnSetActive('weekly'); } },
+  { id:'sched',    icon:'🗓', lbl:'الجدول',           fn:function(){ switchPage('sched');   bnSetActive('sched');   } },
+  { id:'absence',  icon:'📋', lbl:'الغياب',           fn:function(){ switchPage('absence'); bnSetActive('absence'); } },
+  { id:'cards',    icon:'📅', lbl:'الأسبوعي',         fn:function(){ switchPage('weekly');  setTimeout(function(){ if(typeof WKS!=='undefined'){ WKS.viewMode='table'; renderWeekly(); renderViewBar(); } },80); bnSetActive('weekly'); } },
+  { id:'stats',    icon:'📊', lbl:'إحصائيات',         fn:function(){ switchPage('stats');   bnSetActive('stats');   } },
+  { id:'notifs',   icon:'🔔', lbl:'الإشعارات',        fn:function(){ switchPage('notifs');  bnSetActive('notifs');  }, badge:true },
+  { id:'sick',     icon:'🤒', lbl:'المرضى',            fn:function(){ switchPage('sick');    bnSetActive('sick');    } },
+  { id:'curric',   icon:'📖', lbl:'توزيع المنهج',     fn:function(){ switchPage('curric');  bnSetActive('curric');  } },
+  { id:'report',   icon:'📄', lbl:'كشف الدرجات',      fn:function(){ switchPage('report');  bnSetActive('report');  } },
+  { id:'tafrigh',  icon:'🗃', lbl:'كشف التفريغ',      fn:function(){ switchPage('tafrigh'); bnSetActive('tafrigh'); } },
+  { id:'dict',     icon:'🎤', lbl:'الإملاء',           fn:function(){ switchPage('dict');    bnSetActive('dict');    } },
+  { id:'witness',  icon:'✍️', lbl:'توقيع المتابع',    fn:function(){ switchPage('witness'); bnSetActive('witness'); } },
+  { id:'backup',   icon:'💾', lbl:'النسخ الاحتياطي',  fn:function(){ switchPage('backup');  bnSetActive('backup');  } },
+  { id:'settings', icon:'⚙️', lbl:'الإعدادات',        fn:function(){ switchPage('settings');bnSetActive('settings');} },
+  { id:'share',    icon:'🔗', lbl:'مشاركة',            fn:function(){ copyViewerLink();                              } }
+];
+
+function _buildHomeNavCards(){
+  var grid = document.getElementById('h-nav-grid');
+  if(!grid) return;
+  grid.innerHTML = '';
+
+  // CSS مرة واحدة
+  if(!document.getElementById('_hncCSS')){
+    var st = document.createElement('style');
+    st.id = '_hncCSS';
+    st.textContent =
+      '.hnc-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;'+
+        'background:transparent;border:none;'+
+        'border-radius:13px;padding:11px 4px 9px;cursor:pointer;font-family:inherit;'+
+        'transition:background .15s,transform .1s;}'+
+      '.hnc-btn:active{transform:scale(.93);background:rgba(29,78,216,.2);}'+
+      '.hnc-btn.hnc-active{background:rgba(29,78,216,.2);border-color:rgba(96,165,250,.4);}'+
+      '.hnc-icon{font-size:22px;line-height:1;position:relative;display:block;}'+
+      '.hnc-lbl{font-size:9px;font-weight:700;color:#64748b;text-align:center;'+
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block;}'+
+      '.hnc-btn.hnc-active .hnc-lbl{color:#60a5fa;}';
+    document.head.appendChild(st);
+  }
+
+  _HNG_ALL.forEach(function(item){
+    var btn = document.createElement('button');
+    btn.className = 'hnc-btn';
+    btn.id = 'hnc_' + item.id;
+    btn.addEventListener('click', item.fn);
+
+    var iconEl = document.createElement('span');
+    iconEl.className = 'hnc-icon';
+    iconEl.textContent = item.icon;
+
+    if(item.badge){
+      var bdg = document.createElement('span');
+      bdg.id = 'hncNotifBadge';
+      bdg.style.cssText = 'display:none;position:absolute;top:-3px;right:-5px;background:#ef4444;'+
+        'color:#fff;font-size:7px;font-weight:900;border-radius:8px;padding:0 3px;min-width:12px;text-align:center;';
+      iconEl.style.position = 'relative';
+      iconEl.appendChild(bdg);
+      var orig = document.getElementById('notifBadge');
+      if(orig){
+        new MutationObserver(function(){
+          bdg.textContent = orig.textContent;
+          bdg.style.display = orig.textContent ? 'inline-block' : 'none';
+        }).observe(orig, {childList:true, subtree:true, characterData:true});
+      }
+    }
+
+    var lblEl = document.createElement('span');
+    lblEl.className = 'hnc-lbl';
+    lblEl.textContent = item.lbl;
+
+    btn.appendChild(iconEl);
+    btn.appendChild(lblEl);
+    grid.appendChild(btn);
+  });
+}
+
 function _homeSpawnLeaves(){
   var canvas=document.getElementById('h-leaves-canvas');
   if(!canvas)return;

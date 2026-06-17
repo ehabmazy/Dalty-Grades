@@ -86,7 +86,7 @@
       <button class="tb-menu-btn tb-edit-btn" id="tbEditBtn" onclick="editBarToggle()">✏️ <span class="btn-txt">تحرير</span></button>
     </div>
     <!-- أزرار الإملاء في الشريط العلوي -->
-    <div id="tbDictBtns" style="display:none;align-items:center;gap:3px;padding:0 4px;flex-wrap:nowrap;">
+    <div id="tbDictBtns" style="display:none;align-items:center;gap:3px;padding:0 4px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:calc(100vw - 90px);">
       <!-- 1. زر الفصول -->
       <button id="tbDictClsBarBtn" onclick="dictClsBarToggle();" style="background:rgba(251,191,36,.12);border:1.5px solid #78350f;color:#fbbf24;border-radius:7px;padding:3px 9px;font-size:9.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;">🏫 الفصول</button>
       <!-- فاصل -->
@@ -821,7 +821,7 @@
     </aside>
     <!-- PAGES -->
     <div class="app-pages">
-      <div class="page active" id="page_home"><div id="homeRoot" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div></div>
+      <div class="page active" id="page_home"><div id="homeRoot" style="flex:1;display:flex;flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div></div>
       <div class="page" id="page_grades"><div id="gradesRoot" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div></div>
       <div class="page" id="page_weekly"><div id="weeklyRoot" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div></div>
       <div class="page" id="page_sched"><div id="schedRoot" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div></div>
@@ -838,205 +838,54 @@
       <div class="page" id="page_tafrigh"><div id="tafrighRoot" style="overflow-y:auto;height:100%;width:100%;"></div></div>
     </div>
   </div>
-  <!-- ══ MOBILE DOCK — شريط سفلي ثابت ══ -->
+  <!-- ══ MOBILE DOCK — شريط أيقونات ثابت مصغّر ══ -->
   <div id="mobileDock" style="
     position:fixed;bottom:0;left:0;right:0;
-    background:linear-gradient(180deg,#0d1a2e 0%,#060e1c 100%);
-    border-top:1.5px solid #1e3a5f;
+    background:rgba(6,14,28,.97);
+    border-top:1px solid #1e3a5f;
     z-index:1100;
-    padding:6px 8px 8px;
-    box-shadow:0 -4px 24px rgba(0,0,0,.5);
+    padding:4px 8px env(safe-area-inset-bottom,4px);
+    box-shadow:0 -2px 16px rgba(0,0,0,.5);
   ">
-    <!-- مقبض السحب -->
-    <div id="dockHandle" style="
-      width:36px;height:4px;
-      background:#334155;border-radius:4px;
-      margin:0 auto 8px;cursor:grab;
-    " title="اسحب لأعلى لرؤية المزيد"></div>
-
-    <!-- الصف الأول: 4 أيقونات ظاهرة دائماً -->
-    <div class="dock-grid">
+    <!-- 4 أيقونات ثابتة بدون نص -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
       <button class="dock-btn hbn-active" id="bni_home" onclick="switchPage('home');bnSetActive('home')">
-        <div class="dock-icon">🏠</div><div class="dock-lbl">الرئيسية</div>
+        <div class="dock-icon">🏠</div>
       </button>
       <button class="dock-btn" id="bni_grades" onclick="switchPage('grades');bnSetActive('grades')">
-        <div class="dock-icon">📝</div><div class="dock-lbl">الدرجات</div>
+        <div class="dock-icon">📝</div>
       </button>
       <button class="dock-btn" id="bni_weekly" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);bnSetActive('weekly')">
-        <div class="dock-icon">🎯</div><div class="dock-lbl">الراصد</div>
+        <div class="dock-icon">🎯</div>
       </button>
       <button class="dock-btn" id="bni_sched" onclick="switchPage('sched');bnSetActive('sched')">
-        <div class="dock-icon">🗓</div><div class="dock-lbl">الجدول</div>
+        <div class="dock-icon">🗓</div>
       </button>
-    </div>
-
-    <!-- الصفوف المطوية — تظهر بالسحب لأعلى -->
-    <div id="dockExpanded" style="max-height:0;overflow:hidden;transition:max-height .35s cubic-bezier(.4,0,.2,1);">
-      <div style="height:6px;"></div>
-      <div class="dock-grid">
-        <button class="dock-btn" id="bni_cards" onclick="switchPage('weekly');setTimeout(function(){if(typeof WKS!=='undefined'){WKS.viewMode='table';renderWeekly();renderViewBar();}},80);bnSetActive('weekly')">
-          <div class="dock-icon">📅</div><div class="dock-lbl">الأسبوعي</div>
-        </button>
-        <button class="dock-btn" id="bni_notifs" onclick="switchPage('notifs');bnSetActive('notifs')" style="position:relative;">
-          <div class="dock-icon">🔔<span id="dockNotifBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:#ef4444;color:#fff;font-size:8px;font-weight:900;border-radius:8px;padding:0 4px;min-width:14px;text-align:center;"></span></div>
-          <div class="dock-lbl">الإشعارات</div>
-        </button>
-        <button class="dock-btn" id="bni_absence" onclick="switchPage('absence');bnSetActive('absence')">
-          <div class="dock-icon">📋</div><div class="dock-lbl">الغياب</div>
-        </button>
-        <button class="dock-btn" id="bni_stats" onclick="switchPage('stats');bnSetActive('stats')">
-          <div class="dock-icon">📊</div><div class="dock-lbl">إحصائيات</div>
-        </button>
-      </div>
-      <div style="height:6px;"></div>
-      <div class="dock-grid">
-        <button class="dock-btn" id="bni_curric" onclick="switchPage('curric');bnSetActive('curric')">
-          <div class="dock-icon">📖</div><div class="dock-lbl">توزيع المنهج</div>
-        </button>
-        <button class="dock-btn" id="bni_report" onclick="switchPage('report');bnSetActive('report')">
-          <div class="dock-icon">📄</div><div class="dock-lbl">كشف الدرجات</div>
-        </button>
-        <button class="dock-btn" id="bni_tafrigh" onclick="switchPage('tafrigh');bnSetActive('tafrigh')">
-          <div class="dock-icon">🗃</div><div class="dock-lbl">كشف التفريغ</div>
-        </button>
-        <button class="dock-btn" id="bni_sick" onclick="switchPage('sick');bnSetActive('sick')">
-          <div class="dock-icon">🤒</div><div class="dock-lbl">المرضى</div>
-        </button>
-      </div>
-      <div style="height:6px;"></div>
-      <div class="dock-grid">
-        <button class="dock-btn" id="bni_dict" onclick="switchPage('dict');bnSetActive('dict')">
-          <div class="dock-icon">🎤</div><div class="dock-lbl">الإملاء</div>
-        </button>
-        <button class="dock-btn" id="bni_witness" onclick="switchPage('witness');bnSetActive('witness')">
-          <div class="dock-icon">✍️</div><div class="dock-lbl">توقيع المتابع</div>
-        </button>
-        <button class="dock-btn" id="bni_backup" onclick="switchPage('backup');bnSetActive('backup')">
-          <div class="dock-icon">💾</div><div class="dock-lbl">النسخ الاحتياطي</div>
-        </button>
-        <button class="dock-btn" id="bni_settings" onclick="switchPage('settings');bnSetActive('settings')">
-          <div class="dock-icon">⚙️</div><div class="dock-lbl">الإعدادات</div>
-        </button>
-      </div>
-      <div style="height:4px;"></div>
+      <button class="dock-btn" id="bni_notifs" onclick="switchPage('notifs');bnSetActive('notifs')" style="position:relative;">
+        <div class="dock-icon">🔔<span id="dockNotifBadge" style="display:none;position:absolute;top:-3px;right:-4px;background:#ef4444;color:#fff;font-size:7px;font-weight:900;border-radius:8px;padding:0 3px;min-width:12px;text-align:center;"></span></div>
+      </button>
     </div>
   </div>
 
-  <!-- ستايل الدوك -->
+  <!-- ستايل الدوك والشبكة الرئيسية -->
   <style>
-  .dock-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
-  }
   .dock-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    background: rgba(255,255,255,.04);
-    border: 1.5px solid rgba(255,255,255,.07);
-    border-radius: 12px;
-    padding: 8px 4px 7px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background .15s, border-color .15s, transform .1s;
-    min-height: 58px;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:9px;padding:6px 4px;
+    cursor:pointer;font-family:inherit;
+    transition:background .15s,border-color .15s,transform .1s;
   }
-  .dock-btn:active { transform: scale(.94); }
-  .dock-btn.hbn-active {
-    background: rgba(29,78,216,.25);
-    border-color: rgba(96,165,250,.4);
-  }
-  .dock-icon {
-    font-size: 22px;
-    line-height: 1;
-    position: relative;
-  }
-  .dock-lbl {
-    font-size: 9.5px;
-    font-weight: 700;
-    color: #94a3b8;
-    text-align: center;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-  }
-  .dock-btn.hbn-active .dock-lbl { color: #60a5fa; }
-  /* body padding لتجنب تغطية المحتوى */
-  #appShell { padding-bottom: 84px; }
-  /* فراغ للـ snackbar يكون فوق الدوك */
-  #snackContainer { bottom: 96px !important; }
-  /* زر المساعدة فوق الدوك */
+  .dock-btn:active{transform:scale(.9);}
+  .dock-btn.hbn-active{background:rgba(29,78,216,.3);border-color:rgba(96,165,250,.5);}
+  .dock-icon{font-size:20px;line-height:1;position:relative;}
+  #appShell{padding-bottom:50px;}
+  #snackContainer{bottom:60px !important;}
+  #tbDictBtns::-webkit-scrollbar{display:none;}
+
   </style>
 
-  <!-- سكريبت السحب لأعلى -->
-  <script>
-  (function(){
-    var handle = document.getElementById('dockHandle');
-    var expanded = document.getElementById('dockExpanded');
-    var dock = document.getElementById('mobileDock');
-    var isOpen = false;
-    var startY = 0;
-    var startScrollY = 0;
-
-    function openDock(){
-      isOpen = true;
-      expanded.style.maxHeight = '260px';
-      handle.style.background = '#60a5fa';
-      handle.style.cursor = 'grab';
-    }
-    function closeDock(){
-      isOpen = false;
-      expanded.style.maxHeight = '0';
-      handle.style.background = '#334155';
-    }
-
-    handle.addEventListener('touchstart', function(e){
-      startY = e.touches[0].clientY;
-    }, {passive:true});
-    handle.addEventListener('touchend', function(e){
-      var dy = startY - e.changedTouches[0].clientY;
-      if(dy > 20) openDock();
-      else if(dy < -20) closeDock();
-      else { isOpen ? closeDock() : openDock(); }
-    });
-
-    // سحب من أي مكان في الدوك
-    dock.addEventListener('touchstart', function(e){
-      startY = e.touches[0].clientY;
-    }, {passive:true});
-    dock.addEventListener('touchend', function(e){
-      var dy = startY - e.changedTouches[0].clientY;
-      if(dy > 30 && !isOpen) openDock();
-      else if(dy < -30 && isOpen) closeDock();
-    });
-
-    // للماوس (ديسكتوب)
-    handle.addEventListener('click', function(){
-      isOpen ? closeDock() : openDock();
-    });
-
-    // تحديث badge الإشعارات
-    var origBadge = document.getElementById('notifBadge');
-    var dockBadge = document.getElementById('dockNotifBadge');
-    if(origBadge && dockBadge){
-      var obs = new MutationObserver(function(){
-        dockBadge.textContent = origBadge.textContent;
-        dockBadge.style.display = origBadge.textContent ? 'inline-block' : 'none';
-      });
-      obs.observe(origBadge, {childList:true, subtree:true, characterData:true});
-    }
-
-    // إغلاق الدوك عند الضغط على أي زر
-    document.querySelectorAll('.dock-btn').forEach(function(btn){
-      btn.addEventListener('click', function(){ closeDock(); });
-    });
-  })();
-  </script>
 
 </div>
 
