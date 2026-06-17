@@ -86,7 +86,7 @@
       <button class="tb-menu-btn tb-edit-btn" id="tbEditBtn" onclick="editBarToggle()">✏️ <span class="btn-txt">تحرير</span></button>
     </div>
     <!-- أزرار الإملاء في الشريط العلوي -->
-    <div id="tbDictBtns" style="display:none;align-items:center;gap:3px;padding:0 4px;flex-wrap:nowrap;">
+    <div id="tbDictBtns" style="display:none;align-items:center;gap:3px;padding:0 4px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:calc(100vw - 90px);">
       <!-- 1. زر الفصول -->
       <button id="tbDictClsBarBtn" onclick="dictClsBarToggle();" style="background:rgba(251,191,36,.12);border:1.5px solid #78350f;color:#fbbf24;border-radius:7px;padding:3px 9px;font-size:9.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;">🏫 الفصول</button>
       <!-- فاصل -->
@@ -882,6 +882,7 @@
   .dock-icon{font-size:20px;line-height:1;position:relative;}
   #appShell{padding-bottom:50px;}
   #snackContainer{bottom:60px !important;}
+  #tbDictBtns::-webkit-scrollbar{display:none;}
 
   </style>
 

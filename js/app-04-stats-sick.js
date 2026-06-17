@@ -1251,6 +1251,10 @@ function _dnConfirm(){
   if(!raw)return;
   // تحقق من تحديد العمود (في وضع الغياب)
   if(!DS.nameOnly&&!DS.selectedCol){showSnack("⚠ اختر العمود المستهدف أولاً");return;}
+  // إذا كان الإدخال رقماً فقط بدون درجة (لا توجد مسافة) → غائب تلقائياً
+  if(!DS.nameOnly&&/^\d+$/.test(raw)){
+    raw=raw+" غ";
+  }
   var pool=dPool();
   var results=DS.nameOnly?dNameOnlyProcess(raw):dProcess(raw);
   var ok=results.filter(function(r){return r.status==="ok"||r.status==="weak";}).length;
