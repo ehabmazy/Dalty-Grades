@@ -49,7 +49,7 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '<div class="np2-input-row">';
   h += '<textarea id="npDictInput" class="np2-dict-inp" rows="1"';
   h += ' placeholder="اسم الطالب أو رقمه + الدرجة — مثال: محمد 15  أو  5 15"';
-  h += ' inputmode="none" id="npDictInput"';
+  h += ' inputmode="none" onfocus="this.blur();"';
   h += ' oninput="WKS.npTextInput=this.value;">';
   h += esc(WKS.npTextInput||'');
   h += '</textarea>';
@@ -1840,7 +1840,9 @@ function _npSubmit() {
       WKS.npTextInput  = '';
       WKS.numpadInput  = '';
     }
+    var _sy = window.scrollY || window.pageYOffset;
     renderWeekly();
+    if((window.scrollY || window.pageYOffset) !== _sy) window.scrollTo(0, _sy);
   }
 
   if(matched.length === 0) {
@@ -1849,7 +1851,9 @@ function _npSubmit() {
     if(!WKS.npSessionLog) WKS.npSessionLog = [];
     WKS.npSessionLog.unshift({inputText:raw,matchedName:null,grade:gradeStr,field:fld,isAbsent:false,status:'fail',error:'لم يُعثر على: '+nameStr});
     if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
+    var _sy0 = window.scrollY || window.pageYOffset;
     renderWeekly();
+    if((window.scrollY || window.pageYOffset) !== _sy0) window.scrollTo(0, _sy0);
     return;
   }
 
