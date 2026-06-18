@@ -1116,6 +1116,24 @@ function renderNotifsPage(){
   card.appendChild(btnRow);
   wrap.appendChild(card);
 
+  // ══ COUNTDOWN CARD ════════════════════════════════
+  var cdHtml=_buildCurricCountdown();
+  if(cdHtml){
+    var cdWrap=document.createElement('div');
+    cdWrap.innerHTML=cdHtml;
+    var cdEl=cdWrap.firstElementChild;
+    if(cdEl){
+      // غلّف في notif-card للتناسق مع باقي البطاقات
+      var cdCard=document.createElement('div'); cdCard.className='notif-card'; cdCard.style.padding='0';
+      var cdHdr=document.createElement('div'); cdHdr.className='notif-card-hdr';
+      cdHdr.innerHTML='<span style="font-size:14px;font-weight:800;">⏳ العد التنازلي</span><span style="font-size:10px;color:#64748b;">للاختبارات والإجازات</span>';
+      cdCard.appendChild(cdHdr);
+      cdEl.style.cssText='padding:0 16px 14px;';
+      cdCard.appendChild(cdEl);
+      wrap.appendChild(cdCard);
+    }
+  }
+
   // ══ PER-PERIOD CARD ══════════════════════════════
   var allPeriods=_getAllScheduledPeriods();
   // Sort by real minutes until next occurrence across all days
@@ -2101,23 +2119,38 @@ function _buildCurricStrip(){
   // Week label — current or just "أسبوع N"
   var weekLabel=isCurrentWeek?'الأسبوع الحالي':'الأسبوع '+w;
 
+  // اقتصر على أول سطر من الدرس للعرض في الشريط
+  var lessonPreview='';
+  if(info.wd&&info.wd.lessons){
+    var _firstLine=info.wd.lessons.split('\n')[0].trim();
+    lessonPreview=_firstLine.length>40?_firstLine.substring(0,40)+'…':_firstLine;
+  }
+
+  // وحدة + درس في سطر واحد
+  var lessonPreview='';
+  if(info.wd&&info.wd.lessons){
+    var _firstLine=info.wd.lessons.split('\n')[0].trim();
+    lessonPreview=_firstLine.length>35?_firstLine.substring(0,35)+'…':_firstLine;
+  }
+  var unitLesson='';
+  if(info.unit&&lessonPreview) unitLesson='📚 '+info.unit.name+' — '+lessonPreview;
+  else if(info.unit)          unitLesson='📚 '+info.unit.name;
+  else if(lessonPreview)      unitLesson=lessonPreview;
+
   return '<div class="home-curric-strip" onclick="showCurricPopup()" title="توزيع المنهج — انقر للتفاصيل">'
     +'<div class="home-curric-strip-inner">'
-    // Left badge — week number + colored by unit
-    +'<div class="home-curric-week-badge" style="background:linear-gradient(160deg,'+unitColor+'dd,'+unitColor+');">'
+    +'<div class="home-curric-week-badge" style="background:linear-gradient(160deg,'+unitColor+'dd,'+unitColor+');">' 
     +'<div class="wcb-num">'+w+'</div>'
     +'<div class="wcb-lbl">'+esc(weekLabel)+'</div>'
     +'</div>'
-    // Center info
-    +'<div class="home-curric-info">'
-    // Day + date in one line
-    +'<div class="home-curric-daydate-row">'
+    +'<div class="home-curric-info" style="text-align:center;justify-content:center;">'
+    +'<div class="home-curric-daydate-row" style="justify-content:center;">'
     +'<span class="home-curric-day">'+todayDay+'</span>'
     +'<span style="color:#4c1d95;font-size:12px;margin:0 4px;">|</span>'
     +'<span class="home-curric-datestr">'+todayDate+'</span>'
     +'</div>'
-    +(tagHtml?'<div style="margin-top:4px;">'+tagHtml+'</div>':'')
-    +'<div style="font-size:9px;color:#7c3aed;margin-top:4px;font-weight:600;">انقر لعرض الوحدة والدرس ›</div>'
+    +(unitLesson?'<div style="font-size:12px;font-weight:800;color:#c4b5fd;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;">'+esc(unitLesson)+'</div>':'')
+    +(tagHtml?'<div style="margin-top:3px;text-align:center;">'+tagHtml+'</div>':'')
     +'</div>'
     +'<div class="home-curric-arrow">›</div>'
     +'</div>'
@@ -2340,6 +2373,100 @@ function _buildUpcomingStrip(){ return ""; // مُعطَّل — الكروت ت
     +'</div>';
 }
 
+
+// ══════════════════════════════════════════════════════
+// شريط عد تنازلي للاختبارات والإجازات القادمة
+// ══════════════════════════════════════════════════════
+function _curricWeekStartMs(weekNum){
+  if(!DB||!DB.meta||!DB.meta.startDate) return null;
+  try{
+    var d=new Date(DB.meta.startDate);
+    d.setDate(d.getDate()+(weekNum-1)*7);
+    d.setHours(0,0,0,0);
+    return d.getTime();
+  }catch(e){return null;}
+}
+
+function _buildCurricCountdown(){
+  if(!DB||!DB.curric) return '';
+  var now=Date.now();
+  var todayStart=new Date(); todayStart.setHours(0,0,0,0);
+  var todayMs=todayStart.getTime();
+
+  // جمع الأحداث القادمة (اختبارات + إجازات)
+  var events=[];
+  (DB.curric.exams||[]).forEach(function(ex){
+    var ms=_curricWeekStartMs(ex.w);
+    if(ms===null) return;
+    if(ms+7*86400000 < todayMs) return; // انتهى
+    events.push({type:'exam', label:ex.label||'اختبار', week:ex.w, ms:ms});
+  });
+  (DB.curric.holidays||[]).forEach(function(hol){
+    var ms=_curricWeekStartMs(hol.w);
+    if(ms===null) return;
+    if(ms+7*86400000 < todayMs) return;
+    events.push({type:'holiday', label:hol.label||'إجازة', week:hol.w, ms:ms});
+  });
+
+  if(!events.length) return '';
+
+  // ترتيب حسب الأقرب
+  events.sort(function(a,b){return a.ms-b.ms;});
+
+  var html='<div class="home-countdown-wrap" id="homeCountdownWrap">';
+  html+='<div style="font-size:9px;color:#475569;font-weight:800;letter-spacing:.6px;margin-bottom:8px;padding-right:2px;">⏳ العد التنازلي</div>';
+  html+='<div class="home-countdown-scroll">';
+
+  events.forEach(function(ev){
+    var diffMs=ev.ms - now;
+    var isToday=(ev.ms <= now && now < ev.ms+7*86400000);
+    var isPast=diffMs<0 && !isToday;
+    if(isPast) return;
+
+    var totalDays=Math.ceil(diffMs/86400000);
+    if(totalDays<0) totalDays=0;
+
+    var maxDays=30; // نافذة العرض
+    var pct=isToday?100:Math.max(0,Math.min(100,(1-(diffMs/(maxDays*86400000)))*100));
+
+    var isExam=ev.type==='exam';
+    var barColor=isExam?'#7c3aed':'#d97706';
+    var bgColor=isExam?'rgba(109,40,217,.12)':'rgba(217,119,6,.12)';
+    var borderColor=isExam?'rgba(109,40,217,.35)':'rgba(217,119,6,.35)';
+    var icon=isExam?'📋':'🏖️';
+
+    var countTxt;
+    if(isToday){
+      countTxt='<span style="color:'+barColor+';font-weight:900;font-size:14px;">هذا الأسبوع! 🔥</span>';
+    } else if(totalDays===1){
+      countTxt='<span style="color:'+barColor+';font-weight:900;font-size:14px;">غداً!</span>';
+    } else {
+      countTxt='<span style="font-size:20px;font-weight:900;color:'+barColor+';font-variant-numeric:tabular-nums;">'+totalDays+'</span>'
+              +'<span style="font-size:9px;color:#94a3b8;margin-right:3px;">يوم</span>';
+    }
+
+    html+='<div class="home-countdown-card" style="background:'+bgColor+';border:1px solid '+borderColor+';">';
+    // الأيقونة + الاسم
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">';
+    html+='<span style="font-size:16px;">'+icon+'</span>';
+    html+='<div style="flex:1;min-width:0;">';
+    html+='<div style="font-size:11px;font-weight:800;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+ev.label+'</div>';
+    html+='<div style="font-size:9px;color:#64748b;">أسبوع '+ev.week+'</div>';
+    html+='</div>';
+    html+='</div>';
+    // العدد التنازلي
+    html+='<div style="display:flex;align-items:baseline;gap:2px;margin-bottom:8px;">'+countTxt+'</div>';
+    // شريط التقدم
+    html+='<div style="background:rgba(255,255,255,.06);border-radius:99px;height:5px;overflow:hidden;">';
+    html+='<div style="height:5px;border-radius:99px;background:'+barColor+';width:'+pct.toFixed(1)+'%;transition:width .4s;';
+    if(pct>70) html+='box-shadow:0 0 6px '+barColor+'88;';
+    html+='"></div></div>';
+    html+='</div>';
+  });
+
+  html+='</div></div>';
+  return html;
+}
 function renderHomePage(){
   var root=document.getElementById('homeRoot');
   if(!root)return;
@@ -2349,7 +2476,7 @@ function renderHomePage(){
   if(!document.getElementById('_bnFixStyle')){
     var _bnSt=document.createElement('style');
     _bnSt.id='_bnFixStyle';
-    _bnSt.textContent='.home-bottom-nav,.hbn,#homeBottomNav{height:56px!important;padding-bottom:env(safe-area-inset-bottom,0)!important;}'+'  .hbn button,.home-bottom-nav button,#homeBottomNav button{font-size:11px!important;gap:2px!important;padding:4px 0!important;min-width:48px!important;}'+'  .hbn button span:first-child,.hbn-icon,.bn-icon{font-size:20px!important;line-height:1.1!important;}'+'  .hbn button span:last-child,.hbn-label,.bn-label{font-size:9px!important;}'+'  #h-cards-scroll{display:flex!important;flex-direction:row!important;direction:rtl!important;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}'+'  #h-cards-scroll::-webkit-scrollbar{display:none;}'+'  .home-body{padding-bottom:72px!important;}';
+    _bnSt.textContent='.home-bottom-nav,.hbn,#homeBottomNav{height:56px!important;padding-bottom:env(safe-area-inset-bottom,0)!important;}'+'  .hbn button,.home-bottom-nav button,#homeBottomNav button{font-size:11px!important;gap:2px!important;padding:4px 0!important;min-width:48px!important;}'+'  .hbn button span:first-child,.hbn-icon,.bn-icon{font-size:20px!important;line-height:1.1!important;}'+'  .hbn button span:last-child,.hbn-label,.bn-label{font-size:9px!important;}'+'  #h-cards-scroll{display:flex!important;flex-direction:row!important;direction:rtl!important;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-ms-overflow-style:none;-webkit-overflow-scrolling:touch;}'+'  #h-cards-scroll::-webkit-scrollbar{display:none;}'+'  .home-body{padding-bottom:72px!important;}/* ── شريط العد التنازلي ── */.home-countdown-wrap{padding:0 16px 4px;direction:rtl;}.home-countdown-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch;}.home-countdown-scroll::-webkit-scrollbar{display:none;}.home-countdown-card{flex-shrink:0;width:140px;border-radius:14px;padding:12px 12px 10px;cursor:default;}';
     document.head.appendChild(_bnSt);
   }
 
@@ -2397,6 +2524,8 @@ function renderHomePage(){
     +'</div>'
     // Curric week strip
     +_buildCurricStrip()
+    // ── شريط العد التنازلي للاختبارات والإجازات
+    +_buildCurricCountdown()
     // Ring card
     +'<div class="home-ring-section">'
     +'<div class="home-ring-card">'

@@ -1347,14 +1347,16 @@ function curricBuildConfigPanel(c){
     html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#1a0f35;border:1px solid #4c1d95;border-radius:6px;padding:4px 8px;">';
     html+='<span class="exam-badge">📋 أسبوع '+ex.w+'</span>';
     html+='<input class="curric-config-inp" style="flex:1;font-size:10px;" placeholder="نوع الاختبار" value="'+esc(ex.label||'')+'" onchange="curricExamLabel('+ex.w+',this.value)">';
+    html+=_curricDaySelectHtml(ex.day,'curricExamDay('+ex.w+',this.value)');
     html+='<button class="unit-del-btn" onclick="curricRemoveExam('+ex.w+')">✕</button>';
     html+='</div>';
   });
   html+='</div>';
-  html+='<div style="display:flex;gap:5px;align-items:center;margin-top:5px;">';
-  html+='<select class="curric-config-inp" id="newExamWeek" style="width:100px;font-size:10px;">';
+  html+='<div style="display:flex;gap:5px;align-items:center;margin-top:5px;flex-wrap:wrap;">';
+  html+='<select class="curric-config-inp" id="newExamWeek" style="width:90px;font-size:10px;">';
   for(var w=1;w<=Number(DB.meta.activeWeeks||14);w++){html+='<option value="'+w+'">الأسبوع '+w+'</option>';}
   html+='</select>';
+  html+='<select class="curric-config-inp" id="newExamDay" style="font-size:10px;width:80px;"><option value="">— يوم —</option><option value="0">الأحد</option><option value="1">الاثنين</option><option value="2">الثلاثاء</option><option value="3">الأربعاء</option><option value="4">الخميس</option><option value="5">الجمعة</option><option value="6">السبت</option></select>';
   html+='<button class="btn btn-purple btn-sm" onclick="curricAddExam()">+ إضافة</button>';
   html+='</div>';
   html+='</div>';
@@ -1366,14 +1368,16 @@ function curricBuildConfigPanel(c){
     html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#1a1505;border:1px solid #854d0e;border-radius:6px;padding:4px 8px;">';
     html+='<span class="holiday-badge">🏖️ أسبوع '+hol.w+'</span>';
     html+='<input class="curric-config-inp" style="flex:1;font-size:10px;" placeholder="اسم الإجازة" value="'+esc(hol.label||'')+'" onchange="curricHolidayLabel('+hol.w+',this.value)">';
+    html+=_curricDaySelectHtml(hol.day,'curricHolidayDay('+hol.w+',this.value)');
     html+='<button class="unit-del-btn" onclick="curricRemoveHoliday('+hol.w+')">✕</button>';
     html+='</div>';
   });
   html+='</div>';
-  html+='<div style="display:flex;gap:5px;align-items:center;margin-top:5px;">';
-  html+='<select class="curric-config-inp" id="newHolWeek" style="width:100px;font-size:10px;">';
+  html+='<div style="display:flex;gap:5px;align-items:center;margin-top:5px;flex-wrap:wrap;">';
+  html+='<select class="curric-config-inp" id="newHolWeek" style="width:90px;font-size:10px;">';
   for(var w2=1;w2<=Number(DB.meta.activeWeeks||14);w2++){html+='<option value="'+w2+'">الأسبوع '+w2+'</option>';}
   html+='</select>';
+  html+='<select class="curric-config-inp" id="newHolDay" style="font-size:10px;width:80px;"><option value="">— يوم —</option><option value="0">الأحد</option><option value="1">الاثنين</option><option value="2">الثلاثاء</option><option value="3">الأربعاء</option><option value="4">الخميس</option><option value="5">الجمعة</option><option value="6">السبت</option></select>';
   html+='<button class="btn btn-warn btn-sm" onclick="curricAddHoliday()">+ إضافة</button>';
   html+='</div>';
   html+='</div>';
@@ -1545,13 +1549,27 @@ function curricPickColor(unitId){
   if(dot)dot.style.background=u.color;
 }
 
+
+// Helper: بناء select اليوم للاختبارات/الإجازات
+function _curricDaySelectHtml(selectedDay, onchangeFn){
+  var days=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  var s='<select class="curric-config-inp" style="font-size:10px;width:80px;" onchange="'+onchangeFn+'">';
+  s+='<option value="">— يوم —</option>';
+  for(var di=0;di<days.length;di++){
+    s+='<option value="'+di+'"'+(String(selectedDay)===String(di)?' selected':'')+'>'+days[di]+'</option>';
+  }
+  s+='</select>';
+  return s;
+}
 function curricAddExam(){
   var c=getCurricData();
   var sel=document.getElementById('newExamWeek');
   if(!sel)return;
   var w=Number(sel.value);
   if(!c.exams.find(function(x){return x.w===w;})){
-    c.exams.push({w:w,label:'اختبار'});
+    var newExamDayEl=document.getElementById('newExamDay');
+    var newExamDay=newExamDayEl?newExamDayEl.value:'';
+    c.exams.push({w:w,label:'اختبار',day:newExamDay});
     c.exams.sort(function(a,b){return a.w-b.w;});
     curricSave();
     renderCurric(); curricToggleView('config');
@@ -1578,7 +1596,9 @@ function curricAddHoliday(){
   if(!sel)return;
   var w=Number(sel.value);
   if(!c.holidays.find(function(x){return x.w===w;})){
-    c.holidays.push({w:w,label:'إجازة رسمية'});
+    var newHolDayEl=document.getElementById('newHolDay');
+    var newHolDay=newHolDayEl?newHolDayEl.value:'';
+    c.holidays.push({w:w,label:'إجازة رسمية',day:newHolDay});
     c.holidays.sort(function(a,b){return a.w-b.w;});
     curricSave();
     renderCurric(); curricToggleView('config');
@@ -1598,6 +1618,18 @@ function curricHolidayLabel(w,lbl){
   var hol=c.holidays.find(function(x){return x.w===w;});
   if(hol){hol.label=lbl;curricSave();}
 }
+function curricExamDay(w,day){
+  var c=getCurricData();
+  var ex=c.exams.find(function(x){return x.w===w;});
+  if(ex){ex.day=day;curricSave();}
+}
+
+function curricHolidayDay(w,day){
+  var c=getCurricData();
+  var hol=c.holidays.find(function(x){return x.w===w;});
+  if(hol){hol.day=day;curricSave();}
+}
+
 
 function curricPrint(){
   var c=getCurricData();

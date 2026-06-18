@@ -81,7 +81,10 @@ body{font-family:var(--app-font-family);background:#0f172a;color:#1e293b;font-si
   display:flex;align-items:center;background:#0b1629;
   border-bottom:1px solid #1e3a5f;flex-shrink:0;height:36px;
   gap:0;z-index:100;position:relative;
+  overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:none;-ms-overflow-style:none;
 }
+.app-topbar::-webkit-scrollbar{display:none;}
 .top-hamburger{
   background:transparent;border:none;color:#60a5fa;
   font-size:17px;padding:0 11px;cursor:pointer;
@@ -98,6 +101,14 @@ body{font-family:var(--app-font-family);background:#0f172a;color:#1e293b;font-si
   padding:0 8px;flex:0 0 auto;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;
   border-left:1px solid #1e3a5f;height:100%;display:flex;align-items:center;
+}
+/* على الموبايل: إخفاء اللوجو واسم الصفحة في الصفحات الداخلية */
+@media(max-width:700px){
+  .top-brand.inner-page{display:none!important;}
+  .top-page-title.inner-page{display:none!important;}
+  .tb-menu-btn .btn-txt{display:none;}
+  .tb-menu-btn{padding:0 8px!important;font-size:14px!important;border-left:1px solid #1e3a5f;}
+  .top-user-area{padding:0 6px;gap:4px;flex-shrink:0;}
 }
 .top-user-area{display:flex;align-items:center;gap:8px;padding:0 12px;flex-shrink:0;}
 .top-username{font-size:9px;color:#475569;white-space:nowrap;display:none;}
@@ -1307,12 +1318,6 @@ tr.hl-abs td{background:#fff7ed!important;}
   50%{transform:translateX(-10px) rotate(-10deg);}
   75%{transform:translateX(14px) rotate(8deg);}
   100%{transform:translateX(0) rotate(0deg);}
-}
-
-
-@media (max-width: 480px) {
-  .tb-menu-btn .btn-txt { display:none; }
-  .tb-menu-btn { padding:3px 7px !important; font-size:13px !important; }
 }
 
 
