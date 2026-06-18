@@ -64,7 +64,7 @@ function _tryRequestNotifPermission(){
       if(result==='granted') showSnack('✅ تم تفعيل إشعارات المتصفح');
       else if(result==='denied') showSnack('⚠️ إشعارات المتصفح مرفوضة — ستعمل الإشعارات الداخلية فقط','warn');
       window._notifPermAsked=true;
-    });
+    }).catch(function(){window._notifPermAsked=true;});
   }
   window._notifPermAsked=true;
 }
@@ -86,8 +86,19 @@ function switchPage(p){
   var tt=document.getElementById("topPageTitle");
   if(tt)tt.textContent=_PAGE_TITLES[p]||p;
   var _topBrand=document.getElementById("topBrand");
-  if(_topBrand)_topBrand.style.display=(p==="weekly")?"none":"flex";
-  if(tt)tt.style.display=(p==="weekly")?"none":"";
+  // صفحة الأسبوعي والإملاء: إخفاء اللوجو والعنوان كلياً
+  // الصفحات الأخرى: إخفاءهما على الموبايل فقط عبر class
+  var _hideBrandFully=(p==="weekly"||p==="dict");
+  if(_topBrand){
+    _topBrand.style.display=_hideBrandFully?"none":"flex";
+    if(!_hideBrandFully) _topBrand.classList.add("inner-page");
+    else _topBrand.classList.remove("inner-page");
+  }
+  if(tt){
+    tt.style.display=_hideBrandFully?"none":"";
+    if(!_hideBrandFully) tt.classList.add("inner-page");
+    else tt.classList.remove("inner-page");
+  }
   if(p==="grades")   renderGrades();
   if(p==="weekly")   renderWeekly();
   if(p==="sched")    renderSched();
@@ -158,7 +169,6 @@ function switchPage(p){
     if(vbBtn)vbBtn.classList.remove('active');
   }
 }
-function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 
 // SECTION 2: DATA MODEL & STORAGE
 // ══════════════════════════════════════════════════════
@@ -222,8 +232,17 @@ function loadDB(){
   try{var s=localStorage.getItem(STORE_KEY);if(s)return JSON.parse(s);}catch(e){}
   return null;
 }
+var _saveDBErrShown=false;
 function saveDB(){
-  try{localStorage.setItem(STORE_KEY,JSON.stringify(DB));}catch(e){}
+  try{
+    localStorage.setItem(STORE_KEY,JSON.stringify(DB));
+    _saveDBErrShown=false;
+  }catch(e){
+    if(!_saveDBErrShown){
+      _saveDBErrShown=true;
+      showSnack('⚠️ تعذّر حفظ البيانات — مساحة التخزين ممتلئة. يُرجى الضغط على النسخ الاحتياطي.','','warn');
+    }
+  }
 }
 function initDB(){
   var saved=loadDB();
@@ -283,11 +302,42 @@ function initDB(){
   var _sn=DB.meta.schoolName||'Dalty Grades';
   var _lsn=document.getElementById('loginSchoolTitle');if(_lsn)_lsn.textContent=_sn;
   var _ssn=document.getElementById('sidebarSchoolName');if(_ssn)_ssn.textContent='Dalty Grades';
+  applyAppFont();
 }
 
 // ══════════════════════════════════════════════════════
 // SECTION 3: HELPERS
 // ══════════════════════════════════════════════════════
+// ── تطبيق خط التطبيق ──
+var _loadedFonts={};
+function applyAppFont(){
+  var font=DB&&DB.meta&&DB.meta.appFont?DB.meta.appFont:'Amiri';
+  var size=DB&&DB.meta&&DB.meta.appFontSize?DB.meta.appFontSize:14;
+  // تحميل خط Google Fonts إن لزم
+  if(font!=='inherit'&&font!=='Arial'&&!_loadedFonts[font]){
+    var link=document.createElement('link');
+    link.rel='stylesheet';
+    link.href='https://fonts.googleapis.com/css2?family='+encodeURIComponent(font)+':wght@400;700;900&display=swap';
+    document.head.appendChild(link);
+    _loadedFonts[font]=true;
+  }
+  // استخدام <style> tag بـ !important للتغلب على CSS الموجود
+  var styleId='appFontOverride';
+  var el=document.getElementById(styleId);
+  if(!el){el=document.createElement('style');el.id=styleId;document.head.appendChild(el);}
+  var fontVal=font==='inherit'?'inherit':"'"+font+"',sans-serif";
+  var scale=size/14; // 14px = baseline
+  el.textContent=
+    '*,*::before,*::after{font-family:'+fontVal+'!important;}'
+    +'html{font-size:'+size+'px!important;}'
+    +'body,input,select,textarea,button{font-family:'+fontVal+'!important;}';
+  // معاينة في صفحة الإعدادات
+  var prev=document.getElementById('fontPreviewLbl');
+  if(prev){prev.style.fontFamily=font==='inherit'?'':font;}
+  var sizeEl=document.getElementById('fontSizeVal');
+  if(sizeEl)sizeEl.textContent=size+'px';
+}
+
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 

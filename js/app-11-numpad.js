@@ -1158,65 +1158,6 @@ function _npSelectStudent(id, stuIdx) {
   renderWeekly();
 }
 
-function _npPress(n) {
-  if(!WKS.numpadStudent) return;
-  var cls = WKS.activeClass;
-  var week = WKS.activeWeek;
-  var fld  = WKS.numpadField || 'assess';
-  var aF   = 'a'+week, hF = 'h'+week, bF = 'bw'+week;
-  var curField = fld==='assess'?aF : fld==='hw'?hF : fld==='beh'?bF : fld==='ex1'?'ex1' : 'ex2';
-  var maxVal   = fld==='assess'?_getNpMax('assess',week) : fld==='hw'?_getNpMax('hw',week) : (fld==='ex1'||fld==='ex2')?15 : 10;
-
-  var cur = WKS.numpadInput || '';
-  var next = cur + String(n);
-  var num  = Number(next);
-
-  if(num > maxVal) next = String(maxVal);
-  WKS.numpadInput = next;
-
-  /* حفظ مباشر بدون timer الـ render */
-  var stuIdx = WKS.numpadStudentIdx;
-  var val = clamp(Number(WKS.numpadInput)||0, 0, maxVal);
-  if(DB.data[cls] && DB.data[cls][stuIdx]) {
-    DB.data[cls][stuIdx][curField] = val;
-    saveDB();
-    _gradesUpdateTotCell(cls, stuIdx);
-  }
-
-  /* تحديث الشاشة فقط بدون إعادة رسم كاملة */
-  _npRefreshDisplay();
-}
-
-function _npDel() {
-  if(!WKS.numpadStudent) return;
-  WKS.numpadInput = (WKS.numpadInput||'').slice(0,-1);
-  _npRefreshDisplay();
-  if(WKS.numpadInput==='') {
-    var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-    var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
-    /* حفظ مباشر */
-    if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
-      DB.data[cls][WKS.numpadStudentIdx][curField] = '';
-      saveDB();
-      _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
-    }
-  }
-}
-
-function _npClear() {
-  if(!WKS.numpadStudent) return;
-  WKS.numpadInput='';
-  var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-  var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
-  /* حفظ مباشر */
-  if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
-    DB.data[cls][WKS.numpadStudentIdx][curField] = '';
-    saveDB();
-    _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
-  }
-  _npRefreshDisplay();
-}
-
 /* ══ تسجيل/إزالة إدخال "مباشر" (نقر بطاقة + لوحة أرقام) في سجل جلسة الراصد ══
    نفس WKS.npSessionLog المستخدم في تقرير الجلسة، بحيث تظهر فيه أيضاً
    الدرجات المُدخلة مباشرة (لا فقط عبر الإملاء الصوتي/النصي) بترتيب الإدخال */
@@ -1970,11 +1911,6 @@ function _npClear() {
     _npLogDirectRemove(WKS.numpadStudent, fld);
   }
   _npRefreshDisplay();
-}
-
-function _npPressChar(ch) {
-  /* لم يعد مستخدماً في الوضع الجديد — يكتب في textarea */
-  _npPressToInput(ch);
 }
 
 function _npOpenKeyboard() {

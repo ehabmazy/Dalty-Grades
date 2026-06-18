@@ -71,15 +71,6 @@ function countStudentSickPeriods(cls,studentId){
   return Object.keys(abs).filter(function(k){return abs[k]==="sick";}).length;
 }
 function totalClassAbsencePeriods(cls){
-  var t=0;(DB.data[cls]||[]).forEach(function(s){t+=countStudentAbsencePeriods(cls,s.id);});return t;
-}
-function countStudentAbsenceDays(cls,studentId){
-  var abs=getStudentAbsences(cls,studentId),weeks=new Set();
-  Object.keys(abs).forEach(function(k){if(abs[k]==="abs"||abs[k]==="sick"){var m=k.match(/^w(\d+)_/);if(m)weeks.add(m[1]);}});
-  return weeks.size;
-}
-
-function totalClassAbsencePeriods(cls){
   var total=0;
   (DB.data[cls]||[]).forEach(function(s){
     total+=countStudentAbsencePeriods(cls,s.id);
@@ -404,6 +395,31 @@ function _schedCleanupOnceSlots(){
   if(changed)saveDB();
 }
 
+// ── Time helpers for past/current/upcoming highlight ──
+function _timeToMin(str){
+  // "8:00-8:45" → end=525, or "8:00" → 480
+  if(!str)return -1;
+  var parts=str.split("-");
+  var t=parts[parts.length-1].trim(); // take end time
+  var m=t.match(/(\d+):(\d+)/);
+  if(!m)return -1;
+  return parseInt(m[1])*60+parseInt(m[2]);
+}
+function _timeStartMin(str){
+  if(!str)return -1;
+  var t=str.split("-")[0].trim();
+  var m=t.match(/(\d+):(\d+)/);
+  if(!m)return -1;
+  return parseInt(m[1])*60+parseInt(m[2]);
+}
+function _todayDayIdx(){
+  // JS: 0=Sun,...,6=Sat → app: 0=Sat,1=Sun,...,6=Fri
+  return (new Date().getDay()+1)%7;
+}
+function _nowMin(){
+  var n=new Date();
+  return n.getHours()*60+n.getMinutes();
+}
 function renderSched(){
   var root=document.getElementById("schedRoot");
   if(!root)return;
@@ -518,11 +534,12 @@ function renderSched(){
   }
 
   periods.forEach(function(period,pi){
-    var ptype=(shared.periodTypes&&shared.periodTypes[period.id])||"both";
-    var ptypeColor=ptype==="hw"?"#fcd34d":(ptype==="assess"?"#93c5fd":"#6ee7b7");
     html+='<th class="period-hdr">';
     html+='<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">';
-    html+='<span class="ph-name">'+esc(period.label||('الفترة '+(pi+1)))+'</span>';
+    html+='<input class="ph-name" value="'+esc(period.label||('الفترة '+(pi+1)))+'"'
+      +' onchange="schedRenamePeriod(\''+period.id+'\',this.value)"'
+      +' style="background:transparent;border:none;border-bottom:1px dashed #334155;color:inherit;text-align:center;width:100%;font-size:inherit;font-weight:700;font-family:inherit;outline:none;cursor:text;padding:1px 2px;"'
+      +'/>';
     // Time input
     html+='<input id="sti_'+period.id+'" value="'+esc(period.time||"")+'" placeholder="8:00-8:45"'
       +' class="ph-time-inp" autocomplete="off"'
@@ -531,12 +548,6 @@ function renderSched(){
       +' onchange="schedSetTimeUnified(\''+period.id+'\',this.value)"'
       +' oninput="schedTimeFilter(\''+period.id+'\')"'
       +'/>';
-    // Type select
-    html+='<select class="ph-type-sel" onchange="schedSetTypeUnified(\''+period.id+'\',this.value)" style="color:'+ptypeColor+';">';
-    html+='<option value="both"'+(ptype==="both"?" selected":"")+'>واجب+تقييم</option>';
-    html+='<option value="hw"'+(ptype==="hw"?" selected":"")+'>واجب</option>';
-    html+='<option value="assess"'+(ptype==="assess"?" selected":"")+'>تقييم</option>';
-    html+='</select>';
     html+='<button class="ph-del-btn" onclick="schedDelPeriodUnified(\''+period.id+'\')">✕ حذف</button>';
     html+='</div></th>';
   });
@@ -559,6 +570,8 @@ function renderSched(){
 
   // Body: each row = one day
   html+='<tbody>';
+  var _todayIdx=_todayDayIdx();
+  var _nowMinVal=_nowMin();
   DAYS_AR.forEach(function(dayName,di){
     var rowCls=di%2===0?"even-row":"odd-row";
     var dayIsActive=activeDays[di];
@@ -581,18 +594,26 @@ function renderSched(){
       } else {
         html+='<div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:2px;">';
         html+='<span style="font-size:9px;color:#334155;">—</span>';
-        if(!dayIsActive){html+='<button onclick="schedSpecialOverride(\'assembly\','+di+',1)" style="background:rgba(16,185,129,.15);border:1px solid #059669;color:#6ee7b7;border-radius:4px;font-size:8px;padding:1px 6px;cursor:pointer;font-family:inherit;">إضافة</button>';}
+        html+='<button onclick="schedSpecialOverride(\'assembly\','+di+','+(dayIsActive?0:1)+')" style="background:rgba(16,185,129,.15);border:1px solid #059669;color:#6ee7b7;border-radius:4px;font-size:8px;padding:1px 6px;cursor:pointer;font-family:inherit;">إضافة</button>';
         html+='</div>';
       }
       html+='</td>';
     }
 
+    var _isToday=(di===_todayIdx);
     periods.forEach(function(period){
       var val=getUnifiedSlot(period.id,di);
       var hasCls=val.trim().length>0;
       var col=hasCls?getClassColor(val):null;
       var cellStyle=hasCls?'background:'+col.light+';':'';
-      html+='<td class="slot '+rowCls+(hasCls?" has-cls":"")+'" style="'+cellStyle+'position:relative;">';
+      // past/current/upcoming highlight
+      var _endMin=_timeToMin(period.time);
+      var _startMin=_timeStartMin(period.time);
+      var _isPast=_isToday&&_endMin>=0&&_nowMinVal>_endMin;
+      var _isCurrent=_isToday&&_startMin>=0&&_endMin>=0&&_nowMinVal>=_startMin&&_nowMinVal<=_endMin;
+      if(_isPast)cellStyle+='opacity:0.38;filter:grayscale(60%);';
+      else if(_isCurrent)cellStyle+='outline:2px solid #22d3ee;outline-offset:-2px;';
+      html+='<td class="slot '+rowCls+(hasCls?' has-cls':'')+(_isPast?' slot-past':_isCurrent?' slot-current':(_isToday?' slot-upcoming':''))+'" style="'+cellStyle+'position:relative;">';
       // Colored select
       var selBg=hasCls?col.bg:"#0f172a";
       var selColor=hasCls?col.text:"#64748b";
@@ -617,6 +638,7 @@ function renderSched(){
         html+='<option value="'+esc(val)+'" selected style="background:#1e293b;">'+esc(val)+'</option>';
       }
       html+='</select>';
+      if(_isCurrent)html+='<span style="position:absolute;top:1px;right:2px;font-size:7px;background:#22d3ee;color:#0f172a;border-radius:3px;padding:0 3px;line-height:1.6;font-weight:700;pointer-events:none;">الآن</span>';
       if(hasCls&&isSlotOnce(period.id,di)){
         html+='<span title="مرة واحدة فقط" style="position:absolute;top:1px;left:2px;font-size:8px;line-height:1;pointer-events:none;">🔂</span>';
       }
@@ -638,7 +660,7 @@ function renderSched(){
       } else {
         html+='<div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:2px;">';
         html+='<span style="font-size:9px;color:#334155;">—</span>';
-        if(!dayIsActive){html+='<button onclick="schedSpecialOverride(\'break\','+di+',1)" style="background:rgba(251,191,36,.15);border:1px solid #d97706;color:#fbbf24;border-radius:4px;font-size:8px;padding:1px 6px;cursor:pointer;font-family:inherit;">إضافة</button>';}
+        html+='<button onclick="schedSpecialOverride(\'break\','+di+','+(dayIsActive?0:1)+')" style="background:rgba(251,191,36,.15);border:1px solid #d97706;color:#fbbf24;border-radius:4px;font-size:8px;padding:1px 6px;cursor:pointer;font-family:inherit;">إضافة</button>';
         html+='</div>';
       }
       html+='</td>';
@@ -736,6 +758,13 @@ function schedSetSlotUnified(pid,di,val){
   // Refresh home page ring if it is currently visible
   var homeRoot=document.getElementById("homeRoot");
   if(homeRoot&&homeRoot.offsetParent!==null&&typeof _homeTick==="function")_homeTick();
+}
+
+function schedRenamePeriod(pid,val){
+  var shared=DB.schedule._shared;
+  if(!shared)return;
+  (shared.periods||[]).forEach(function(p){if(p.id===pid)p.label=val.trim()||p.label;});
+  saveDB();
 }
 
 function schedSetTimeUnified(pid,val){

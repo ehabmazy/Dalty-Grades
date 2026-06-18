@@ -156,6 +156,8 @@ function _bkpAutoFolderSync(){
   _bkpWriteToFolder().then(function(ok){
     if(ok && document.getElementById('bkpSyncStatus'))
       __renderBackupPage();
+  }).catch(function(e){
+    console.warn('auto-sync failed:',e);
   });
 }
 
@@ -1000,6 +1002,9 @@ function _wtInitCanvas(){
   var box=document.getElementById('wtSigBox');
   var canvas=document.getElementById('wtSigCanvas');
   if(!box||!canvas) return;
+  // منع إعادة تسجيل الـ listeners إذا سبق تهيئة نفس الـ canvas
+  if(canvas._wtInited) return;
+  canvas._wtInited=true;
   var W=box.clientWidth; var H=180;
   var dpr=window.devicePixelRatio||1;
   canvas.width=W*dpr; canvas.height=H*dpr;

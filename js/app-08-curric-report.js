@@ -5,12 +5,6 @@ function weekEndDate(week){
   return d;
 }
 
-function fmtDate(d){
-  if(!d)return '—';
-  var months=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-  return d.getDate()+' '+months[d.getMonth()];
-}
-
 function fmtDateShort(d){
   if(!d)return '—';
   var m=String(d.getMonth()+1).padStart(2,'0');
@@ -384,22 +378,6 @@ var WEEK_DATES = {
   10: '12/04/2026', 11: '19/04/2026', 12: '26/04/2026',
   13: '03/05/2026', 14: '10/05/2026'
 };
-
-var ALL_WEEKS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14];
-
-var DB = null;
-
-// ── Load from localStorage ────────────────────────────────────
-function loadDB() {
-  var keys = ['grades_v6','grades_v5','grades_v4','grades_v3','grades'];
-  for (var i = 0; i < keys.length; i++) {
-    try {
-      var s = localStorage.getItem(keys[i]);
-      if (s) { var d = JSON.parse(s); if (d && d.classes) return d; }
-    } catch(e){}
-  }
-  return null;
-}
 
 // ── Helpers ───────────────────────────────────────────────────
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }

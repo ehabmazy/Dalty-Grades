@@ -134,7 +134,7 @@
     <div class="tb-menu-wrap" id="tbMenuDev">
       <button class="tb-menu-btn tb-dev-btn" id="tbDevBtn" onclick="devBarToggle()" style="display:none;">⚡ تطوير</button>
     </div>
-    <div style="flex:1;"></div>
+    <div style="flex:1;min-width:4px;"></div>
     <div class="top-user-area">
       <button id="cardsViewBtn" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);" title="عرض الراصد" style="display:none;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">🎯</button>
       <button id="notifBell" onclick="toggleNotifPanel()" title="الإشعارات" style="display:none;">🔔<span id="notifBadge"></span></button>

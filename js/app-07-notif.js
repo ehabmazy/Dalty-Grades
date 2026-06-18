@@ -1,14 +1,3 @@
-
-
-// ══════════════════════════════════════════════════════
-
-
-// ══════════════════════════════════════════════════════
-
-// ══════════════════════════════════════════════════════
-
-// ══════════════════════════════════════════════════════
-
 // ══════════════════════════════════════════════════════
 // NOTIFICATION SYSTEM v3
 // ══════════════════════════════════════════════════════
@@ -745,7 +734,7 @@ function notifSwitchTab(tab){
 }
 function notifReqPerm(){
   if(typeof Notification==='undefined'){showSnack('المتصفح لا يدعم الإشعارات');return;}
-  Notification.requestPermission().then(function(){renderNotifsPage();showSnack('تصريح: '+Notification.permission);});
+  Notification.requestPermission().then(function(){renderNotifsPage();showSnack('تصريح: '+Notification.permission);}).catch(function(){showSnack('⚠️ تعذّر طلب إذن الإشعارات');});
 }
 function notifSetOpt(k,v){ _notifSettings[k]=v; _notifSave(); renderNotifsPage(); }
 function notifToggleDay(i,on){
@@ -1016,7 +1005,7 @@ function renderNotifsPage(){
   reqPermBtn.style.cssText='background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:8px;padding:6px 14px;font-size:11px;cursor:pointer;font-family:inherit;';
   reqPermBtn.onclick=function(){
     if(typeof Notification!=='undefined'&&Notification.permission!=='granted'){
-      Notification.requestPermission().then(function(){ renderNotifsPage(); });
+      Notification.requestPermission().then(function(){ renderNotifsPage(); }).catch(function(){});
     } else { showSnack('✅ الإذن ممنوح مسبقاً'); }
   };
   testRow.appendChild(testLbl); testRow.appendChild(testSndBtn); testRow.appendChild(testNotifBtn); testRow.appendChild(reqPermBtn);
@@ -1753,6 +1742,23 @@ function _homeGetUpcoming(all,curItem){
   return res;
 }
 
+function _homeGetPastToday(all,curItem){
+  var now=new Date(),ourDay=_homeJsToOurDay(now.getDay());
+  var nowM=now.getHours()*60+now.getMinutes();
+  var res=[];
+  all.forEach(function(item){
+    if(curItem&&item===curItem.item)return;
+    if(!item.per.time)return;
+    if(item.days.indexOf(ourDay)<0)return;
+    var parts=item.per.time.split('-');
+    var eM=_homeParseMins(parts[parts.length-1]);
+    if(eM===null||eM>nowM)return;
+    res.push({item:item,eM:eM});
+  });
+  res.sort(function(a,b){return b.eM-a.eM;});
+  return res;
+}
+
 function _homeGreet(){var h=new Date().getHours();if(h<12)return'☀️ صباح الخير،';if(h<17)return'🌤️ مساء الخير،';return'🌙 مساء النور،';}
 var _wishMessages=[
   'أتمنى لك يوماً دراسياً ملهماً ورائعاً ✨',
@@ -1934,6 +1940,8 @@ function _homeTick(){
       +'.hpc-class{font-size:15px;font-weight:900;color:#f1f5f9;margin-top:2px;line-height:1.2;}'
       +'.hpc-active .hpc-class{font-size:22px!important;color:#e0f2fe!important;margin-top:3px;}'
       +'.hpc-next .hpc-class{font-size:16px!important;color:#fde68a!important;}'
+      +'.hpc-upcoming{border-color:#1e3a5f!important;opacity:.82;}'
+      +'.hpc-badge-upcoming{background:rgba(100,116,139,.15);color:#64748b;border:1px solid #33415540;}'
       // badge الحالة
       +'.hpc-badge{font-size:8px;font-weight:800;border-radius:7px;padding:2px 7px;margin-bottom:5px;}'
       +'.hpc-badge-now{background:rgba(56,189,248,.2);color:#38bdf8;border:1px solid #38bdf844;}'
@@ -1941,7 +1949,10 @@ function _homeTick(){
       // النقطة الوامضة
       +'.hpc-dot{width:7px;height:7px;border-radius:50%;margin:0 auto 4px;}'
       +'.hpc-dot-now{background:#38bdf8;animation:hpcDot 1.2s ease-in-out infinite;box-shadow:0 0 5px #38bdf8;}'
-      +'.hpc-dot-next{background:#fbbf24;}';
+      +'.hpc-dot-next{background:#fbbf24;}'
+      +'.hpc-past{opacity:.32;filter:grayscale(55%);border-color:#1e293b!important;background:#0a111e!important;cursor:default;}'
+      +'.hpc-past .hpc-name,.hpc-past .hpc-class{color:#2d3f55!important;}'
+      +'.hpc-badge-past{background:rgba(30,41,59,.4);color:#2d3f55;border:1px solid #1e293b;}';
     document.head.appendChild(_hpcSt);
   }
 
@@ -1952,28 +1963,37 @@ function _homeTick(){
     if(!all.length){
       cardsHtml='<div style="color:#334155;padding:16px;font-size:11px;white-space:nowrap;">أضف فترات من الجدول</div>';
     } else {
+      var past=_homeGetPastToday(all,cur);
       var shown=[];
-      // الترتيب المنطقي: جارية أولاً، ثم التالية، ثم الباقي
+      // الترتيب المنطقي: جارية أولاً، ثم التالية، ثم الباقي، ثم المنتهية
       if(cur)shown.push({type:'cur',data:cur,item:cur.item});
-      upcoming.filter(function(u){return u.daysAhead===0&&u.item.cls&&u.item.cls.trim();}).slice(0,4).forEach(function(u){shown.push({type:'up',data:u,item:u.item});});
-      var nextIdx=cur?1:0;
+      var _ndh=DB.meta&&DB.meta.nextDayHour!=null?DB.meta.nextDayHour:12;
+      var _nowH=now.getHours();
+      var _showNext=_nowH>=_ndh;
+      var _todayUp=upcoming.filter(function(u){
+        if(!u.item.cls||!u.item.cls.trim())return false;
+        if(u.daysAhead===0)return true;
+        if(u.daysAhead===1&&_showNext)return true;
+        return false;
+      });
+      _todayUp.slice(0,4).forEach(function(u,ui){shown.push({type:ui===0?'next':'up',data:u,item:u.item});});
+      past.slice(0,3).forEach(function(p){shown.push({type:'past',data:p,item:p.item});});
       shown.forEach(function(s,idx){
         var isCur=s.type==='cur';
-        var isNext=!isCur&&idx===nextIdx;
+        var isNext=s.type==='next';
         var isAssembly=s.item.isSpecial&&s.item.specialType==='assembly';
         var isBreak=s.item.isSpecial&&s.item.specialType==='break';
 
         // إخفاء أي فترة بدون فصل مخصص تمامًا
         if(!isCur&&(!s.item.cls||!s.item.cls.trim()))return;
 
-        var cardCls='home-period-card'+(isCur?' hpc-active':isNext?' hpc-next':'');
+        var isPast=s.type==='past';
+        var cardCls='home-period-card'+(isCur?' hpc-active':isNext?' hpc-next':isPast?' hpc-past':' hpc-upcoming');
         var assemblyStyle=isAssembly?'border-color:#059669!important;background:rgba(16,185,129,.1)!important;':'';
         var breakStyle=isBreak?'border-color:#d97706!important;background:rgba(251,191,36,.07)!important;':'';
         var extraStyle=assemblyStyle||breakStyle;
 
-        var perIdx=all.indexOf(s.item);
-        var perNum=perIdx>=0?perIdx+1:(parseInt((s.item.per.id||'').replace(/\D/g,''))||0);
-        var whenTxt=perNum?('ف '+perNum):esc(s.item.per.label||'');
+        var whenTxt=esc(s.item.per.label||s.item.per.id||'');
         var clsTxt=s.item.cls||'';
         var nameColor=isAssembly?'#34d399':isBreak?'#fbbf24':'';
 
@@ -1985,6 +2005,10 @@ function _homeTick(){
         } else if(isNext){
           badgeHtml='<div class="hpc-badge hpc-badge-next">⏰ التالية</div>';
           dotHtml='<div class="hpc-dot hpc-dot-next"></div>';
+        } else if(isPast){
+          badgeHtml='<div class="hpc-badge hpc-badge-past">✓ منتهية</div>';
+        } else {
+          badgeHtml='<div class="hpc-badge hpc-badge-upcoming">📋 قادمة</div>';
         }
 
         cardsHtml+='<div class="'+cardCls+'" style="'+extraStyle+'" onclick="switchPage(\'sched\')">'
@@ -2540,749 +2564,4 @@ function _homeSpawnLeaves(){
 
 
 
-
-// ══════════════════════════════
-
-
-
-// ── Colors for classes ────────────────────────────────
-var CLS_COLORS=['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#14b8a6','#f97316','#ec4899'];
-var DB=null;
-var ALL_WEEKS=[1,2,3,4,5,6,7,8,9,10,11,12,13,14];
-var currentView='general';
-var currentCls=null;
-var currentStudent=null;
-
-// ── Load DB ───────────────────────────────────────────
-function loadDB(){
-  try{
-    var s=localStorage.getItem('grades_v6');
-    if(s)return JSON.parse(s);
-  }catch(e){}
-  return null;
-}
-
-function repInit(){
-  DB=loadDB();
-  document.getElementById('loadingOverlay').style.display='none';
-  if(!DB||!DB.classes||!DB.classes.length){
-    // استخدام البيانات المدمجة عند غياب localStorage
-    DB=repGetDemoData();
-  }
-  var _tmSem=(DB.meta&&DB.meta.semester)?((Number(DB.meta.semester)===2)?'ف٢':'ف١'):'ف١';var _tmYr=(DB.meta&&DB.meta.schoolYear)?DB.meta.schoolYear:'2025 / 2026';  document.getElementById('topMeta').textContent=((DB.meta&&DB.meta.schoolName)||'Dalty Grades')+' | '+_tmSem+' '+_tmYr;
-  renderClsList();
-  selectClass(DB.classes[0]);
-}
-
-function repGetDemoData(){
-  return {
-    meta:{schoolName:'Dalty Grades',subject:'مادة العلوم',grade:'الصف الثاني الإعدادي',year:'2025 - 2026',teacherName:'ا/ إيهاب مازي عبده',activeWeeks:14,periodsPerWeek:3,periodsPerDay:4,periodTimes:[]},
-    classes:['فصل 2-4','فصل 2-5','فصل 2-6','فصل 2-7'],
-    colPages:[{id:'p1',label:'الأعمدة',cols:[
-      {id:'a9',field:'a9',label:'تقييم 9',max:20,visible:true},{id:'h9',field:'h9',label:'واجب 9',max:10,visible:true},
-      {id:'a10',field:'a10',label:'تقييم 10',max:20,visible:true},{id:'h10',field:'h10',label:'واجب 10',max:10,visible:true},
-      {id:'a11',field:'a11',label:'تقييم 11',max:20,visible:true},{id:'h11',field:'h11',label:'واجب 11',max:10,visible:true},
-      {id:'a12',field:'a12',label:'تقييم 12',max:20,visible:true},{id:'h12',field:'h12',label:'واجب 12',max:10,visible:true},
-      {id:'a13',field:'a13',label:'تقييم 13',max:20,visible:true},{id:'h13',field:'h13',label:'واجب 13',max:10,visible:true},
-      {id:'beh1',field:'beh1',label:'السلوك',max:5,visible:true},{id:'beh2',field:'beh2',label:'المواظبة',max:5,visible:true},
-      {id:'ex1',field:'ex1',label:'اختبار 1',max:15,visible:true},{id:'ex2',field:'ex2',label:'اختبار 2',max:15,visible:true}
-    ]}],
-    schedule:{},absences:{},
-    data:{
-      'فصل 2-4':[
-        {id:1,name:'عبد الله محمد احمد عبد الله محمد',a9:'غ',h9:10,a10:19,h10:4,a11:'غ',h11:5,a12:14,h12:7,a13:6,h13:9,beh1:7,beh2:4,ex1:11,ex2:10},
-        {id:2,name:'عبد الله محمد فاروق ياقوت تقي الدين',a9:19,h9:10,a10:5,h10:2,a11:17,h11:10,a12:'غ',h12:8,a13:20,h13:10,beh1:7,beh2:5,ex1:12,ex2:12},
-        {id:3,name:'عبد الله محمد محمود احمد محمود',a9:14,h9:10,a10:'غ',h10:4,a11:'غ',h11:2,a12:3,h12:8,a13:19,h13:6,beh1:5,beh2:4,ex1:9,ex2:8},
-        {id:4,name:'عبد الله محمود محمد ابراهيم عبد العال',a9:17,h9:7,a10:10,h10:10,a11:'غ',h11:5,a12:19,h12:0,a13:18,h13:8,beh1:5,beh2:5,ex1:10,ex2:9},
-        {id:5,name:'عبد الله وليد مصطفى كمال عبد الحميد',a9:18,h9:5,a10:3,h10:3,a11:20,h11:4,a12:19,h12:8,a13:5,h13:10,beh1:6,beh2:4,ex1:10,ex2:9},
-        {id:6,name:'عدي محمد سليمان محمد محمد الجنه',a9:20,h9:8,a10:19,h10:6,a11:'غ',h11:6,a12:19,h12:'غ',a13:5,h13:8,beh1:6,beh2:5,ex1:11,ex2:10},
-        {id:7,name:'علاء الدين ابراهيم سعد محمد السيد سيد',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:20,h12:10,a13:20,h13:10,beh1:9,beh2:6,ex1:15,ex2:15},
-        {id:8,name:'علاء السيد عبد السيد منصور',a9:14,h9:6,a10:13,h10:7,a11:11,h11:8,a12:8,h12:2,a13:19,h13:7,beh1:6,beh2:4,ex1:10,ex2:9},
-        {id:9,name:'علاء خالد سلامه خالد عبده جمعه',a9:19,h9:7,a10:12,h10:5,a11:'غ',h11:8,a12:14,h12:0,a13:'غ',h13:10,beh1:7,beh2:3,ex1:10,ex2:9},
-        {id:10,name:'علاء عماد حمدي محمد جاهين',a9:8,h9:5,a10:18,h10:0,a11:9,h11:10,a12:20,h12:10,a13:15,h13:10,beh1:8,beh2:5,ex1:11,ex2:10},
-        {id:11,name:'علي محمد ابو الحسن مصطفى',a9:6,h9:6,a10:14,h10:10,a11:'غ',h11:8,a12:13,h12:'غ',a13:18,h13:10,beh1:7,beh2:5,ex1:10,ex2:10},
-        {id:12,name:'علي محمد علي ابراهيم احمد داوود',a9:20,h9:10,a10:20,h10:10,a11:17,h11:10,a12:20,h12:10,a13:18,h13:10,beh1:10,beh2:6,ex1:15,ex2:14},
-        {id:13,name:'علي محمد علي محمد السيد',a9:20,h9:10,a10:18,h10:10,a11:20,h11:10,a12:20,h12:10,a13:17,h13:10,beh1:10,beh2:6,ex1:15,ex2:14},
-        {id:14,name:'علي محمد محمود محمد سليمان العدل',a9:20,h9:'غ',a10:2,h10:'غ',a11:20,h11:10,a12:5,h12:7,a13:18,h13:7,beh1:7,beh2:3,ex1:10,ex2:9},
-        {id:15,name:'علي محمود علي محمد عبد العال صالح',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:20,h12:10,a13:20,h13:10,beh1:9,beh2:6,ex1:15,ex2:15},
-        {id:16,name:'عماد محمد صبري احمد محمد',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:20,h12:10,a13:20,h13:10,beh1:10,beh2:6,ex1:15,ex2:15},
-        {id:17,name:'عمار احمد الاحمدي صالح محمد',a9:20,h9:10,a10:18,h10:6,a11:20,h11:10,a12:20,h12:9,a13:12,h13:10,beh1:8,beh2:6,ex1:14,ex2:13},
-        {id:18,name:'عمار علي عبد العظيم علي السيد',_totalAbsent:true,a9:'غ',h9:'غ',a10:'غ',h10:'غ',a11:'غ',h11:'غ',a12:'غ',h12:'غ',a13:'غ',h13:'غ',beh1:'غ',beh2:'غ',ex1:'غ',ex2:'غ'},
-        {id:19,name:'عمر احمد احمد عبد الله نافع',a9:12,h9:'غ',a10:'غ',h10:3,a11:20,h11:6,a12:9,h12:10,a13:19,h13:10,beh1:6,beh2:3,ex1:10,ex2:9},
-        {id:20,name:'عمر اسلام السيد فريد ابو المعاطي',a9:18,h9:10,a10:13,h10:6,a11:18,h11:9,a12:20,h12:10,a13:16,h13:10,beh1:9,beh2:5,ex1:13,ex2:13},
-        {id:21,name:'عمر محمد علي اسماعيل عبد الله',a9:18,h9:10,a10:20,h10:10,a11:20,h11:10,a12:20,h12:10,a13:17,h13:10,beh1:10,beh2:6,ex1:15,ex2:14},
-        {id:22,name:'عمران وائل محمد جمال زكي مصطفى',a9:19,h9:10,a10:20,h10:10,a11:20,h11:10,a12:18,h12:10,a13:18,h13:10,beh1:9,beh2:6,ex1:15,ex2:14},
-        {id:23,name:'عمرو عبد السلام محمد محمد نعمه الله',a9:4,h9:8,a10:19,h10:10,a11:20,h11:10,a12:17,h12:2,a13:20,h13:10,beh1:8,beh2:5,ex1:12,ex2:12},
-        {id:24,name:'عنتر سمير عبد الرحمن محمود سلامه',a9:20,h9:10,a10:'غ',h10:3,a11:13,h11:10,a12:9,h12:10,a13:19,h13:7,beh1:7,beh2:5,ex1:12,ex2:12},
-        {id:25,name:'فارس عبد الله ممدوح راشد السعيد',_totalAbsent:true,a9:'غ',h9:'غ',a10:'غ',h10:'غ',a11:'غ',h11:'غ',a12:'غ',h12:'غ',a13:'غ',h13:'غ',beh1:'غ',beh2:'غ',ex1:'غ',ex2:'غ'},
-        {id:26,name:'كريم حمدي حامد احمد عماره',a9:5,h9:10,a10:20,h10:3,a11:20,h11:3,a12:8,h12:8,a13:12,h13:6,beh1:6,beh2:4,ex1:10,ex2:9},
-        {id:27,name:'كريم عماد حمدي محمد الهجرسي',a9:16,h9:7,a10:17,h10:10,a11:17,h11:10,a12:20,h12:10,a13:15,h13:8,beh1:8,beh2:5,ex1:13,ex2:13},
-        {id:28,name:'كريم فتحي عبد العظيم السعيد عوض',a9:18,h9:8,a10:14,h10:10,a11:20,h11:10,a12:19,h12:'غ',a13:14,h13:8,beh1:7,beh2:6,ex1:13,ex2:12},
-        {id:29,name:'كريم محمد ابراهيم عوض يوسف شبانه',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:18,h12:9,a13:12,h13:6,beh1:9,beh2:5,ex1:14,ex2:13},
-        {id:30,name:'كريم محمد السيد محمد عبد النبي',a9:20,h9:5,a10:15,h10:10,a11:16,h11:10,a12:19,h12:10,a13:20,h13:10,beh1:9,beh2:5,ex1:14,ex2:13},
-        {id:31,name:'كريم محمد عبد الجواد السيد عجور',a9:20,h9:10,a10:18,h10:6,a11:20,h11:9,a12:17,h12:10,a13:20,h13:10,beh1:8,beh2:6,ex1:14,ex2:14},
-        {id:32,name:'كريم محمد فتحي محمد عبد الواحد',_totalAbsent:true,a9:'غ',h9:'غ',a10:'غ',h10:'غ',a11:'غ',h11:'غ',a12:'غ',h12:'غ',a13:'غ',h13:'غ',beh1:'غ',beh2:'غ',ex1:'غ',ex2:'غ'},
-        {id:33,name:'كريم محمد مصباح محمد المهدي',a9:13,h9:10,a10:16,h10:'غ',a11:14,h11:9,a12:17,h12:10,a13:20,h13:10,beh1:9,beh2:4,ex1:12,ex2:12},
-        {id:34,name:'مازن احمد شكري عبد المطلب حسن',a9:17,h9:7,a10:14,h10:5,a11:14,h11:10,a12:17,h12:'غ',a13:3,h13:7,beh1:7,beh2:3,ex1:10,ex2:9},
-        {id:35,name:'مازن المتولي السيد محمد جمعه',a9:14,h9:5,a10:10,h10:10,a11:20,h11:3,a12:'غ',h12:7,a13:17,h13:5,beh1:5,beh2:5,ex1:10,ex2:9},
-        {id:36,name:'ماهر سمير احمد ابراهيم علي',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:20,h12:10,a13:20,h13:10,beh1:9,beh2:6,ex1:15,ex2:15},
-        {id:37,name:'محمد ابراهيم احمد هاشم رخا',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:20,h12:10,a13:20,h13:10,beh1:10,beh2:6,ex1:15,ex2:15},
-        {id:38,name:'محمد ابراهيم السيد ابو تقي الدين',a9:20,h9:10,a10:17,h10:10,a11:20,h11:10,a12:18,h12:10,a13:20,h13:10,beh1:10,beh2:6,ex1:15,ex2:14},
-        {id:39,name:'محمد ابراهيم عزمي عبد المنعم السيد',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:20,h12:10,a13:20,h13:10,beh1:10,beh2:6,ex1:15,ex2:15},
-        {id:40,name:'محمد ابراهيم محمد السيد علي',a9:19,h9:10,a10:19,h10:10,a11:17,h11:10,a12:20,h12:10,a13:20,h13:10,beh1:10,beh2:6,ex1:15,ex2:14},
-        {id:41,name:'محمد احمد ابراهيم عبد العال عطيه',a9:17,h9:10,a10:8,h10:9,a11:20,h11:2,a12:15,h12:'غ',a13:'غ',h13:9,beh1:7,beh2:4,ex1:9,ex2:9},
-        {id:42,name:'محمد احمد احمد السعيد محمد نافع',a9:12,h9:5,a10:17,h10:5,a11:15,h11:9,a12:16,h12:2,a13:5,h13:'غ',beh1:7,beh2:3,ex1:10,ex2:9},
-        {id:43,name:'محمد احمد حمدي علي الشاعر',a9:10,h9:10,a10:16,h10:'غ',a11:16,h11:9,a12:20,h12:10,a13:18,h13:10,beh1:7,beh2:5,ex1:12,ex2:12},
-        {id:44,name:'محمد احمد عبد العزيز محمد حسين',a9:10,h9:9,a10:20,h10:10,a11:15,h11:9,a12:20,h12:7,a13:20,h13:10,beh1:8,beh2:5,ex1:13,ex2:13},
-        {id:45,name:'محمد احمد عبد المنعم علي احمد',a9:20,h9:10,a10:7,h10:10,a11:19,h11:9,a12:20,h12:6,a13:19,h13:10,beh1:9,beh2:5,ex1:13,ex2:13},
-        {id:46,name:'محمد احمد عوض احمد حسن',a9:15,h9:10,a10:20,h10:9,a11:20,h11:9,a12:20,h12:10,a13:20,h13:7,beh1:8,beh2:6,ex1:14,ex2:14},
-        {id:47,name:'محمد احمد محمد احمد شملول',a9:15,h9:'غ',a10:15,h10:10,a11:13,h11:2,a12:20,h12:7,a13:'غ',h13:9,beh1:7,beh2:3,ex1:10,ex2:9},
-        {id:48,name:'محمد احمد محمد توكل علي البغدادي',a9:20,h9:10,a10:20,h10:10,a11:20,h11:10,a12:19,h12:10,a13:16,h13:10,beh1:9,beh2:6,ex1:15,ex2:14}
-      ],
-      'فصل 2-5':[],'فصل 2-6':[],'فصل 2-7':[]
-    }
-  };
-}
-
-// ── Sidebar class list ────────────────────────────────
-function renderClsList(){
-  var el=document.getElementById('clsList');
-  if(!el)return;
-  el.innerHTML=DB.classes.map(function(c,i){
-    var count=(DB.data[c]||[]).filter(function(s){return s.name;}).length;
-    var color=CLS_COLORS[i%CLS_COLORS.length];
-    return '<div class="cls-item" id="ci_'+esc(c)+'" onclick="selectClass(\''+esc(c)+'\')">'
-      +'<div class="cls-dot" style="background:'+color+'"></div>'
-      +esc(c)
-      +'<span class="cls-badge">'+count+'</span>'
-      +'</div>';
-  }).join('');
-}
-
-function selectClass(cls){
-  currentCls=cls;
-  currentStudent=null;
-  DB.classes.forEach(function(c){
-    var el=document.getElementById('ci_'+esc(c));
-    if(el)el.classList.toggle('active',c===cls);
-  });
-  var _bb=document.getElementById('backBtn');if(_bb)_bb.classList.remove('show');
-  if(currentView==='general') renderGeneralReport(cls);
-  else if(currentView==='follower') renderFollowerReport(cls);
-  else renderStudentList(cls);
-}
-
-function setView(v){
-  currentView=v;
-  var _vg=document.getElementById('vt-general');if(_vg)_vg.classList.toggle('active',v==='general');
-  var _vs=document.getElementById('vt-student');if(_vs)_vs.classList.toggle('active',v==='student');
-  var _vf=document.getElementById('vt-follower');if(_vf)_vf.classList.toggle('active',v==='follower');
-  if(!currentCls)return;
-  currentStudent=null;
-  var _bb=document.getElementById('backBtn');if(_bb)_bb.classList.remove('show');
-  if(v==='general') renderGeneralReport(currentCls);
-  else if(v==='follower') renderFollowerReport(currentCls);
-  else renderStudentList(currentCls);
-}
-
-function goBack(){
-  currentStudent=null;
-  var _bb=document.getElementById('backBtn');if(_bb)_bb.classList.remove('show');
-  if(currentView==='follower') renderFollowerReport(currentCls);
-  else renderStudentList(currentCls);
-}
-
-// ── Helpers ───────────────────────────────────────────
-function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-
-function allCols(){
-  var r=[];
-  if(!DB||!DB.colPages)return r;
-  DB.colPages.forEach(function(pg){(pg.cols||[]).forEach(function(c){r.push(c);});});
-  return r;
-}
-
-function calcStudent(s){
-  if(!DB)return{total:0,avgAssess:0,avgHw:0,avgBeh:'—',exTotal:0};
-  if(s._totalAbsent)return{total:0,avgAssess:0,avgHw:0,avgBeh:'—',exTotal:0};
-  var aSum=0,aC=0,hSum=0,hC=0,bSum=0,bC=0,exSum=0;
-  var aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  var awList=ALL_WEEKS.slice(0,aw);
-  // حساب متوسط السلوك من حقول bw الأسبوعية
-  awList.forEach(function(w){
-    var bwv=s['bw'+w];
-    if(bwv===''||bwv===undefined||bwv===null)return;
-    if(bwv==='م')return;
-    var bwn=bwv==='غ'?0:Math.min(Number(bwv)||0,10);
-    bSum+=bwn;bC++;
-  });
-  allCols().forEach(function(c){
-    if(c.id.match(/^a\d+$/)){var wn=parseInt(c.id.slice(1));if(awList.indexOf(wn)<0)return;}
-    if(c.id.match(/^h\d+$/)){var wn=parseInt(c.id.slice(1));if(awList.indexOf(wn)<0)return;}
-    if(c.id.match(/^bw\d+$/))return;
-    if(c.id==='beh1'||c.id==='beh2')return;
-    if(!c.visible&&c.id!=='ex1'&&c.id!=='ex2')return;
-    var raw=s[c.field];
-    if(raw===''||raw===undefined||raw===null)return;
-    if(raw==='م')return;
-    var v=raw==='غ'?0:Math.min(Number(raw)||0,c.max);
-    if(c.id.charAt(0)==='a'&&c.id!=='abs'){aSum+=v;aC++;}
-    else if(c.id.charAt(0)==='h'){hSum+=v;hC++;}
-    else if(c.id==='ex1'||c.id==='ex2')exSum+=Math.min(v,c.max);
-  });
-  var avgA=aC?Math.round(aSum/aC):0;
-  var avgH=hC?Math.round(hSum/hC):0;
-  var beh=bC>0?Math.round(bSum/bC):0;
-  var avgBehDisp=bC>0?beh:'—';
-  var ex=Math.min(exSum,30);
-  return{total:avgA+avgH+beh+ex,avgAssess:avgA,avgHw:avgH,avgBeh:avgBehDisp,exTotal:ex};
-}
-
-function gradeColor(pct){
-  if(pct>=85)return'#10b981';
-  if(pct>=70)return'#3b82f6';
-  if(pct>=55)return'#f59e0b';
-  if(pct>=40)return'#f97316';
-  return'#ef4444';
-}
-
-function gradeLetter(pct){
-  if(pct>=90)return'A+';
-  if(pct>=85)return'A';
-  if(pct>=80)return'B+';
-  if(pct>=75)return'B';
-  if(pct>=70)return'C+';
-  if(pct>=65)return'C';
-  if(pct>=60)return'D+';
-  if(pct>=50)return'D';
-  return'F';
-}
-
-function gradeAr(pct){
-  if(pct>=85)return'ممتاز';
-  if(pct>=70)return'جيد جداً';
-  if(pct>=55)return'جيد';
-  if(pct>=40)return'مقبول';
-  return'راسب';
-}
-
-function countAbsences(cls,sid){
-  if(!DB.absences||!DB.absences[cls]||!DB.absences[cls][sid])return 0;
-  var abs=DB.absences[cls][sid];
-  return Object.keys(abs).filter(function(k){return abs[k]==='abs';}).length;
-}
-
-function countSick(cls,sid){
-  if(!DB.absences||!DB.absences[cls]||!DB.absences[cls][sid])return 0;
-  var abs=DB.absences[cls][sid];
-  return Object.keys(abs).filter(function(k){return abs[k]==='sick';}).length;
-}
-
-function svgRing(val,max,color,size){
-  size=size||64;
-  var r=size/2-5;
-  var circ=2*Math.PI*r;
-  var pct=max>0?val/max:0;
-  var dash=circ*Math.min(1,pct);
-  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" class="ring-svg">'
-    +'<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" stroke="#1e2d47" stroke-width="5"/>'
-    +'<circle cx="'+size/2+'" cy="'+size/2+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="5" stroke-linecap="round"'
-    +' stroke-dasharray="'+dash+' '+circ+'" transform="rotate(-90 '+size/2+' '+size/2+')"/>'
-    +'</svg>';
-}
-
-// ═══════════════════════════════════════════════════════
-// GENERAL REPORT
-// ═══════════════════════════════════════════════════════
-function renderGeneralReport(cls){
-  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
-  var tmax=70;
-  var totalStudents=students.length;
-  var clsIdx=DB.classes.indexOf(cls);
-  var color=CLS_COLORS[clsIdx%CLS_COLORS.length];
-
-  // Compute stats
-  var scores=students.map(function(s){return calcStudent(s).total;});
-  var avg=totalStudents?Math.round(scores.reduce(function(a,b){return a+b;},0)/totalStudents):0;
-  var maxScore=totalStudents?Math.max.apply(null,scores):0;
-  var minScore=totalStudents?Math.min.apply(null,scores):0;
-  var passCount=scores.filter(function(x){return x/tmax>=0.4;}).length;
-  var excellentCount=scores.filter(function(x){return x/tmax>=0.85;}).length;
-
-  // Distribution buckets
-  var buckets=[0,0,0,0,0]; // <40, 40-55, 55-70, 70-85, 85+
-  scores.forEach(function(s){
-    var p=s/tmax*100;
-    if(p<40)buckets[0]++;
-    else if(p<55)buckets[1]++;
-    else if(p<70)buckets[2]++;
-    else if(p<85)buckets[3]++;
-    else buckets[4]++;
-  });
-  var bucketColors=['#ef4444','#f97316','#f59e0b','#3b82f6','#10b981'];
-  var bucketLabels=['راسب','مقبول','جيد','جيد جداً','ممتاز'];
-
-  // Ranked students
-  var ranked=students.map(function(s){
-    var c=calcStudent(s);
-    return{s:s,total:c.total,avgAssess:c.avgAssess,avgHw:c.avgHw,avgBeh:c.avgBeh,exTotal:c.exTotal,abs:countAbsences(cls,s.id),sick:countSick(cls,s.id)};
-  }).sort(function(a,b){return b.total-a.total;});
-
-  // Weekly avgs (for line mini-chart)
-  var aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  var weeklyAssessAvgs=ALL_WEEKS.slice(0,aw).map(function(w){
-    var vals=students.map(function(s){var v=s['a'+w];return(v===''||v===undefined||v===null||v==='م')?null:(v==='غ'?0:Number(v)||0);}).filter(function(v){return v!==null;});
-    return vals.length?Math.round(vals.reduce(function(a,b){return a+b;},0)/vals.length):null;
-  });
-  var weeklyHwAvgs=ALL_WEEKS.slice(0,aw).map(function(w){
-    var vals=students.map(function(s){var v=s['h'+w];return(v===''||v===undefined||v===null||v==='م')?null:(v==='غ'?0:Number(v)||0);}).filter(function(v){return v!==null;});
-    return vals.length?Math.round(vals.reduce(function(a,b){return a+b;},0)/vals.length):null;
-  });
-
-  // --- HTML ---
-  var html='';
-
-  // Header title bar
-  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">';
-  html+='<div style="width:14px;height:14px;border-radius:50%;background:'+color+';flex-shrink:0;"></div>';
-  html+='<div style="font-size:16px;font-weight:900;color:var(--text);">'+esc(cls)+'</div>';
-  html+='<div style="margin-right:auto;display:flex;gap:5px;">';
-  html+='<span style="background:rgba(59,130,246,.15);color:var(--blue3);border:1px solid rgba(59,130,246,.3);padding:2px 9px;border-radius:8px;font-size:9px;font-weight:700;">'+totalStudents+' طالب</span>';
-  html+='<span style="background:rgba(16,185,129,.15);color:#34d399;border:1px solid rgba(16,185,129,.3);padding:2px 9px;border-radius:8px;font-size:9px;font-weight:700;">'+passCount+' ناجح</span>';
-  html+='</div></div>';
-
-  // Stat cards row
-  html+='<div class="report-header">';
-  html+=statCard(avg+'/'+tmax,'متوسط الفصل',gradeAr(avg/tmax*100),gradeColor(avg/tmax*100));
-  html+=statCard(maxScore+'/'+tmax,'أعلى درجة','درجة القمة','#10b981');
-  html+=statCard(minScore+'/'+tmax,'أدنى درجة','تحتاج متابعة','#ef4444');
-  html+=statCard(excellentCount+' / '+totalStudents,'الممتازون','فوق 85%','#f59e0b');
-  html+='</div>';
-
-  // Distribution bar
-  html+='<div class="section-title">📊 توزيع الدرجات</div>';
-  html+='<div class="dist-bar-wrap">';
-  html+='<div class="dist-bar">';
-  var total100=buckets.reduce(function(a,b){return a+b;},0)||1;
-  buckets.forEach(function(cnt,i){
-    var pct=Math.round(cnt/total100*100);
-    if(pct===0)return;
-    html+='<div class="dist-seg" style="width:'+pct+'%;background:'+bucketColors[i]+';min-width:'+(cnt>0?24:0)+'px;" title="'+bucketLabels[i]+': '+cnt+' طالب">'+cnt+'</div>';
-  });
-  html+='</div>';
-  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:7px;">';
-  buckets.forEach(function(cnt,i){
-    html+='<span style="font-size:9px;color:'+bucketColors[i]+';display:flex;align-items:center;gap:3px;">';
-    html+='<span style="width:8px;height:8px;border-radius:2px;background:'+bucketColors[i]+';display:inline-block;"></span>';
-    html+=bucketLabels[i]+' ('+cnt+')</span>';
-  });
-  html+='</div></div>';
-
-  // Weekly averages chart
-  html+='<div class="section-title">📈 متوسط التقييم الأسبوعي</div>';
-  html+='<div class="weekly-chart">';
-  html+='<div class="wk-bars" id="wchart_'+esc(cls)+'">';
-  var maxA=Math.max.apply(null,weeklyAssessAvgs.filter(function(v){return v!==null;}).concat([1]));
-  ALL_WEEKS.slice(0,aw).forEach(function(w,i){
-    var val=weeklyAssessAvgs[i];
-    var hwVal=weeklyHwAvgs[i];
-    var pct=val!==null?(val/20*100):0;
-    var hpct=hwVal!==null?(hwVal/10*100):0;
-    html+='<div class="wk-col">';
-    html+='<div class="wk-bar-wrap">';
-    if(val!==null){
-      html+='<div class="wk-bar" style="height:'+pct+'%;background:linear-gradient(180deg,#3b82f6,#1d4ed8);" data-val="تقييم: '+val+'/20"></div>';
-    } else {
-      html+='<div style="width:100%;height:4px;background:var(--border);border-radius:3px;margin-bottom:2px;"></div>';
-    }
-    html+='</div>';
-    html+='<div class="wk-lbl">'+w+'</div>';
-    html+='</div>';
-  });
-  html+='</div>';
-  html+='<div style="font-size:9px;color:var(--text3);margin-top:7px;">📊 متوسط التقييم الأسبوعي من 20 — اضغط على الأعمدة لرؤية القيم</div>';
-  html+='</div>';
-
-  // Grade table
-  html+='<div class="section-title">🏆 قائمة الدرجات والترتيب</div>';
-  html+='<div class="search-bar">';
-  html+='<input class="search-inp" placeholder="🔍 بحث باسم الطالب..." oninput="filterGeneralTable(this.value)" id="searchGeneral"/>';
-  html+='<button class="filter-btn active" id="gf_all" onclick="filterGeneralBy(\'all\')">الكل</button>';
-  html+='<button class="filter-btn" id="gf_exc" onclick="filterGeneralBy(\'exc\')">ممتاز</button>';
-  html+='<button class="filter-btn" id="gf_fail" onclick="filterGeneralBy(\'fail\')">راسب</button>';
-  html+='<button class="filter-btn" id="gf_abs" onclick="filterGeneralBy(\'abs\')">غياب</button>';
-  html+='</div>';
-
-  html+='<div class="grade-table-wrap"><table class="grade-table" id="generalTable">';
-  html+='<thead><tr>';
-  html+='<th>م</th><th class="td-name">الاسم</th>';
-  html+='<th>التقييم<br><span style="font-size:8px;opacity:.7;">/20</span></th>';
-  html+='<th>الواجب<br><span style="font-size:8px;opacity:.7;">/10</span></th>';
-  html+='<th>السلوك<br><span style="font-size:8px;opacity:.7;">/10</span></th>';
-  html+='<th>الاختبارات<br><span style="font-size:8px;opacity:.7;">/30</span></th>';
-  html+='<th>المجموع<br><span style="font-size:8px;opacity:.7;">/70</span></th>';
-  html+='<th>%</th><th>التقدير</th><th>غياب</th><th>تقرير</th>';
-  html+='</tr></thead><tbody>';
-
-  ranked.forEach(function(r,i){
-    var pct=Math.round(r.total/tmax*100);
-    var color=gradeColor(pct);
-    var rankClass=i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'';
-    html+='<tr data-name="'+esc(r.s.name)+'" data-pct="'+pct+'" data-abs="'+r.abs+'">';
-    html+='<td class="td-rank"><span class="'+rankClass+'">'+(i===0?'🥇':i===1?'🥈':i===2?'🥉':'#'+(i+1))+'</span></td>';
-    html+='<td class="td-name">'+esc(r.s.name)+'</td>';
-    html+='<td>'+r.avgAssess+'</td>';
-    html+='<td>'+r.avgHw+'</td>';
-    html+='<td>'+r.avgBeh+'</td>';
-    html+='<td>'+r.exTotal+'</td>';
-    html+='<td><span class="grade-pill" style="background:'+color+'22;color:'+color+';border:1px solid '+color+'44;">'+r.total+'</span></td>';
-    html+='<td style="color:'+color+';font-weight:700;">'+pct+'%</td>';
-    html+='<td><span class="grade-pill" style="background:'+color+'22;color:'+color+';border:1px solid '+color+'44;">'+gradeAr(pct)+'</span></td>';
-    html+='<td style="color:'+(r.abs>5?'#ef4444':r.abs>0?'#f59e0b':'#475569')+'">'+(r.abs||'—')+(r.sick?' / 🤒'+r.sick:'')+'</td>';
-    html+='<td><button onclick="openStudentReport(\''+esc(cls)+'\','+r.s.id+')" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:var(--blue3);border-radius:6px;padding:2px 7px;font-size:9px;cursor:pointer;font-family:inherit;">تفصيل</button></td>';
-    html+='</tr>';
-  });
-
-  if(!ranked.length){
-    html+='<tr><td colspan="11" style="color:var(--text3);padding:20px;text-align:center;">لا يوجد طلاب في هذا الفصل</td></tr>';
-  }
-
-  html+='</tbody></table></div>';
-
-  // class summary component breakdown
-  var avgBreakdown={assess:0,hw:0,beh:0,ex:0};
-  ranked.forEach(function(r){avgBreakdown.assess+=r.avgAssess;avgBreakdown.hw+=r.avgHw;avgBreakdown.beh+=(r.avgBeh==='—'?0:Number(r.avgBeh)||0);avgBreakdown.ex+=r.exTotal;});
-  if(ranked.length){avgBreakdown.assess=Math.round(avgBreakdown.assess/ranked.length);avgBreakdown.hw=Math.round(avgBreakdown.hw/ranked.length);avgBreakdown.beh=Math.round(avgBreakdown.beh/ranked.length);avgBreakdown.ex=Math.round(avgBreakdown.ex/ranked.length);}
-
-  html+='<div class="section-title" style="margin-top:14px;">📋 متوسطات مكونات الدرجة</div>';
-  html+='<div class="breakdown-grid">';
-  html+=breakdownCard('📊 التقييمات',avgBreakdown.assess,20,'#3b82f6');
-  html+=breakdownCard('📝 الواجبات',avgBreakdown.hw,10,'#8b5cf6');
-  html+=breakdownCard('🌟 السلوك',avgBreakdown.beh,10,'#10b981');
-  html+=breakdownCard('📋 الاختبارات',avgBreakdown.ex,30,'#f59e0b');
-  html+='</div>';
-
-  document.getElementById('mainContent').innerHTML=html;
-
-  // Store ranked for filtering
-  window._generalRanked=ranked;
-  window._generalCls=cls;
-  window._generalFilter='all';
-}
-
-function statCard(val,lbl,sub,color){
-  return '<div class="stat-card"><div class="sc-val" style="color:'+color+'">'+val+'</div>'
-    +'<div class="sc-lbl">'+lbl+'</div>'
-    +(sub?'<div class="sc-sub">'+sub+'</div>':'')+'</div>';
-}
-
-function breakdownCard(label,val,max,color){
-  var pct=max>0?Math.round(val/max*100):0;
-  return '<div class="breakdown-card">'
-    +'<div class="bc-label">'+label+'</div>'
-    +'<div class="bc-bar-bg"><div class="bc-bar-fill" style="width:'+pct+'%;background:'+color+';"></div></div>'
-    +'<div class="bc-vals"><span class="bc-val" style="color:'+color+'">'+val+'</span><span class="bc-max">/'+max+'</span></div>'
-    +'</div>';
-}
-
-function filterGeneralTable(q){
-  q=q.trim().toLowerCase();
-  var rows=document.querySelectorAll('#generalTable tbody tr');
-  rows.forEach(function(r){
-    var name=(r.getAttribute('data-name')||'').toLowerCase();
-    var matchQ=!q||name.indexOf(q)>=0;
-    var filter=window._generalFilter||'all';
-    var pct=parseInt(r.getAttribute('data-pct')||0);
-    var abs=parseInt(r.getAttribute('data-abs')||0);
-    var matchF=filter==='all'||(filter==='exc'&&pct>=85)||(filter==='fail'&&pct<40)||(filter==='abs'&&abs>0);
-    r.style.display=(matchQ&&matchF)?'':'none';
-  });
-}
-
-function filterGeneralBy(f){
-  window._generalFilter=f;
-  ['all','exc','fail','abs'].forEach(function(x){
-    var el=document.getElementById('gf_'+x);
-    if(el)el.classList.toggle('active',x===f);
-  });
-  var q=(document.getElementById('searchGeneral')||{}).value||'';
-  filterGeneralTable(q);
-}
-
-// ═══════════════════════════════════════════════════════
-// STUDENT LIST VIEW
-// ═══════════════════════════════════════════════════════
-function renderStudentList(cls){
-  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
-  var tmax=70;
-  var clsIdx=DB.classes.indexOf(cls);
-  var color=CLS_COLORS[clsIdx%CLS_COLORS.length];
-
-  var ranked=students.map(function(s){
-    var c=calcStudent(s);
-    return{s:s,total:c.total,abs:countAbsences(cls,s.id)};
-  }).sort(function(a,b){return b.total-a.total;});
-
-  var html='';
-  html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">';
-  html+='<div style="width:14px;height:14px;border-radius:50%;background:'+color+';flex-shrink:0;"></div>';
-  html+='<div style="font-size:16px;font-weight:900;">'+esc(cls)+'</div>';
-  html+='<span style="margin-right:auto;font-size:10px;color:var(--text3);">اختر طالباً لعرض تقريره</span>';
-  html+='</div>';
-
-  html+='<div class="search-bar">';
-  html+='<input class="search-inp" placeholder="🔍 بحث..." oninput="filterStudentList(this.value)"/>';
-  html+='</div>';
-
-  html+='<div id="studentListGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">';
-
-  ranked.forEach(function(r,i){
-    var pct=Math.round(r.total/tmax*100);
-    var color2=gradeColor(pct);
-    var initials=r.s.name.split(' ').slice(0,2).map(function(x){return x.charAt(0);}).join('');
-    html+='<div onclick="openStudentReport(\''+esc(cls)+'\','+r.s.id+')" data-name="'+esc(r.s.name)+'" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;transition:all .15s;position:relative;" onmouseover="this.style.borderColor=\''+color2+'\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
-    html+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;">';
-    if(r.s.photo||DB.meta.defaultStudentPhoto){
-      html+='<div class="stu-avatar"><img src="'+(r.s.photo||DB.meta.defaultStudentPhoto)+'" alt=""/></div>';
-    } else {
-      html+='<div class="stu-avatar" style="font-size:14px;">'+esc(initials)+'</div>';
-    }
-    html+='<div style="flex:1;overflow:hidden;">';
-    html+='<div style="font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(r.s.name)+'</div>';
-    html+='<div style="font-size:9px;color:var(--text3);">ترتيب: #'+(i+1)+'</div>';
-    html+='</div></div>';
-    // Mini progress bar
-    html+='<div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;margin-bottom:5px;">';
-    html+='<div style="width:'+pct+'%;background:'+color2+';height:100%;border-radius:4px;"></div>';
-    html+='</div>';
-    html+='<div style="display:flex;justify-content:space-between;font-size:10px;">';
-    html+='<span style="font-weight:700;color:'+color2+'">'+r.total+'/'+tmax+'</span>';
-    html+='<span style="color:'+color2+'">'+gradeAr(pct)+'</span>';
-    html+='</div>';
-    if(r.abs>0)html+='<div style="position:absolute;top:8px;left:8px;background:rgba(239,68,68,.2);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:6px;font-size:8px;padding:1px 5px;">'+r.abs+' غياب</div>';
-    html+='</div>';
-  });
-
-  if(!ranked.length) html+='<div class="empty-state" style="grid-column:1/-1;"><div class="es-icon">👥</div><div class="es-msg">لا يوجد طلاب</div></div>';
-
-  html+='</div>';
-  document.getElementById('mainContent').innerHTML=html;
-  window._studentListCls=cls;
-}
-
-function filterStudentList(q){
-  q=q.trim();
-  var items=document.querySelectorAll('#studentListGrid > div[data-name]');
-  items.forEach(function(el){
-    el.style.display=(!q||el.getAttribute('data-name').indexOf(q)>=0)?'':'none';
-  });
-}
-
-// ═══════════════════════════════════════════════════════
-// INDIVIDUAL STUDENT REPORT
-// ═══════════════════════════════════════════════════════
-function openStudentReport(cls,sid){
-  currentStudent=sid;
-  currentCls=cls;
-  // Update sidebar active
-  DB.classes.forEach(function(c){
-    var el=document.getElementById('ci_'+esc(c));
-    if(el)el.classList.toggle('active',c===cls);
-  });
-  var _bb2=document.getElementById('backBtn');if(_bb2)_bb2.classList.add('show');
-  renderStudentReport(cls,sid);
-}
-
-function renderStudentReport(cls,sid){
-  var students=DB.data[cls]||[];
-  var s=null;
-  students.forEach(function(x){if(x.id===sid)s=x;});
-  if(!s){document.getElementById('mainContent').innerHTML='<div class="empty-state"><div class="es-icon">❓</div><div class="es-msg">لم يُعثر على الطالب</div></div>';return;}
-
-  var tmax=70;
-  var calc=calcStudent(s);
-  var pct=Math.round(calc.total/tmax*100);
-  var color=gradeColor(pct);
-  var absCount=countAbsences(cls,s.id);
-  var sickCount=countSick(cls,s.id);
-
-  // Rank
-  var ranked=(DB.data[cls]||[]).filter(function(x){return x.name;}).map(function(x){return{id:x.id,total:calcStudent(x).total};}).sort(function(a,b){return b.total-a.total;});
-  var rank=1;
-  ranked.forEach(function(r,i){if(r.id===sid)rank=i+1;});
-  var totalInCls=ranked.length;
-
-  var initials=s.name.split(' ').slice(0,2).map(function(x){return x.charAt(0);}).join('');
-
-  var aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  var awList=ALL_WEEKS.slice(0,aw);
-
-  var html='';
-
-  // Student header card
-  html+='<div class="stu-report-header">';
-  if(s.photo||DB.meta.defaultStudentPhoto){
-    html+='<div class="stu-avatar" style="width:56px;height:56px;"><img src="'+(s.photo||DB.meta.defaultStudentPhoto)+'" alt=""/></div>';
-  } else {
-    html+='<div class="stu-avatar">'+esc(initials)+'</div>';
-  }
-  html+='<div class="stu-info">';
-  html+='<div class="stu-name">'+esc(s.name)+'</div>';
-  html+='<div class="stu-cls">'+esc(cls)+' — '+(DB.meta&&DB.meta.subject?esc(DB.meta.subject):'')+'</div>';
-  html+='<div class="stu-badges">';
-  html+='<span class="stu-badge" style="background:'+color+'22;color:'+color+';border-color:'+color+'44;">'+gradeAr(pct)+'</span>';
-  html+='<span class="stu-badge" style="background:rgba(59,130,246,.15);color:var(--blue3);border-color:rgba(59,130,246,.3);">ترتيب #'+rank+' / '+totalInCls+'</span>';
-  if(absCount>0) html+='<span class="stu-badge" style="background:rgba(239,68,68,.15);color:#f87171;border-color:rgba(239,68,68,.3);">'+absCount+' غياب</span>';
-  if(sickCount>0) html+='<span class="stu-badge" style="background:rgba(245,158,11,.15);color:var(--yellow2);border-color:rgba(245,158,11,.3);">🤒 '+sickCount+' مرض</span>';
-  html+='</div></div>';
-  html+='<div class="stu-score-big">';
-  html+='<div style="position:relative;display:inline-flex;align-items:center;justify-content:center;">';
-  html+=svgRing(calc.total,tmax,color,80);
-  html+='<div style="position:absolute;text-align:center;">';
-  html+='<div class="stu-score-num" style="color:'+color+';font-size:18px;">'+calc.total+'</div>';
-  html+='<div style="font-size:8px;color:var(--text3);">/'+tmax+'</div>';
-  html+='</div></div>';
-  html+='<div class="stu-score-rank" style="text-align:center;">'+pct+'%</div>';
-  html+='</div>';
-  html+='</div>';
-
-  // Breakdown cards
-  html+='<div class="section-title">📋 تفاصيل مكونات الدرجة</div>';
-  html+='<div class="breakdown-grid">';
-  html+=breakdownCard('📊 التقييمات (متوسط)',calc.avgAssess,20,'#3b82f6');
-  html+=breakdownCard('📝 الواجبات (متوسط)',calc.avgHw,10,'#8b5cf6');
-  html+=breakdownCard('🌟 السلوك',calc.avgBeh,10,'#10b981');
-  html+=breakdownCard('📋 الاختبارات',calc.exTotal,30,'#f59e0b');
-  html+='</div>';
-
-  // Weekly assessment chart
-  html+='<div class="section-title">📈 أداء التقييم الأسبوعي</div>';
-  html+='<div class="weekly-chart">';
-  html+='<div class="wk-bars">';
-  awList.forEach(function(w){
-    var av=s['a'+w];
-    var hv=s['h'+w];
-    var aVal=(av===''||av===undefined||av===null)?null:(av==='غ'?0:(av==='م'?null:Number(av)||0));
-    var hVal=(hv===''||hv===undefined||hv===null)?null:(hv==='غ'?0:(hv==='م'?null:Number(hv)||0));
-    var aPct=aVal!==null?(aVal/20*100):0;
-    var aColor=aVal!==null?gradeColor(aVal/20*100):'#334155';
-    html+='<div class="wk-col">';
-    html+='<div class="wk-bar-wrap" title="أسبوع '+w+'">';
-    if(av==='غ'){
-      html+='<div class="wk-bar" style="height:6px;background:#ef4444;min-height:6px;" data-val="أسبوع '+w+': غائب"></div>';
-    } else if(av==='م'){
-      html+='<div class="wk-bar" style="height:6px;background:#3b82f6;min-height:6px;" data-val="أسبوع '+w+': معذور"></div>';
-    } else if(aVal!==null){
-      html+='<div class="wk-bar" style="height:'+Math.max(5,aPct)+'%;background:'+aColor+';" data-val="أسبوع '+w+': '+aVal+'/20"></div>';
-    } else {
-      html+='<div style="width:100%;height:3px;background:var(--border);border-radius:2px;margin-bottom:2px;"></div>';
-    }
-    html+='</div>';
-    html+='<div class="wk-lbl">'+w+'</div>';
-    html+='</div>';
-  });
-  html+='</div>';
-  // Legend
-  html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:9px;">';
-  html+='<span style="color:#ef4444;display:flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;border-radius:2px;background:#ef4444;display:inline-block;"></span>غائب</span>';
-  html+='<span style="color:#3b82f6;display:flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;border-radius:2px;background:#3b82f6;display:inline-block;"></span>معذور</span>';
-  html+='<span style="color:#10b981;display:flex;align-items:center;gap:3px;"><span style="width:8px;height:8px;border-radius:2px;background:#10b981;display:inline-block;"></span>أداء جيد</span>';
-  html+='</div>';
-  html+='</div>';
-
-  // Weekly grades table
-  html+='<div class="section-title">📅 جدول الدرجات الأسبوعية</div>';
-  html+='<div class="grade-table-wrap"><table class="grade-table">';
-  html+='<thead><tr>';
-  html+='<th>الأسبوع</th>';
-  html+='<th>التقييم<br><span style="font-size:8px;opacity:.7;">/20</span></th>';
-  html+='<th>الواجب<br><span style="font-size:8px;opacity:.7;">/10</span></th>';
-  html+='<th>حالة التقييم</th>';
-  html+='</tr></thead><tbody>';
-
-  awList.forEach(function(w){
-    var av=s['a'+w];
-    var hv=s['h'+w];
-    var aDisp=(av===''||av===undefined||av===null)?'—':(av==='غ'?'<span style="color:#ef4444;font-weight:700;">غ</span>':av==='م'?'<span style="color:#3b82f6;">م</span>':av);
-    var hDisp=(hv===''||hv===undefined||hv===null)?'—':(hv==='غ'?'<span style="color:#ef4444;font-weight:700;">غ</span>':hv==='م'?'<span style="color:#3b82f6;">م</span>':hv);
-    var aNum=(av===''||av===undefined||av===null||av==='م')?null:(av==='غ'?0:Number(av)||0);
-    var status='';
-    if(av==='غ') status='<span style="background:rgba(239,68,68,.2);color:#f87171;padding:1px 7px;border-radius:6px;font-size:9px;">غياب</span>';
-    else if(av==='م') status='<span style="background:rgba(59,130,246,.15);color:var(--blue3);padding:1px 7px;border-radius:6px;font-size:9px;">معذور</span>';
-    else if(aNum===null) status='<span style="color:var(--text3);font-size:9px;">لم يُرصد</span>';
-    else {
-      var p=aNum/20*100;
-      status='<span class="grade-pill" style="background:'+gradeColor(p)+'22;color:'+gradeColor(p)+';border:1px solid '+gradeColor(p)+'44;font-size:9px;">'+gradeAr(p)+'</span>';
-    }
-    html+='<tr><td style="font-weight:700;color:var(--text2);">'+w+'</td><td>'+aDisp+'</td><td>'+hDisp+'</td><td>'+status+'</td></tr>';
-  });
-
-  html+='</tbody></table></div>';
-
-  // Other grades
-  html+='<div class="section-title">📋 اختبارات وسلوك</div>';
-  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">';
-  [['beh1','سلوك 1','5'],['beh2','سلوك 2','5'],['ex1','اختبار 1','15'],['ex2','اختبار 2','15']].forEach(function(f){
-    var val=s[f[0]];
-    var disp=(val===''||val===undefined||val===null)?'—':val;
-    var num=(val===''||val===undefined||val===null||val==='م')?null:(val==='غ'?0:Number(val)||0);
-    var c2=num!==null?gradeColor(num/Number(f[2])*100):'#475569';
-    html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;flex:1;min-width:120px;text-align:center;">';
-    html+='<div style="font-size:9px;color:var(--text3);margin-bottom:4px;">'+f[1]+'</div>';
-    html+='<div style="font-size:20px;font-weight:900;color:'+c2+'">'+disp+'</div>';
-    html+='<div style="font-size:9px;color:var(--text3);">/'+f[2]+'</div>';
-    html+='</div>';
-  });
-  html+='</div>';
-
-  // Absence timeline
-  if(absCount>0||sickCount>0){
-    html+='<div class="section-title">📋 ملخص الغياب</div>';
-    html+='<div class="abs-summary">';
-    html+='<span class="abs-badge" style="background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);">غياب: '+absCount+' حصة</span>';
-    html+='<span class="abs-badge" style="background:rgba(245,158,11,.15);color:var(--yellow2);border:1px solid rgba(245,158,11,.3);">مرض: '+sickCount+' حصة</span>';
-    html+='<span class="abs-badge" style="background:rgba(100,116,139,.15);color:var(--text2);border:1px solid var(--border);">الإجمالي: '+(absCount+sickCount)+' حصة</span>';
-    html+='</div>';
-  }
-
-  // Compare with class average
-  html+='<div class="section-title" style="margin-top:4px;">📊 المقارنة مع متوسط الفصل</div>';
-  var clsStudents=(DB.data[cls]||[]).filter(function(x){return x.name;});
-  var clsAvg=clsStudents.length?Math.round(clsStudents.map(function(x){return calcStudent(x).total;}).reduce(function(a,b){return a+b;},0)/clsStudents.length):0;
-  var diff=calc.total-clsAvg;
-  html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">';
-  html+='<div style="flex:1;text-align:center;">';
-  html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">درجة الطالب</div>';
-  html+='<div style="font-size:26px;font-weight:900;color:'+color+'">'+calc.total+'</div>';
-  html+='<div style="font-size:9px;color:var(--text3);">/'+tmax+'</div>';
-  html+='</div>';
-  html+='<div style="display:flex;align-items:center;font-size:18px;color:var(--border2);">—</div>';
-  html+='<div style="flex:1;text-align:center;">';
-  html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">متوسط الفصل</div>';
-  html+='<div style="font-size:26px;font-weight:900;color:var(--blue3)">'+clsAvg+'</div>';
-  html+='<div style="font-size:9px;color:var(--text3);">/'+tmax+'</div>';
-  html+='</div>';
-  html+='<div style="display:flex;align-items:center;font-size:18px;color:var(--border2);">=</div>';
-  html+='<div style="flex:1;text-align:center;">';
-  html+='<div style="font-size:10px;color:var(--text3);margin-bottom:4px;">الفرق</div>';
-  html+='<div style="font-size:26px;font-weight:900;color:'+(diff>=0?'#10b981':'#ef4444')+'">'+(diff>=0?'+':'')+diff+'</div>';
-  html+='<div style="font-size:9px;color:'+(diff>=0?'#10b981':'#ef4444')+'">'+(diff>=0?'فوق المتوسط':'تحت المتوسط')+'</div>';
-  html+='</div>';
-  html+='</div>';
-
-  document.getElementById('mainContent').innerHTML=html;
-}
-
-// ═══════════════════════════════════════════════════════
-// FOLLOWER REPORT — تقرير المتابعين
-// ═══════════════════════════════════════════════════════
-var FR = { search:'', selectedStudents:[], showAll:true, printMode:false };
-
-function weekStartDate(week){
-  // Returns Date for start of that week (Saturday) based on DB startDate
-  if(!DB.meta||!DB.meta.startDate) return null;
-  var d=new Date(DB.meta.startDate);
-  d.setDate(d.getDate()+(week-1)*7);
-  return d;
-}
 

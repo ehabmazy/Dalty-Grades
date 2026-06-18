@@ -759,7 +759,7 @@ function wkImOnKey(e){
 }
 
 // تنظيف justSet لألوان اللوحة
-setInterval(function(){
+window._weeklyHighlightInterval=setInterval(function(){
   var IP=WKS.imlaaPanel;
   if(!IP||!IP.justSet)return;
   var now=Date.now();var changed=false;

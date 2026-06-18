@@ -29,7 +29,7 @@ function renderStats(){
 
 
 // Clear just-set highlights
-setInterval(function(){
+window._dictHighlightInterval=setInterval(function(){
   var now=Date.now();var changed=false;
   Object.keys(DS.justSet).forEach(function(id){if(now-DS.justSet[id]>5000){delete DS.justSet[id];changed=true;}});
   Object.keys(GS.dictHL).forEach(function(id){if(now-GS.dictHL[id]>5000){delete GS.dictHL[id];changed=true;}});
@@ -206,6 +206,9 @@ function sickExport(){
     XLSX.writeFile(wb,"سجل_المرضى.xlsx");
   }catch(e){alert("خطأ: "+e.message);}
 }
+
+// مراجع دوال drag على document لتفادي تراكم listeners
+var _dictDragMM=null, _dictDragMU=null;
 
 var DS={dictDate:"",
   dictNumpad:false,
@@ -995,13 +998,13 @@ function renderDict(){
       drag.style.cursor='grabbing';
       e.preventDefault();
     });
-    document.addEventListener('mousemove',function(e){
-      if(!dragging)return;
-      applyPos(startL+(e.clientX-startX),startT+(e.clientY-startY));
-    });
-    document.addEventListener('mouseup',function(){
-      dragging=false;drag.style.cursor='grab';
-    });
+    // استخدام دوال مُسماة لتفادي تراكم الـ listeners على document عند كل render
+    if(_dictDragMM) document.removeEventListener('mousemove',_dictDragMM);
+    if(_dictDragMU) document.removeEventListener('mouseup',_dictDragMU);
+    _dictDragMM=function(e){ if(!dragging)return; applyPos(startL+(e.clientX-startX),startT+(e.clientY-startY)); };
+    _dictDragMU=function(){ dragging=false; drag.style.cursor='grab'; };
+    document.addEventListener('mousemove',_dictDragMM);
+    document.addEventListener('mouseup',_dictDragMU);
     /* Touch */
     drag.addEventListener('touchstart',function(e){
       if(e.target.tagName==='BUTTON')return;
@@ -1298,13 +1301,5 @@ function dExport(){
     XLSX.writeFile(wb,"رصد_إملاء.xlsx");
   }catch(e){alert("خطأ: "+e.message);}
 }
-
-// Clear just-set highlights
-setInterval(function(){
-  var now=Date.now();var changed=false;
-  Object.keys(DS.justSet).forEach(function(id){if(now-DS.justSet[id]>5000){delete DS.justSet[id];changed=true;}});
-  Object.keys(GS.dictHL).forEach(function(id){if(now-GS.dictHL[id]>5000){delete GS.dictHL[id];changed=true;}});
-  if(changed&&_currentPage==="dict")renderDict();
-},1000);
 
 // ══════════════════════════════════════════════════════
