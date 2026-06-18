@@ -185,6 +185,20 @@ function renderSettings(){
   html+='</div></div>';
 
   html+='</div>'; // end grid
+
+  // ── وقت تحويل عرض اليوم التالي ──
+  var _ndh=DB.meta.nextDayHour!=null?DB.meta.nextDayHour:12;
+  html+='<div class="settings-row" style="margin-top:8px;">';
+  html+='<span class="settings-lbl">🌅 عرض فترات الغد بعد</span>';
+  html+='<div class="settings-val" style="display:flex;align-items:center;gap:6px;">';
+  html+='<select class="s-sel" onchange="DB.meta.nextDayHour=Number(this.value);saveDB();showSnack(\'✅ تم الحفظ\');">';
+  [6,7,8,9,10,11,12,13,14,15,16,17,18].forEach(function(h){
+    html+='<option value="'+h+'"'+(_ndh===h?' selected':'')+'>'+h+':00</option>';
+  });
+  html+='</select>';
+  html+='<span class="settings-desc">يوم اليوم الدراسي</span>';
+  html+='</div></div>';
+
   html+='</div></div>';
 
   // ── مواعيد الفترات ──
@@ -306,6 +320,42 @@ function renderSettings(){
   html+='<button class="btn btn-sm" onclick="WKS.photoFit=\'cover\';if(typeof renderWeekly===\'function\'&&document.getElementById(\'weeklyRoot\'))renderWeekly();" style="background:'+(_pfCover?'#059669':'#334155')+';color:white;">🖼 مرنة</button>';
   html+='<button class="btn btn-sm" onclick="WKS.photoFit=\'contain\';if(typeof renderWeekly===\'function\'&&document.getElementById(\'weeklyRoot\'))renderWeekly();" style="background:'+(_pfContain?'#1d4ed8':'#334155')+';color:white;">🔲 غير مرنة</button>';
   html+='</div><span class="settings-desc">مرنة = تملأ الكرت بالكامل | غير مرنة = بنسبة عرض ثابتة</span></div></div>';
+
+
+  // ── الخط ──
+  var _fonts=[
+    {val:'inherit',lbl:'الخط الافتراضي'},
+    {val:'Tajawal',lbl:'Tajawal'},
+    {val:'Cairo',lbl:'Cairo'},
+    {val:'Almarai',lbl:'Almarai'},
+    {val:'Noto Kufi Arabic',lbl:'Noto Kufi'},
+    {val:'Amiri',lbl:'Amiri'},
+    {val:'Arial',lbl:'Arial'},
+  ];
+  var _curFont=DB.meta.appFont||'Amiri';
+  var _curSize=DB.meta.appFontSize||14;
+  html+='<div class="settings-row">';
+  html+='<span class="settings-lbl">🔤 نوع الخط:</span>';
+  html+='<div class="settings-val" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+  html+='<select class="s-sel" style="width:160px;" onchange="DB.meta.appFont=this.value;saveDB();applyAppFont();">';
+  _fonts.forEach(function(f){
+    html+='<option value="'+f.val+'"'+(_curFont===f.val?' selected':'')+' style="font-family:'+f.val+';">'+f.lbl+'</option>';
+  });
+  html+='</select>';
+  html+='<span class="settings-desc" id="fontPreviewLbl" style="font-family:'+_curFont+';font-size:13px;color:#94a3b8;">معاينة النص العربي ١٢٣</span>';
+  html+='</div></div>';
+
+  html+='<div class="settings-row">';
+  html+='<span class="settings-lbl">🔡 حجم الخط:</span>';
+  html+='<div class="settings-val" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+  html+='<input type="range" min="11" max="20" step="1" value="'+_curSize+'" style="width:130px;accent-color:#3b82f6;" oninput="DB.meta.appFontSize=Number(this.value);saveDB();applyAppFont();document.getElementById(\'fontSizeVal\').textContent=this.value+\'px\';">';
+  html+='<span id="fontSizeVal" style="font-size:11px;color:#60a5fa;min-width:32px;">'+_curSize+'px</span>';
+  html+='<div style="display:flex;gap:4px;">';
+  [12,13,14,15,16].forEach(function(s){
+    html+='<button onclick="DB.meta.appFontSize='+s+';saveDB();applyAppFont();renderSettings();" style="background:'+(_curSize===s?'#1d4ed8':'#1e293b')+';border:1px solid #334155;color:white;padding:2px 8px;border-radius:5px;cursor:pointer;font-size:9px;font-family:inherit;">'+s+'</button>';
+  });
+  html+='</div>';
+  html+='</div></div>';
 
   html+='</div></div>';
 

@@ -283,11 +283,42 @@ function initDB(){
   var _sn=DB.meta.schoolName||'Dalty Grades';
   var _lsn=document.getElementById('loginSchoolTitle');if(_lsn)_lsn.textContent=_sn;
   var _ssn=document.getElementById('sidebarSchoolName');if(_ssn)_ssn.textContent='Dalty Grades';
+  applyAppFont();
 }
 
 // ══════════════════════════════════════════════════════
 // SECTION 3: HELPERS
 // ══════════════════════════════════════════════════════
+// ── تطبيق خط التطبيق ──
+var _loadedFonts={};
+function applyAppFont(){
+  var font=DB&&DB.meta&&DB.meta.appFont?DB.meta.appFont:'Amiri';
+  var size=DB&&DB.meta&&DB.meta.appFontSize?DB.meta.appFontSize:14;
+  // تحميل خط Google Fonts إن لزم
+  if(font!=='inherit'&&font!=='Arial'&&!_loadedFonts[font]){
+    var link=document.createElement('link');
+    link.rel='stylesheet';
+    link.href='https://fonts.googleapis.com/css2?family='+encodeURIComponent(font)+':wght@400;700;900&display=swap';
+    document.head.appendChild(link);
+    _loadedFonts[font]=true;
+  }
+  // استخدام <style> tag بـ !important للتغلب على CSS الموجود
+  var styleId='appFontOverride';
+  var el=document.getElementById(styleId);
+  if(!el){el=document.createElement('style');el.id=styleId;document.head.appendChild(el);}
+  var fontVal=font==='inherit'?'inherit':"'"+font+"',sans-serif";
+  var scale=size/14; // 14px = baseline
+  el.textContent=
+    '*,*::before,*::after{font-family:'+fontVal+'!important;}'
+    +'html{font-size:'+size+'px!important;}'
+    +'body,input,select,textarea,button{font-family:'+fontVal+'!important;}';
+  // معاينة في صفحة الإعدادات
+  var prev=document.getElementById('fontPreviewLbl');
+  if(prev){prev.style.fontFamily=font==='inherit'?'':font;}
+  var sizeEl=document.getElementById('fontSizeVal');
+  if(sizeEl)sizeEl.textContent=size+'px';
+}
+
 function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
 

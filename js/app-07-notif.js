@@ -1753,6 +1753,23 @@ function _homeGetUpcoming(all,curItem){
   return res;
 }
 
+function _homeGetPastToday(all,curItem){
+  var now=new Date(),ourDay=_homeJsToOurDay(now.getDay());
+  var nowM=now.getHours()*60+now.getMinutes();
+  var res=[];
+  all.forEach(function(item){
+    if(curItem&&item===curItem.item)return;
+    if(!item.per.time)return;
+    if(item.days.indexOf(ourDay)<0)return;
+    var parts=item.per.time.split('-');
+    var eM=_homeParseMins(parts[parts.length-1]);
+    if(eM===null||eM>nowM)return;
+    res.push({item:item,eM:eM});
+  });
+  res.sort(function(a,b){return b.eM-a.eM;});
+  return res;
+}
+
 function _homeGreet(){var h=new Date().getHours();if(h<12)return'☀️ صباح الخير،';if(h<17)return'🌤️ مساء الخير،';return'🌙 مساء النور،';}
 var _wishMessages=[
   'أتمنى لك يوماً دراسياً ملهماً ورائعاً ✨',
@@ -1934,6 +1951,8 @@ function _homeTick(){
       +'.hpc-class{font-size:15px;font-weight:900;color:#f1f5f9;margin-top:2px;line-height:1.2;}'
       +'.hpc-active .hpc-class{font-size:22px!important;color:#e0f2fe!important;margin-top:3px;}'
       +'.hpc-next .hpc-class{font-size:16px!important;color:#fde68a!important;}'
+      +'.hpc-upcoming{border-color:#1e3a5f!important;opacity:.82;}'
+      +'.hpc-badge-upcoming{background:rgba(100,116,139,.15);color:#64748b;border:1px solid #33415540;}'
       // badge الحالة
       +'.hpc-badge{font-size:8px;font-weight:800;border-radius:7px;padding:2px 7px;margin-bottom:5px;}'
       +'.hpc-badge-now{background:rgba(56,189,248,.2);color:#38bdf8;border:1px solid #38bdf844;}'
@@ -1941,7 +1960,10 @@ function _homeTick(){
       // النقطة الوامضة
       +'.hpc-dot{width:7px;height:7px;border-radius:50%;margin:0 auto 4px;}'
       +'.hpc-dot-now{background:#38bdf8;animation:hpcDot 1.2s ease-in-out infinite;box-shadow:0 0 5px #38bdf8;}'
-      +'.hpc-dot-next{background:#fbbf24;}';
+      +'.hpc-dot-next{background:#fbbf24;}'
+      +'.hpc-past{opacity:.32;filter:grayscale(55%);border-color:#1e293b!important;background:#0a111e!important;cursor:default;}'
+      +'.hpc-past .hpc-name,.hpc-past .hpc-class{color:#2d3f55!important;}'
+      +'.hpc-badge-past{background:rgba(30,41,59,.4);color:#2d3f55;border:1px solid #1e293b;}';
     document.head.appendChild(_hpcSt);
   }
 
@@ -1952,28 +1974,37 @@ function _homeTick(){
     if(!all.length){
       cardsHtml='<div style="color:#334155;padding:16px;font-size:11px;white-space:nowrap;">أضف فترات من الجدول</div>';
     } else {
+      var past=_homeGetPastToday(all,cur);
       var shown=[];
-      // الترتيب المنطقي: جارية أولاً، ثم التالية، ثم الباقي
+      // الترتيب المنطقي: جارية أولاً، ثم التالية، ثم الباقي، ثم المنتهية
       if(cur)shown.push({type:'cur',data:cur,item:cur.item});
-      upcoming.filter(function(u){return u.daysAhead===0&&u.item.cls&&u.item.cls.trim();}).slice(0,4).forEach(function(u){shown.push({type:'up',data:u,item:u.item});});
-      var nextIdx=cur?1:0;
+      var _ndh=DB.meta&&DB.meta.nextDayHour!=null?DB.meta.nextDayHour:12;
+      var _nowH=now.getHours();
+      var _showNext=_nowH>=_ndh;
+      var _todayUp=upcoming.filter(function(u){
+        if(!u.item.cls||!u.item.cls.trim())return false;
+        if(u.daysAhead===0)return true;
+        if(u.daysAhead===1&&_showNext)return true;
+        return false;
+      });
+      _todayUp.slice(0,4).forEach(function(u,ui){shown.push({type:ui===0?'next':'up',data:u,item:u.item});});
+      past.slice(0,3).forEach(function(p){shown.push({type:'past',data:p,item:p.item});});
       shown.forEach(function(s,idx){
         var isCur=s.type==='cur';
-        var isNext=!isCur&&idx===nextIdx;
+        var isNext=s.type==='next';
         var isAssembly=s.item.isSpecial&&s.item.specialType==='assembly';
         var isBreak=s.item.isSpecial&&s.item.specialType==='break';
 
         // إخفاء أي فترة بدون فصل مخصص تمامًا
         if(!isCur&&(!s.item.cls||!s.item.cls.trim()))return;
 
-        var cardCls='home-period-card'+(isCur?' hpc-active':isNext?' hpc-next':'');
+        var isPast=s.type==='past';
+        var cardCls='home-period-card'+(isCur?' hpc-active':isNext?' hpc-next':isPast?' hpc-past':' hpc-upcoming');
         var assemblyStyle=isAssembly?'border-color:#059669!important;background:rgba(16,185,129,.1)!important;':'';
         var breakStyle=isBreak?'border-color:#d97706!important;background:rgba(251,191,36,.07)!important;':'';
         var extraStyle=assemblyStyle||breakStyle;
 
-        var perIdx=all.indexOf(s.item);
-        var perNum=perIdx>=0?perIdx+1:(parseInt((s.item.per.id||'').replace(/\D/g,''))||0);
-        var whenTxt=perNum?('ف '+perNum):esc(s.item.per.label||'');
+        var whenTxt=esc(s.item.per.label||s.item.per.id||'');
         var clsTxt=s.item.cls||'';
         var nameColor=isAssembly?'#34d399':isBreak?'#fbbf24':'';
 
@@ -1985,6 +2016,10 @@ function _homeTick(){
         } else if(isNext){
           badgeHtml='<div class="hpc-badge hpc-badge-next">⏰ التالية</div>';
           dotHtml='<div class="hpc-dot hpc-dot-next"></div>';
+        } else if(isPast){
+          badgeHtml='<div class="hpc-badge hpc-badge-past">✓ منتهية</div>';
+        } else {
+          badgeHtml='<div class="hpc-badge hpc-badge-upcoming">📋 قادمة</div>';
         }
 
         cardsHtml+='<div class="'+cardCls+'" style="'+extraStyle+'" onclick="switchPage(\'sched\')">'
