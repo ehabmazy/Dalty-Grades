@@ -318,10 +318,12 @@ function dApplyGrade(student,colId,grade){
       if(wm){
         var wnum=parseInt(wm[1]);
         var sched2=DB.schedule[cls]||{periods:[],slots:{}};
+        if(!sched2.periods)sched2.periods=[];
+        if(!sched2.slots)sched2.slots={};
         var periods2=sched2.periods||[];
         var absData2=getStudentAbsences(cls,student.id);
         if(periods2.length){
-          periods2.forEach(function(period){DAYS_AR.forEach(function(_,di){var slot=sched2.slots[period.id+"_d"+di]||"";if(slot.trim()){var dt2=DS.dictDate||null;var k=absKey(wnum,period.id,di,dt2);if(!absData2[k])absData2[k]="abs";}});});
+          periods2.forEach(function(period){if(!period||!period.id)return;DAYS_AR.forEach(function(_,di){var slot=sched2.slots[period.id+"_d"+di]||"";if(slot.trim()){var dt2=DS.dictDate||null;var k=absKey(wnum,period.id,di,dt2);if(!absData2[k])absData2[k]="abs";}});});
         } else {
           var ppw2=Math.max(1,Number(DB.meta.periodsPerWeek)||3);
           for(var pi2=0;pi2<ppw2;pi2++){var dt3=DS.dictDate||null;var k2=absKey(wnum,"g"+pi2,pi2%5,dt3);if(!absData2[k2])absData2[k2]="abs";}
