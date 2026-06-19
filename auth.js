@@ -24,11 +24,20 @@ var AUTH_CONFIG = {
 var AUTH_DB_PATH = "users";
 
 /* ════════════════════════════════════════
+   إعدادات نظام الاشتراك
+   ════════════════════════════════════════ */
+var SUB_PHONE = "01004277320";       /* رقم إنستاباي وواتساب */
+var SUB_PRICE = "20";                /* سعر الاشتراك بالجنيه لكل فصل */
+/* الأشهر المجانية (بدون اشتراك): يونيو=6، يوليو=7، أغسطس=8 */
+var SUB_FREE_MONTHS = [6, 7, 8];
+
+/* ════════════════════════════════════════
    المتغيرات الداخلية
    ════════════════════════════════════════ */
 var _authApp  = null;
 var _authInst = null;
 var _authDB   = null;
+var _authFS   = null;   /* Firestore — لتخزين الاشتراكات فقط */
 var _currentUser = null;
 var _userRef  = null;
 
@@ -49,6 +58,13 @@ function initAuth() {
 
     _authInst = firebase.auth();
     _authDB   = firebase.database();
+
+    try {
+      _authFS = firebase.firestore();
+    } catch (fsErr) {
+      console.warn("[Subscription] Firestore SDK غير محمّل — لن يعمل نظام الاشتراك:", fsErr);
+      _authFS = null;
+    }
 
     /* احتفظ بالجلسة حتى بعد إغلاق المتصفح — تسجيل دخول مرة واحدة فقط */
     function _startListening() {
@@ -108,7 +124,7 @@ function onUserLoggedIn(user) {
   var uid = sanitizeUID(user.uid);
   window.STORE_KEY = "grades_v6_" + uid;
 
-  /* أخفِ شاشة الدخول وافتح التطبيق */
+  /* أخفِ شاشة الدخول */
   removeAuthScreen();
 
   /* تحديث اسم المستخدم في الشريط */
@@ -120,18 +136,8 @@ function onUserLoggedIn(user) {
     window.setFirebaseUserPath(user.uid);
   }
 
-  /* تشغيل التطبيق */
-  if (window._origShowApp) {
-    window._origShowApp();
-  } else if (typeof initDB === "function") {
-    if (!window._booted) { window._booted = true; initDB(); }
-    if (typeof switchPage === "function") switchPage("home");
-  }
-
-  /* حدّث الزر المدمج بمعلومات المستخدم */
   window._currentAuthUser = user;
   if (typeof window._updateMergedBtn === "function") window._updateMergedBtn();
-  /* اضبط دالة تسجيل الخروج لاستخدامها من الزر المدمج */
   var btn = document.getElementById("fbSyncBtn");
   if (btn) {
     btn.dataset.userName = (user.displayName || user.email || "").split(" ")[0];
@@ -139,6 +145,141 @@ function onUserLoggedIn(user) {
   }
 
   console.log("[Auth] ✅ مرحباً:", user.displayName || user.email);
+
+  /* ✅ تحقق من الاشتراك قبل فتح التطبيق فعلياً */
+  checkSubscriptionAndOpenApp(user);
+}
+
+/* ════════════════════════════════════════
+   نظام الاشتراك — تحقق ثم افتح التطبيق
+   ════════════════════════════════════════ */
+function _subCurrentMonth() {
+  return new Date().getMonth() + 1; /* 1-12 */
+}
+
+function _subIsFreeMonth() {
+  return SUB_FREE_MONTHS.indexOf(_subCurrentMonth()) !== -1;
+}
+
+function _subCurrentTermLabel() {
+  var m = _subCurrentMonth();
+  if (m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
+  if (m === 2 || m === 3 || m === 4 || m === 5) return "الفصل الدراسي الثاني";
+  return "الفترة المجانية";
+}
+
+function checkSubscriptionAndOpenApp(user) {
+  /* الأشهر المجانية: افتح التطبيق مباشرة بدون أي تحقق */
+  if (_subIsFreeMonth()) {
+    openAppNow();
+    return;
+  }
+
+  /* لو Firestore مش متاح لأي سبب، افتح التطبيق (فشل آمن) بدل ما يتعطل الموقع بالكامل */
+  if (!_authFS) {
+    console.warn("[Subscription] Firestore غير متاح، يتم فتح التطبيق بدون تحقق");
+    openAppNow();
+    return;
+  }
+
+  _authFS.collection("subscriptions").doc(user.uid).get()
+    .then(function(snap) {
+      if (!snap.exists) {
+        showSubscriptionBlockedScreen("لا يوجد اشتراك مفعّل لهذا الحساب");
+        return;
+      }
+      var data = snap.data();
+      var endDate = (data.endDate && data.endDate.toDate) ? data.endDate.toDate() : new Date(data.endDate);
+      var now = new Date();
+
+      if (!data.active || now > endDate) {
+        var endStr = endDate ? endDate.toLocaleDateString("ar-EG") : "";
+        showSubscriptionBlockedScreen("انتهت مدة اشتراكك" + (endStr ? " بتاريخ " + endStr : ""));
+        return;
+      }
+
+      /* الاشتراك فعّال */
+      openAppNow();
+    })
+    .catch(function(err) {
+      /* فشل في الاتصال (مثلاً بدون إنترنت) — افتح التطبيق بدل ما تحجب مستخدم مشترك بالفعل */
+      console.warn("[Subscription] تعذر التحقق (سيتم فتح التطبيق):", err.message);
+      openAppNow();
+    });
+}
+
+function openAppNow() {
+  if (window._origShowApp) {
+    window._origShowApp();
+  } else if (typeof initDB === "function") {
+    if (!window._booted) { window._booted = true; initDB(); }
+    if (typeof switchPage === "function") switchPage("home");
+  }
+}
+
+/* ════════════════════════════════════════
+   شاشة "الاشتراك مطلوب / منتهي"
+   ════════════════════════════════════════ */
+function showSubscriptionBlockedScreen(reasonMsg) {
+  removeSubscriptionBlockedScreen();
+
+  var shell = document.getElementById("appShell");
+  if (shell) shell.classList.remove("visible");
+
+  var term = _subCurrentTermLabel();
+  var waText = encodeURIComponent("السلام عليكم، أنا حولت " + SUB_PRICE + " جنيه اشتراك " + term + " — اسمي: ");
+  var waLink = "https://wa.me/2" + SUB_PHONE + "?text=" + waText;
+
+  var overlay = document.createElement("div");
+  overlay.id = "subBlockOverlay";
+  overlay.style.cssText = [
+    "position:fixed", "inset:0", "z-index:99999",
+    "background:linear-gradient(135deg,#0a0f1e 0%,#0f1e35 60%,#0a0f1e 100%)",
+    "display:flex", "align-items:center", "justify-content:center",
+    "font-family:Cairo,sans-serif", "direction:rtl", "padding:16px", "box-sizing:border-box"
+  ].join(";");
+
+  overlay.innerHTML = [
+    '<div style="background:#0f1e35;border:1px solid #1e3a5f;border-radius:16px;',
+    'padding:30px 26px;text-align:center;max-width:380px;width:100%;',
+    'box-shadow:0 20px 60px rgba(0,0,0,.6);">',
+
+      '<div style="font-size:42px;margin-bottom:8px;">🔒</div>',
+      '<div style="font-size:19px;font-weight:900;color:#fbbf24;margin-bottom:6px;">' + reasonMsg + '</div>',
+      '<div style="font-size:13px;color:#94a3b8;margin-bottom:20px;line-height:1.7;">',
+        'لتفعيل/تجديد اشتراك <b style="color:#60a5fa;">' + term + '</b> بسعر ',
+        '<b style="color:#6ee7b7;">' + SUB_PRICE + ' جنيه</b>، حوّل عبر إنستاباي على الرقم:',
+      '</div>',
+
+      '<div style="background:#0a1628;border:1.5px dashed #1e3a5f;border-radius:10px;',
+      'padding:12px;margin-bottom:16px;display:flex;align-items:center;justify-content:center;gap:10px;">',
+        '<span style="font-size:18px;font-weight:900;color:#fff;letter-spacing:1px;" dir="ltr">' + SUB_PHONE + '</span>',
+        '<button onclick="navigator.clipboard.writeText(\'' + SUB_PHONE + '\');this.textContent=\'✅\';setTimeout(()=>this.textContent=\'📋\',1500);" ',
+          'style="background:#1e3a5f;border:none;color:#60a5fa;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px;">📋</button>',
+      '</div>',
+
+      '<a href="' + waLink + '" target="_blank" style="display:block;text-decoration:none;',
+      'background:#25D366;color:#fff;border-radius:10px;padding:13px;font-size:14px;font-weight:800;',
+      'margin-bottom:10px;">📲 إرسال إثبات التحويل عبر واتساب</a>',
+
+      '<button onclick="checkSubscriptionAndOpenApp(window._currentAuthUser)" style="',
+      'width:100%;background:transparent;color:#60a5fa;border:1px solid #1e3a5f;',
+      'border-radius:10px;padding:11px;font-size:13px;cursor:pointer;font-family:Cairo,sans-serif;margin-bottom:8px;">',
+      '🔄 تم الدفع، تحقق الآن</button>',
+
+      '<button onclick="if(typeof window.signOut===\'function\')window.signOut();" style="',
+      'width:100%;background:transparent;color:#64748b;border:none;',
+      'padding:8px;font-size:12px;cursor:pointer;font-family:Cairo,sans-serif;">تسجيل الخروج / حساب آخر</button>',
+
+    '</div>'
+  ].join("");
+
+  document.body.appendChild(overlay);
+}
+
+function removeSubscriptionBlockedScreen() {
+  var el = document.getElementById("subBlockOverlay");
+  if (el) el.remove();
 }
 
 /* ════════════════════════════════════════
@@ -175,6 +316,7 @@ var _GOOGLE_LOGO_SVG = [
 ].join("");
 
 function showAuthScreen() {
+  removeSubscriptionBlockedScreen();
   if (document.getElementById("authOverlay")) return;
 
   /* أخفِ التطبيق */
@@ -389,6 +531,7 @@ window.signInLocal = function() {
 
 window.signOut = function() {
   if (!confirm("تسجيل الخروج؟")) return;
+  removeSubscriptionBlockedScreen();
   _authInst.signOut().then(function() {
     window._booted = false;
     window.DB = null;
