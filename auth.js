@@ -514,7 +514,7 @@ window.signInLocal = function() {
   _authInst.signInWithEmailAndPassword(email, pass)
     .catch(function(err) {
       /* إذا المستخدم غير موجود، أنشئ حساباً جديداً */
-      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+      if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential" || err.code === "auth/invalid-login-credentials") {
         return _authInst.createUserWithEmailAndPassword(email, pass);
       }
       throw err;
@@ -555,7 +555,8 @@ function getAuthErrorMsg(code) {
     "auth/invalid-email":           "البريد الإلكتروني غير صالح",
     "auth/email-already-in-use":    "البريد مستخدم مسبقاً",
     "auth/weak-password":           "كلمة المرور ضعيفة — 6 أحرف على الأقل",
-    "auth/invalid-credential":      "البريد أو كلمة المرور غير صحيحة"
+    "auth/invalid-credential":      "البريد أو كلمة المرور غير صحيحة",
+    "auth/invalid-login-credentials": "البريد أو كلمة المرور غير صحيحة"
   };
   return msgs[code] || "خطأ في تسجيل الدخول";
 }
