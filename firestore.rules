@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // مستند اشتراك كل معلم — المعرف (document ID) هو UID بتاع المعلم من Firebase Auth
+    match /subscriptions/{teacherId} {
+
+      // المعلم يقدر يقرأ بس بيانات اشتراكه هو (مش بيانات معلمين تانيين)
+      allow read: if request.auth != null && request.auth.uid == teacherId;
+
+      // محدش يكتب أو يعدّل من جهة الكلاينت — التعديل بييتم بس من Firebase Console
+      // أو من حساب أدمن معين (شوف ملاحظة الأدمن تحت)
+      allow write: if false;
+    }
+
+    // (اختياري) لو هتعمل حساب أدمن خاص بيك للتفعيل من داخل صفحة إدارة
+    // استبدل ADMIN_UID_HERE بالـ UID بتاع حسابك انت في Firebase Auth
+    match /subscriptions/{teacherId} {
+      allow write: if request.auth != null && request.auth.uid == "ADMIN_UID_HERE";
+    }
+  }
+}
