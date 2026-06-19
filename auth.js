@@ -163,7 +163,7 @@ function _subIsFreeMonth() {
 
 function _subCurrentTermLabel() {
   var m = _subCurrentMonth();
-  if (m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
+  if (m === 6 ||m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
   if (m === 2 || m === 3 || m === 4 || m === 5) return "الفصل الدراسي الثاني";
   return "الفترة المجانية";
 }
