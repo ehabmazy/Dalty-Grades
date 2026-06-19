@@ -29,7 +29,7 @@ var AUTH_DB_PATH = "users";
 var SUB_PHONE = "01004277320";       /* رقم إنستاباي وواتساب */
 var SUB_PRICE = "20";                /* سعر الاشتراك بالجنيه لكل فصل */
 /* الأشهر المجانية (بدون اشتراك): يونيو=6، يوليو=7، أغسطس=8 */
-var SUB_FREE_MONTHS = [ 7, 8];
+var SUB_FREE_MONTHS = [6, 7, 8];
 
 /* ════════════════════════════════════════
    المتغيرات الداخلية
@@ -163,7 +163,7 @@ function _subIsFreeMonth() {
 
 function _subCurrentTermLabel() {
   var m = _subCurrentMonth();
-  if (m === 6 ||m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
+  if (m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
   if (m === 2 || m === 3 || m === 4 || m === 5) return "الفصل الدراسي الثاني";
   return "الفترة المجانية";
 }
@@ -227,7 +227,14 @@ function showSubscriptionBlockedScreen(reasonMsg) {
   if (shell) shell.classList.remove("visible");
 
   var term = _subCurrentTermLabel();
-  var waText = encodeURIComponent("السلام عليكم، أنا حولت " + SUB_PRICE + " جنيه اشتراك " + term + " — اسمي: ");
+  var teacherEmail = (window._currentAuthUser && window._currentAuthUser.email) ? window._currentAuthUser.email : "غير متاح";
+  var teacherUid = (window._currentAuthUser && window._currentAuthUser.uid) ? window._currentAuthUser.uid : "غير متاح";
+  var waText = encodeURIComponent(
+    "السلام عليكم، أنا حولت " + SUB_PRICE + " جنيه اشتراك " + term + "\n" +
+    "اسمي: \n" +
+    "إيميل الدخول: " + teacherEmail + "\n" +
+    "UID: " + teacherUid
+  );
   var waLink = "https://wa.me/2" + SUB_PHONE + "?text=" + waText;
 
   var overlay = document.createElement("div");
@@ -256,6 +263,10 @@ function showSubscriptionBlockedScreen(reasonMsg) {
         '<span style="font-size:18px;font-weight:900;color:#fff;letter-spacing:1px;" dir="ltr">' + SUB_PHONE + '</span>',
         '<button onclick="navigator.clipboard.writeText(\'' + SUB_PHONE + '\');this.textContent=\'✅\';setTimeout(()=>this.textContent=\'📋\',1500);" ',
           'style="background:#1e3a5f;border:none;color:#60a5fa;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px;">📋</button>',
+      '</div>',
+
+      '<div style="font-size:11px;color:#64748b;margin-bottom:16px;">',
+        'إيميل حسابك: <span style="color:#93c5fd;" dir="ltr">' + teacherEmail + '</span>',
       '</div>',
 
       '<a href="' + waLink + '" target="_blank" style="display:block;text-decoration:none;',
