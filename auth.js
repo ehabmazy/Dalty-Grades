@@ -29,7 +29,7 @@ var AUTH_DB_PATH = "users";
 var SUB_PHONE = "01004277320";       /* رقم إنستاباي وواتساب */
 var SUB_PRICE = "20";                /* سعر الاشتراك بالجنيه لكل فصل */
 /* الأشهر المجانية (بدون اشتراك): يونيو=6، يوليو=7، أغسطس=8 */
-var SUB_FREE_MONTHS = [7, 8];
+var SUB_FREE_MONTHS = [6, 7, 8];
 
 /* ════════════════════════════════════════
    المتغيرات الداخلية
@@ -163,7 +163,7 @@ function _subIsFreeMonth() {
 
 function _subCurrentTermLabel() {
   var m = _subCurrentMonth();
-  if (m === 6 |m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
+  if (m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
   if (m === 2 || m === 3 || m === 4 || m === 5) return "الفصل الدراسي الثاني";
   return "الفترة المجانية";
 }
@@ -171,6 +171,7 @@ function _subCurrentTermLabel() {
 function checkSubscriptionAndOpenApp(user) {
   /* الأشهر المجانية: افتح التطبيق مباشرة بدون أي تحقق */
   if (_subIsFreeMonth()) {
+    updateSubBadge("free");
     openAppNow();
     return;
   }
@@ -199,6 +200,15 @@ function checkSubscriptionAndOpenApp(user) {
       }
 
       /* الاشتراك فعّال */
+      var daysLeft = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+      var term = _subCurrentTermLabel();
+      _subLastInfo = { term: term, endDate: endDate, daysLeft: daysLeft };
+
+      if (daysLeft <= 7) {
+        updateSubBadge("warning", "ينتهي خلال " + daysLeft + " يوم");
+      } else {
+        updateSubBadge("active", term);
+      }
       openAppNow();
     })
     .catch(function(err) {
@@ -207,6 +217,52 @@ function checkSubscriptionAndOpenApp(user) {
       openAppNow();
     });
 }
+
+/* ════════════════════════════════════════
+   شارة حالة الاشتراك في الشريط العلوي
+   ════════════════════════════════════════ */
+var _subLastInfo = null; /* آخر بيانات اشتراك معروفة — تُستخدم في showSubDetails */
+
+function updateSubBadge(mode, extraText) {
+  var badge = document.getElementById("subStatusBadge");
+  if (!badge) return;
+  badge.style.display = "inline-block";
+
+  if (mode === "free") {
+    badge.textContent = "🎁 فترة مجانية";
+    badge.style.background = "rgba(96,165,250,.15)";
+    badge.style.color = "#60a5fa";
+    badge.style.border = "1px solid rgba(96,165,250,.3)";
+  } else if (mode === "active") {
+    badge.textContent = "✅ " + extraText;
+    badge.style.background = "rgba(74,222,128,.15)";
+    badge.style.color = "#4ade80";
+    badge.style.border = "1px solid rgba(74,222,128,.3)";
+  } else if (mode === "warning") {
+    badge.textContent = "⚠️ " + extraText;
+    badge.style.background = "rgba(251,191,36,.15)";
+    badge.style.color = "#fbbf24";
+    badge.style.border = "1px solid rgba(251,191,36,.3)";
+  }
+}
+
+/* تفاصيل أوسع عند الضغط على الشارة */
+window.showSubDetails = function() {
+  if (_subIsFreeMonth()) {
+    alert("🎁 أنت حاليًا في الفترة المجانية\n(يونيو - يوليو - أغسطس)\nلا يلزم أي اشتراك خلال هذه الفترة.");
+    return;
+  }
+  if (_subLastInfo) {
+    alert(
+      "✅ اشتراكك فعّال\n" +
+      "الفصل: " + _subLastInfo.term + "\n" +
+      "ينتهي بتاريخ: " + _subLastInfo.endDate.toLocaleDateString("ar-EG") + "\n" +
+      "الأيام المتبقية: " + _subLastInfo.daysLeft + " يوم"
+    );
+  } else {
+    alert("لا توجد معلومات اشتراك متاحة حاليًا.");
+  }
+};
 
 function openAppNow() {
   if (window._origShowApp) {
