@@ -29,7 +29,7 @@ var AUTH_DB_PATH = "users";
 var SUB_PHONE = "01004277320";       /* رقم إنستاباي وواتساب */
 var SUB_PRICE = "20";                /* سعر الاشتراك بالجنيه لكل فصل */
 /* الأشهر المجانية (بدون اشتراك): يونيو=6، يوليو=7، أغسطس=8 */
-var SUB_FREE_MONTHS = [7, 8];
+var SUB_FREE_MONTHS = [6, 7, 8];
 
 /* ════════════════════════════════════════
    المتغيرات الداخلية
@@ -163,7 +163,7 @@ function _subIsFreeMonth() {
 
 function _subCurrentTermLabel() {
   var m = _subCurrentMonth();
-  if (m === 6 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
+  if (m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
   if (m === 2 || m === 3 || m === 4 || m === 5) return "الفصل الدراسي الثاني";
   return "الفترة المجانية";
 }
@@ -459,6 +459,11 @@ function showAuthScreen() {
         'padding:8px 12px;color:#4ade80;font-size:12px;margin-bottom:12px;">',
           '<span style="width:7px;height:7px;border-radius:50%;background:#4ade80;flex-shrink:0;display:inline-block;"></span>',
           'وضع بدون إنترنت — بيانات محلية فقط',
+        '</div>',
+
+        '<div style="font-size:11px;color:#fbbf24;background:rgba(251,191,36,.08);',
+        'border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:7px 10px;margin-bottom:10px;line-height:1.6;">',
+          '⚠️ استخدم بريدك الشخصي الحقيقي — استخدام نفس البريد من أكثر من معلم يجعلهم يدخلون لنفس الحساب والبيانات',
         '</div>',
 
         '<input id="localEmail" type="email" placeholder="البريد الإلكتروني" style="' + inputStyle + '" dir="ltr">',
