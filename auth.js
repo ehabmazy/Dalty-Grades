@@ -29,7 +29,7 @@ var AUTH_DB_PATH = "users";
 var SUB_PHONE = "01004277320";       /* رقم إنستاباي وواتساب */
 var SUB_PRICE = "20";                /* سعر الاشتراك بالجنيه لكل فصل */
 /* الأشهر المجانية (بدون اشتراك): يونيو=6، يوليو=7، أغسطس=8 */
-var SUB_FREE_MONTHS = [6, 7, 8];
+var SUB_FREE_MONTHS = [7, 8];
 
 /* ════════════════════════════════════════
    المتغيرات الداخلية
@@ -163,7 +163,7 @@ function _subIsFreeMonth() {
 
 function _subCurrentTermLabel() {
   var m = _subCurrentMonth();
-  if (m === 9 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
+  if (m === 6 || m === 10 || m === 11 || m === 12 || m === 1) return "الفصل الدراسي الأول";
   if (m === 2 || m === 3 || m === 4 || m === 5) return "الفصل الدراسي الثاني";
   return "الفترة المجانية";
 }
