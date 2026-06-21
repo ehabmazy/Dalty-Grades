@@ -1222,7 +1222,7 @@ function renderAbsence(){
         var k="w"+week+"_ci"+col._ci;
         var absSt=abs[k];
         var isAbs=absSt==="abs", isSick=absSt==="sick";
-        var cellClass="abs-period-cell"+(isAbs?" is-abs":isSick?" is-sick":col.isScheduled?" scheduled":"");
+        var cellClass="abs-period-cell"+(isAbs?" absent":isSick?" sick-mark":col.isScheduled?" scheduled":"");
         var clickHandler=col._ci>=0?'onclick="toggleAbsence(\''+esc(cls)+'\','+s.id+','+week+','+col._ci+')"':'';
         html+='<div class="'+cellClass+'" '+clickHandler+' title="'+esc(col.period.label)+" — "+DAYS_AR[col.dayIdx]+(isSick?" (مريض)":isAbs?" (غائب)":"")+'">';
         html+=isAbs?"✗":isSick?"م":(col.isScheduled?"·":"");
