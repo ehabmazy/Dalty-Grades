@@ -187,17 +187,17 @@ function renderSettings(){
   html+='</div>'; // end grid
 
   // ── وقت تحويل عرض اليوم التالي ──
-  var _ndh=DB.meta.nextDayHour!=null?DB.meta.nextDayHour:12;
+  var _ndo=DB.meta.nextDayOffsetHours!=null?DB.meta.nextDayOffsetHours:0;
   html+='<div class="settings-row" style="margin-top:8px;">';
-  html+='<span class="settings-lbl">🌅 عرض فترات الغد بعد</span>';
+  html+='<span class="settings-lbl">🌙 عرض فترات الغد قبل منتصف الليل بـ</span>';
   html+='<div class="settings-val" style="display:flex;align-items:center;gap:6px;">';
-  html+='<select class="s-sel" onchange="DB.meta.nextDayHour=Number(this.value);saveDB();showSnack(\'✅ تم الحفظ\');">';
-  [6,7,8,9,10,11,12,13,14,15,16,17,18].forEach(function(h){
-    html+='<option value="'+h+'"'+(_ndh===h?' selected':'')+'>'+h+':00</option>';
+  html+='<select class="s-sel" onchange="DB.meta.nextDayOffsetHours=Number(this.value);saveDB();showSnack(\'✅ تم الحفظ\');">';
+  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18].forEach(function(h){
+    var lbl=h===0?'بدون (منتصف الليل 00:00)':h+' ساعة';
+    html+='<option value="'+h+'"'+(_ndo===h?' selected':'')+'>'+lbl+'</option>';
   });
   html+='</select>';
-  html+='<span class="settings-desc">يوم اليوم الدراسي</span>';
-  html+='</div></div>';
+  html+='<span class="settings-desc">افتراضيًا تظهر فترات الغد بعد منتصف الليل مباشرة (00:00)</span></div></div>';
 
   html+='</div></div>';
 

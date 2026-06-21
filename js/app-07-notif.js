@@ -1996,7 +1996,8 @@ function _homeTick(){
       var shown=[];
       // الترتيب المنطقي: جارية أولاً، ثم التالية، ثم الباقي، ثم المنتهية
       if(cur)shown.push({type:'cur',data:cur,item:cur.item});
-      var _ndh=DB.meta&&DB.meta.nextDayHour!=null?DB.meta.nextDayHour:12;
+      var _ndo=DB.meta&&DB.meta.nextDayOffsetHours!=null?DB.meta.nextDayOffsetHours:0;
+      var _ndh=24-_ndo; // الساعة اللي تبدأ بعدها فترات الغد تظهر — افتراضيًا 24 (أي بعد منتصف الليل فعليًا)
       var _nowH=now.getHours();
       var _showNext=_nowH>=_ndh;
       var _todayUp=upcoming.filter(function(u){
