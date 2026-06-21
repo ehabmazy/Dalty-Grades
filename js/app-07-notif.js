@@ -2006,7 +2006,7 @@ function _homeTick(){
         if(u.daysAhead===1&&_showNext)return true;
         return false;
       });
-      _todayUp.slice(0,4).forEach(function(u,ui){shown.push({type:ui===0?'next':'up',data:u,item:u.item});});
+      _todayUp.forEach(function(u,ui){shown.push({type:ui===0?'next':'up',data:u,item:u.item});});
       past.slice(0,3).forEach(function(p){shown.push({type:'past',data:p,item:p.item});});
       shown.forEach(function(s,idx){
         var isCur=s.type==='cur';
