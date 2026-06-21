@@ -2007,7 +2007,7 @@ function _homeTick(){
         return false;
       });
       _todayUp.forEach(function(u,ui){shown.push({type:ui===0?'next':'up',data:u,item:u.item});});
-      past.slice(0,3).forEach(function(p){shown.push({type:'past',data:p,item:p.item});});
+      past.forEach(function(p){shown.push({type:'past',data:p,item:p.item});});
       shown.forEach(function(s,idx){
         var isCur=s.type==='cur';
         var isNext=s.type==='next';
