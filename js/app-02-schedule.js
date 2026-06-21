@@ -1094,6 +1094,12 @@ function renderAbsence(){
   if(!AS.activeClass&&DB.classes.length)AS.activeClass=DB.classes[0];
   if(!AS._autoWeekSet){AS.activeWeek=_calcCurrentWeek();AS._autoWeekSet=true;}
   var cls=AS.activeClass;
+  // حفظ موضع التمرير الحالي (رأسي وأفقي) قبل إعادة الرسم
+  var _absBodyOld=root.querySelector('.abs-body');
+  var _absScrollTop=_absBodyOld?_absBodyOld.scrollTop:0;
+  var _absScrollLeft=_absBodyOld?_absBodyOld.scrollLeft:0;
+  var _absGridOld=root.querySelector('.abs-grid');
+  var _absGridScrollLeft=_absGridOld?_absGridOld.scrollLeft:0;
   var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
   var _shared=(DB.schedule&&DB.schedule._shared)||{periods:[],slots:{}};
   var periods=_shared.periods||[];
@@ -1136,7 +1142,7 @@ function renderAbsence(){
   html+='</div>';
   html+='<button class="btn btn-success btn-sm" onclick="absExport()" style="display:flex;align-items:center;gap:3px;padding:4px 10px;border-radius:8px;font-size:10px;">⬇ Excel</button>';
   html+='</div></div>';
-  html+='<div class="abs-body">';
+  html+='<div class="abs-body" style="overflow-x:auto;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;">';
 
   // إعادة رسم أشرطة الفصول/الأسابيع العلوية إن كانت مفتوحة
   if(document.getElementById('absClsBar')&&document.getElementById('absClsBar').classList.contains('open'))renderAbsClsBar();
@@ -1176,7 +1182,7 @@ function renderAbsence(){
     html+='<span style="background:linear-gradient(135deg,#0c2a52,#0e3268);border:1px solid #1e4a8a;border-radius:10px;padding:3px 11px;font-size:9px;color:#60a5fa;font-weight:700;">📚 '+activePeriodDays.length+' فترة / الأسبوع</span>';
     html+='<button onclick="switchPage(\'settings\')" style="background:#0f172a;border:1px solid #1e3a5f;padding:3px 10px;border-radius:8px;cursor:pointer;font-size:9px;color:#64748b;font-family:inherit;transition:all .15s;" onmouseover="this.style.borderColor=\'#334155\';this.style.color=\'#94a3b8\'" onmouseout="this.style.borderColor=\'#1e3a5f\';this.style.color=\'#64748b\'">⚙️ تغيير العدد</button>';
     html+='</div>';
-    html+='<div class="abs-grid">';
+    html+='<div class="abs-grid" style="overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;">';
     html+='<div class="abs-grid-hdr" style="display:grid;grid-template-columns:'+gridCols+';">';
     html+='<div style="padding:5px 3px;text-align:center;font-size:8px;color:#475569;">م</div>';
     html+='<div style="padding:5px 3px;text-align:center;font-size:8px;color:#475569;">📷</div>';
@@ -1239,8 +1245,10 @@ function renderAbsence(){
   html+='</div></div>';
   root.innerHTML=html;
   requestAnimationFrame(function(){
-    var _nb2=root.querySelector('.sched-body');
-    if(_nb2&&window._schedBodyScroll)_nb2.scrollTop=window._schedBodyScroll;
+    var _nb2=root.querySelector('.abs-body');
+    if(_nb2){_nb2.scrollTop=_absScrollTop;_nb2.scrollLeft=_absScrollLeft;}
+    var _ng2=root.querySelector('.abs-grid');
+    if(_ng2)_ng2.scrollLeft=_absGridScrollLeft;
   });
 }
 
