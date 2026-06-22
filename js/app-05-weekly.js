@@ -1,6 +1,6 @@
 // SECTION NEW-A: WEEKLY GRADES PAGE
 // ══════════════════════════════════════════════════════
-var WKS={activeClass:"",activeWeek:1,_autoWeekSet:false,search:'',selectedCol:'',viewMode:'numpad',imlaaPanel:{open:false,conf:70,sep:'التالي',log:[],justSet:{}}};
+var WKS={activeClass:"",activeWeek:1,_autoWeekSet:false,search:'',selectedCol:'',viewMode:'numpad',imlaaAbsColIdx:0,imlaaPanel:{open:false,conf:70,sep:'التالي',log:[],justSet:{}}};
 
 function _getActiveWeeks(){
   var n=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
@@ -321,8 +321,7 @@ function renderWeekly(){
     var beh=(_bwVal!==undefined&&_bwVal!==null&&_bwVal!=="")
       ?Math.min(Number(_bwVal)||0,10)
       :((s.beh1===''||s.beh1===undefined||s.beh1===null)&&(s.beh2===''||s.beh2===undefined||s.beh2===null)?'':Math.min((Number(s.beh1)||0)+(Number(s.beh2)||0),10));
-    var res=calcStudent(s);
-    // مجموع هذا الأسبوع فقط: تقييم + واجب + إملاء + سلوك
+    var res=calcStudent(s,cls);
     // غ = صفر في الجمع، م = صفر في الجمع
     var _aW = (isAA||isAM) ? 0 : (aVal !== "" && aVal !== undefined ? Math.min(Number(aVal)||0, assessMax) : 0);
     var _hW = (isHA||isHM) ? 0 : (hVal !== "" && hVal !== undefined ? Math.min(Number(hVal)||0, hwMax) : 0);
@@ -342,8 +341,9 @@ function renderWeekly(){
           html+='<span class="wk-abs-val '+(isHA?"is-abs":"is-exc")+'">'+(isHA?"غ":"م")+'</span></td>';
         }else{
           var _hwDisplay=hVal!==''?hVal:'—';
-          html+='<td class="wk-tbl-cell'+((_isTblSel)?' wk-tbl-sel':'')+'" style="cursor:pointer;text-align:center;padding:4px 3px;" onclick="_tblSelectCell('+stuIdx+',\'hw\',\''+hF+'\','+hwMax+','+si+');" data-stuIdx="'+stuIdx+'" data-fld="hw">';
-          html+='<span style="font-size:11px;font-weight:700;color:'+(_isTblSel?'#fbbf24':(hVal!==''?'#93c5fd':'#334155'))+';">'+(_isTblSel&&WKS._tblInput!==''?WKS._tblInput:_hwDisplay)+'</span>';
+          var _hwMissing=(hVal===''&&week<=autoW);
+          html+='<td class="wk-tbl-cell'+((_isTblSel)?' wk-tbl-sel':'')+'" style="cursor:pointer;text-align:center;padding:4px 3px;'+(_hwMissing&&!_isTblSel?'background:rgba(239,68,68,.22);':'')+'" onclick="_tblSelectCell('+stuIdx+',\'hw\',\''+hF+'\','+hwMax+','+si+');" data-stuIdx="'+stuIdx+'" data-fld="hw">';
+          html+='<span style="font-size:11px;font-weight:700;color:'+(_isTblSel?'#fbbf24':(hVal!==''?'#93c5fd':(_hwMissing?'#fca5a5':'#334155')))+';">'+(_isTblSel&&WKS._tblInput!==''?WKS._tblInput:_hwDisplay)+'</span>';
           if(hVal!==''&&!_isTblSel)html+='<span style="font-size:8px;color:#475569;">/'+hwMax+'</span>';
           html+='</td>';
         }
@@ -354,8 +354,9 @@ function renderWeekly(){
           html+='<span class="wk-abs-val '+(isAA?"is-abs":"is-exc")+'">'+(isAA?"غ":"م")+'</span></td>';
         }else{
           var _asDisplay=aVal!==''?aVal:'—';
-          html+='<td class="wk-tbl-cell'+((_isTblSel)?' wk-tbl-sel':'')+'" style="cursor:pointer;text-align:center;padding:4px 3px;" onclick="_tblSelectCell('+stuIdx+',\'assess\',\''+aF+'\','+assessMax+','+si+');" data-stuIdx="'+stuIdx+'" data-fld="assess">';
-          html+='<span style="font-size:11px;font-weight:700;color:'+(_isTblSel?'#fbbf24':(aVal!==''?'#6ee7b7':'#334155'))+';">'+(_isTblSel&&WKS._tblInput!==''?WKS._tblInput:_asDisplay)+'</span>';
+          var _asMissing=(aVal===''&&week<=autoW);
+          html+='<td class="wk-tbl-cell'+((_isTblSel)?' wk-tbl-sel':'')+'" style="cursor:pointer;text-align:center;padding:4px 3px;'+(_asMissing&&!_isTblSel?'background:rgba(239,68,68,.22);':'')+'" onclick="_tblSelectCell('+stuIdx+',\'assess\',\''+aF+'\','+assessMax+','+si+');" data-stuIdx="'+stuIdx+'" data-fld="assess">';
+          html+='<span style="font-size:11px;font-weight:700;color:'+(_isTblSel?'#fbbf24':(aVal!==''?'#6ee7b7':(_asMissing?'#fca5a5':'#334155')))+';">'+(_isTblSel&&WKS._tblInput!==''?WKS._tblInput:_asDisplay)+'</span>';
           if(aVal!==''&&!_isTblSel)html+='<span style="font-size:8px;color:#475569;">/'+assessMax+'</span>';
           html+='</td>';
         }
@@ -392,8 +393,9 @@ function renderWeekly(){
         var _bvd=(beh==='' ? '' : beh);
         var _isTblSelBeh=(WKS._tblCell&&WKS._tblCell.stuIdx===stuIdx&&WKS._tblCell.fld==='beh');
         var _behDisplay=_bvd!==''?_bvd:'—';
-        html+='<td class="wk-tbl-cell'+((_isTblSelBeh)?' wk-tbl-sel':'')+'" style="cursor:pointer;text-align:center;padding:4px 3px;" onclick="_tblSelectCell('+stuIdx+',\'beh\',\'bw'+week+'\',10,'+si+');">';
-        html+='<span style="font-size:11px;font-weight:700;color:'+(_isTblSelBeh?'#fbbf24':(_bvd!==''?'#c4b5fd':'#334155'))+';">'+(_isTblSelBeh&&WKS._tblInput!==''?WKS._tblInput:_behDisplay)+'</span>';
+        var _behMissing=(_bvd===''&&week<=autoW);
+        html+='<td class="wk-tbl-cell'+((_isTblSelBeh)?' wk-tbl-sel':'')+'" style="cursor:pointer;text-align:center;padding:4px 3px;'+(_behMissing&&!_isTblSelBeh?'background:rgba(239,68,68,.22);':'')+'" onclick="_tblSelectCell('+stuIdx+',\'beh\',\'bw'+week+'\',10,'+si+');">';
+        html+='<span style="font-size:11px;font-weight:700;color:'+(_isTblSelBeh?'#fbbf24':(_bvd!==''?'#c4b5fd':(_behMissing?'#fca5a5':'#334155')))+';">'+(_isTblSelBeh&&WKS._tblInput!==''?WKS._tblInput:_behDisplay)+'</span>';
         if(_bvd!==''&&!_isTblSelBeh)html+='<span style="font-size:8px;color:#475569;">/10</span>';
         html+='</td>';
       } else if(cd.type==='tot'){
@@ -408,6 +410,7 @@ function renderWeekly(){
 
   html+='</tbody></table></div></div>';
   html+='<div style="font-size:8.5px;color:#475569;margin-top:5px;padding-bottom:4px;display:flex;gap:10px;flex-wrap:wrap;">';
+  html+='<span style="color:#fca5a5;">🟥 خانة حمراء = الدرجة لسه متسجلتش</span>';
   html+='<span style="color:#fca5a5;">✗ = غائب (اضغط للتبديل)</span>';
   html+='<span style="color:#fb923c;">غ = الدرجة غياب</span>';
   html+='<span style="color:#a5b4fc;">م = معذور</span>';
@@ -480,6 +483,20 @@ function renderWeekly(){
     html+='<select style="background:#0f172a;border:1.5px solid '+(wkNoCol?'#d97706':'#78350f')+';color:'+(wkNoCol?'#fcd34d':'#fdba74')+';padding:3px 8px;border-radius:6px;font-size:10px;outline:none;font-family:inherit;" onchange="WKS.selectedCol=this.value;renderWeekly();">'+wkColOpts+'</select>';
     if(wkNoCol)html+='<span style="font-size:9px;color:#fbbf24;font-weight:700;">⚠ اختر العمود أولاً قبل بدء الرصد</span>';
     html+='</div>';
+    /* ── selector فترة الغياب المقابلة ── */
+    var _absColsUI=buildAbsCols(WKS.activeClass||'', WKS.activeWeek||1);
+    if(_absColsUI.length>1){
+      var _absColSelOpts='';
+      _absColsUI.forEach(function(col,ci){
+        var lbl=col.label||('ف'+(ci+1));
+        _absColSelOpts+='<option value="'+ci+'"'+(ci===(WKS.imlaaAbsColIdx||0)?' selected':'')+'>'+esc(lbl)+'</option>';
+      });
+      html+='<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:8px;padding:5px 10px;background:rgba(239,68,68,.07);border:1.5px solid #7f1d1d;border-radius:8px;">';
+      html+='<span style="font-size:10px;font-weight:700;color:#fca5a5;">📋 تسجيل الغياب في:</span>';
+      html+='<select style="background:#0f172a;border:1.5px solid #7f1d1d;color:#fca5a5;padding:3px 8px;border-radius:6px;font-size:10px;outline:none;font-family:inherit;" onchange="WKS.imlaaAbsColIdx=Number(this.value);renderWeekly();">'+_absColSelOpts+'</select>';
+      html+='<span style="font-size:9px;color:#94a3b8;">عند تسجيل «غ» يُضاف تلقائياً في صفحة الغياب</span>';
+      html+='</div>';
+    }
 
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:7px;">';
     html+='<div class="conf-row"><span class="conf-label" style="color:#fdba74;">دقة:</span>';
@@ -628,6 +645,18 @@ function wkImApplyGrade(student,grade){
   var gradeNum=isBeh?(grade==='غ'?0:Math.min(Number(grade)||0,10)):grade;
   if(isBeh)sts[idx][field]=gradeNum;
   else sts[idx][field]=grade;
+  /* ── تزامن الغياب مع صفحة الغياب عند تسجيل "غ" في الإملاء ── */
+  if(grade==='غ' && !isBeh){
+    var _absCols=buildAbsCols(cls,week);
+    var _absCI=WKS.imlaaAbsColIdx!==undefined?WKS.imlaaAbsColIdx:0;
+    if(_absCI>=_absCols.length)_absCI=0;
+    if(_absCols.length>0){
+      var _absData=getStudentAbsences(cls,student.id);
+      var _absKey='w'+week+'_ci'+_absCI;
+      _absData[_absKey]='abs';
+      applyAbsenceToGrades(cls,student.id,week);
+    }
+  }
   if(!IP.justSet)IP.justSet={};
   IP.justSet[student.id]=Date.now();
   saveDB();
@@ -1166,8 +1195,7 @@ function weeklyExport(){
       var rows=sts.map(function(s,i){
         var row=[i+1,s.name];
         activeWks.forEach(function(w){row.push(s["a"+w]||"",s["h"+w]||"",s["im"+w]||"");});
-        var res=calcStudent(s);
-        row.push((Number(s.beh1)||0)+(Number(s.beh2)||0),res.total,countStudentAbsencePeriods(cls,s.id));
+        var res=calcStudent(s,cls);
         return row;
       });
       var ws=XLSX.utils.aoa_to_sheet([hdrs].concat(rows));

@@ -57,8 +57,23 @@ function renderGrades(){
       if(pg.id==="pg_hw")hwPg=pg;
       if(pg.id==="pg_beh")behPg=pg;
     });
+    var _curWk=(typeof _calcCurrentWeek==='function')?_calcCurrentWeek():999;
     var _hwActive=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
     var weeks=ALL_WEEKS.slice(0,_hwActive).filter(function(w){if(!assessPg)return true;var col=(assessPg.cols||[]).find(function(c){return c.id==='a'+w;});return col?col.visible:true;});
+
+    // ── اكتمال كل عمود/أسبوع: كل الطلاب عندهم درجة مسجلة (غ/م تُحسب مسجلة) ──
+    var _wkComplete={};
+    weeks.forEach(function(w){
+      var aField='a'+w,hField='h'+w,bField='bw'+w;
+      var aOk=students.length>0,hOk=students.length>0,bOk=students.length>0;
+      students.forEach(function(s){
+        var av=s[aField],hv=s[hField],bv=s[bField];
+        if(av===''||av===undefined)aOk=false;
+        if(hv===''||hv===undefined)hOk=false;
+        if(bv===''||bv===undefined)bOk=false;
+      });
+      _wkComplete[w]={assess:aOk,hw:hOk,beh:bOk};
+    });
 
     // ── رأس الجدول ──
     var _hv=_getHomeColVis();
@@ -72,18 +87,34 @@ function renderGrades(){
     var _showDist=_hv.dist!==false;
     // حساب colspan لكل أسبوع
     var _wkSpan=(_showAssess?1:0)+(_showHw?1:0)+(_showBeh?1:0);
+    var _firstShownFld=_showAssess?'assess':(_showHw?'hw':(_showBeh?'beh':null));
+    var _lastShownFld=_showBeh?'beh':(_showHw?'hw':(_showAssess?'assess':null));
+    var _wkBorderClr='rgba(251,191,36,.55)'; // لون فاصل الأسابيع
+    function _wkEdgeStyle(fld){
+      var s='';
+      if(fld===_firstShownFld)s+='border-right:3px solid '+_wkBorderClr+';';
+      if(fld===_lastShownFld)s+='border-left:3px solid '+_wkBorderClr+';';
+      return s;
+    }
     html+='<div class="tw"><table><thead>';
     if(_wkSpan>0){
       html+='<tr>';
-      html+='<th style="min-width:20px">م</th><th class="td-name">الاسم</th><th style="width:32px;"></th>';
+      html+='<th style="min-width:20px">م</th><th style="width:32px;"></th><th class="td-name">الاسم</th>';
       weeks.forEach(function(w){
-        if(_wkSpan>0)html+='<th colspan="'+_wkSpan+'" style="background:#0d2350;text-align:center;">أسبوع '+w+'</th>';
+        if(_wkSpan>0){
+          var _wc=_wkComplete[w];
+          var _wkDone=(_showAssess?_wc.assess:true)&&(_showHw?_wc.hw:true)&&(_showBeh?_wc.beh:true);
+          var _wkBg=_wkDone?'#0d9488':'#0d2350';
+          var _wkColor=_wkDone?'#ffffff':'';
+          html+='<th colspan="'+_wkSpan+'" style="background:'+_wkBg+';text-align:center;'+(_wkColor?'color:'+_wkColor+';':'')+'border-right:3px solid '+_wkBorderClr+';border-left:3px solid '+_wkBorderClr+';">'+(_wkDone?'✅ ':'')+'أسبوع '+w+'</th>';
+        }
       });
       if(_showAvgAssess)html+='<th style="background:#0a1e35;">متوسط<br><small>تقييم</small></th>';
       if(_showAvgHw)html+='<th style="background:#0a1e35;">متوسط<br><small>واجب</small></th>';
       if(_showAvgBeh)html+='<th style="background:#1a0d3a;">متوسط<br><small>سلوك</small></th>';
       html+='<th style="background:#1c1400;">اختبارات<br><small>/30</small></th>';
       if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+tmax+'</small></th>';
+      if(_showTotal)html+='<th title="عدد الدرجات المخصومة من المجموع بسبب الغياب">خصم<br><small style="color:#f97316;">الغياب</small></th>';
       if(_showDist)html+='<th>توزيع</th>';
       html+='<th>تحريك</th><th>حذف</th>';
       html+='</tr>';
@@ -91,9 +122,10 @@ function renderGrades(){
     html+='<tr>';
     html+='<th></th><th></th><th></th>';
     weeks.forEach(function(w){
-      if(_showAssess)html+='<th style="background:#102060;font-size:8px;">تقييم<br>/20</th>';
-      if(_showHw)html+='<th style="background:#102060;font-size:8px;">واجب<br>/10</th>';
-      if(_showBeh)html+='<th style="background:#1a0d3a;font-size:8px;color:#c4b5fd;">سلوك<br>/10</th>';
+      var _wc=_wkComplete[w];
+      if(_showAssess)html+='<th style="background:'+(_wc.assess?'#0d9488':'#102060')+';font-size:8px;'+(_wc.assess?'color:#ffffff;':'')+_wkEdgeStyle('assess')+'">'+(_wc.assess?'✅ ':'')+'تقييم<br>/20</th>';
+      if(_showHw)html+='<th style="background:'+(_wc.hw?'#0d9488':'#102060')+';font-size:8px;'+(_wc.hw?'color:#ffffff;':'')+_wkEdgeStyle('hw')+'">'+(_wc.hw?'✅ ':'')+'واجب<br>/10</th>';
+      if(_showBeh)html+='<th style="background:'+(_wc.beh?'#0d9488':'#1a0d3a')+';font-size:8px;color:'+(_wc.beh?'#ffffff':'#c4b5fd')+';'+_wkEdgeStyle('beh')+'">'+(_wc.beh?'✅ ':'')+'سلوك<br>/10</th>';
     });
     if(_wkSpan===0){
       if(_showAvgAssess)html+='<th style="background:#0a1e35;">متوسط<br><small>تقييم</small></th>';
@@ -101,6 +133,7 @@ function renderGrades(){
       if(_showAvgBeh)html+='<th style="background:#1a0d3a;">متوسط<br><small>سلوك</small></th>';
       html+='<th style="background:#1c1400;">اختبارات<br><small>/30</small></th>';
       if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+tmax+'</small></th>';
+      if(_showTotal)html+='<th title="عدد الدرجات المخصومة من المجموع بسبب الغياب">خصم<br><small style="color:#f97316;">الغياب</small></th>';
       if(_showDist)html+='<th>توزيع</th>';
       html+='<th>تحريك</th><th>حذف</th>';
     } else {
@@ -108,6 +141,7 @@ function renderGrades(){
       if(_showAvgHw)html+='<th></th>';
       if(_showAvgBeh)html+='<th></th>';
       html+='<th></th>';
+      if(_showTotal)html+='<th></th>';
       if(_showTotal)html+='<th></th>';
       if(_showDist)html+='<th></th>';
       html+='<th></th><th></th>';
@@ -117,11 +151,10 @@ function renderGrades(){
     // ── صفوف الطلاب ──
     filtered.forEach(function(s){
       var idx=students.indexOf(s);
-      var res=calcStudent(s);
+      var res=calcStudent(s,cls);
       var tot=res.total;
       html+='<tr>';
       html+='<td class="td-rn">'+(idx+1)+'</td>';
-      html+='<td class="td-name" style="font-size:10px;padding:3px 5px;">'+esc(s.name)+'</td>';
       var _gPhoto=s.photo||(DB.meta&&DB.meta.defaultStudentPhoto?DB.meta.defaultStudentPhoto:'');
       html+='<td style="padding:1px;text-align:center;width:34px;">';
       html+='<div class="pu" style="width:30px;height:30px;border-radius:50%;overflow:hidden;border:1.5px solid #1e3a5f;display:flex;align-items:center;justify-content:center;cursor:pointer;margin:auto;" onclick="document.getElementById(\'hph'+s.id+'\').click()">';
@@ -130,6 +163,7 @@ function renderGrades(){
       html+='</div>';
       html+='<input id="hph'+s.id+'" type="file" accept="image/*" capture="environment" style="display:none" onchange="gradesPhotoChange(event,'+idx+')" />';
       html+='</td>';
+      html+='<td class="td-name" style="font-size:10px;padding:3px 5px;">'+esc(s.name)+'</td>';
       var behSum=0,behCnt=0;
       weeks.forEach(function(w){
         var aField='a'+w, hField='h'+w, bField='bw'+w;
@@ -141,14 +175,16 @@ function renderGrades(){
         var isAA=(av==="غ"),isAM=(av==="م");
         var isHA=(hv==="غ"),isHM=(hv==="م");
         var isBA=(bv==="غ"),isBM=(bv==="م");
+        var _isPastWk=(w<=_curWk);
         // خلية التقييم
         if(_showAssess){
           var _gsCellIdA='gs_'+idx+'_'+aField;
           var _gsSelA=(GS._gsCell&&GS._gsCell.cellId===_gsCellIdA);
-          html+='<td style="padding:1px;">';
+          var _aMissing=(_isPastWk&&!isAA&&!isAM&&(av===''||av===undefined));
+          html+='<td style="padding:1px;'+(_aMissing&&!_gsSelA?'background:rgba(239,68,68,.22);':'')+_wkEdgeStyle('assess')+'">';
           if(!isAA&&!isAM){
             html+='<div class="gs-tbl-cell'+(_gsSelA?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+aField+'\','+aMax+',\''+_gsCellIdA+'\',\'assess_w'+w+'\')">';
-            html+='<span class="gv '+(_gsSelA?'gv-sel':(av!==''&&av!==undefined?'gv-assess':'gv-empty'))+'">';
+            html+='<span class="gv '+(_gsSelA?'gv-sel':(av!==''&&av!==undefined?'gv-assess':(_aMissing?'gv-missing':'gv-empty')))+'">';
             html+=(_gsSelA&&GS._gsInput!==''?GS._gsInput:(av!==''&&av!==undefined?av:'—'))+'</span>';
             html+='</div>';
           } else if(isAA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+aField+'\',\'\');renderGrades();">غ</span>';
@@ -159,10 +195,11 @@ function renderGrades(){
         if(_showHw){
           var _gsCellIdH='gs_'+idx+'_'+hField;
           var _gsSelH=(GS._gsCell&&GS._gsCell.cellId===_gsCellIdH);
-          html+='<td style="padding:1px;">';
+          var _hMissing=(_isPastWk&&!isHA&&!isHM&&(hv===''||hv===undefined));
+          html+='<td style="padding:1px;'+(_hMissing&&!_gsSelH?'background:rgba(239,68,68,.22);':'')+_wkEdgeStyle('hw')+'">';
           if(!isHA&&!isHM){
             html+='<div class="gs-tbl-cell'+(_gsSelH?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+hField+'\','+hMax+',\''+_gsCellIdH+'\',\'hw_w'+w+'\')">';
-            html+='<span class="gv '+(_gsSelH?'gv-sel':(hv!==''&&hv!==undefined?'gv-hw':'gv-empty'))+'">';
+            html+='<span class="gv '+(_gsSelH?'gv-sel':(hv!==''&&hv!==undefined?'gv-hw':(_hMissing?'gv-missing':'gv-empty')))+'">';
             html+=(_gsSelH&&GS._gsInput!==''?GS._gsInput:(hv!==''&&hv!==undefined?hv:'—'))+'</span>';
             html+='</div>';
           } else if(isHA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+hField+'\',\'\');renderGrades();">غ</span>';
@@ -175,10 +212,11 @@ function renderGrades(){
         if(_showBeh){
           var _gsCellIdB='gs_'+idx+'_'+bField;
           var _gsSelB=(GS._gsCell&&GS._gsCell.cellId===_gsCellIdB);
-          html+='<td style="padding:1px;background:rgba(124,58,237,0.07);">';
+          var _bMissing=(_isPastWk&&!isBA&&!isBM&&(bv===''||bv===undefined));
+          html+='<td style="padding:1px;'+(_bMissing&&!_gsSelB?'background:rgba(239,68,68,.22);':'background:rgba(124,58,237,0.07);')+_wkEdgeStyle('beh')+'">';
           if(!isBA&&!isBM){
             html+='<div class="gs-tbl-cell'+(_gsSelB?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+bField+'\','+bMax+',\''+_gsCellIdB+'\',\'beh_w'+w+'\')">';
-            html+='<span class="gv '+(_gsSelB?'gv-sel':(bv!==''&&bv!==undefined?'gv-beh':'gv-empty'))+'">';
+            html+='<span class="gv '+(_gsSelB?'gv-sel':(bv!==''&&bv!==undefined?'gv-beh':(_bMissing?'gv-missing':'gv-empty')))+'">';
             html+=(_gsSelB&&GS._gsInput!==''?GS._gsInput:(bv!==''&&bv!==undefined?bv:'—'))+'</span>';
             html+='</div>';
           } else if(isBA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+bField+'\',\'\');renderGrades();">غ</span>';
@@ -192,6 +230,10 @@ function renderGrades(){
       if(_showAvgBeh)html+='<td class="avg-cell" style="color:#000000;">'+avgBeh+'</td>';
       html+='<td class="avg-cell gv-exam">'+res.exTotal+'</td>';
       if(_showTotal)html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gc(tot)+'22;color:'+gc(tot)+';border:1.5px solid '+gc(tot)+'">'+tot+'</span></td>';
+      if(_showTotal){
+        var _absDedHome=res.absenceDeduct||0;
+        html+='<td>'+(_absDedHome>0?'<span style="color:#f97316;font-weight:700;font-size:11px;">−'+_absDedHome+'</span>':'<span style="color:#475569;">—</span>')+'</td>';
+      }
       if(_showDist){
         var _gsDistId='gs_dist_'+idx;
         var _gsDistSel=(GS._gsCell&&GS._gsCell.cellId===_gsDistId);
@@ -212,6 +254,7 @@ function renderGrades(){
       html+='</tr>';
     });
     html+='</tbody></table></div>';
+    html+='<div style="font-size:10px;color:#94a3b8;margin:4px 2px;display:flex;gap:14px;flex-wrap:wrap;"><span style="color:#fca5a5;">🟥 الخانة الحمراء = الدرجة لسه متسجلتش في أسبوع وصلنا له أو فات</span><span style="color:#6ee7b7;">✅ رأس العمود/الأسبوع الأخضر = كل الطلاب درجاتهم متسجلة</span><span style="color:#fbbf24;">┃ الخط السميك = فاصل بين الأسابيع</span></div>';
     html+='<button class="add-row-btn" onclick="gradesAddStudent()">+ إضافة طالب جديد</button>';
   } else {
   // NORMAL PAGE VIEW
@@ -248,12 +291,13 @@ function renderGrades(){
   html+='<th title="متوسط السلوك = مجموع درجات السلوك الأسبوعية ÷ عدد الأسابيع المُرصدة">متوسط سلوك<span class="ml">/10</span><br><span style="font-size:7px;color:#a78bfa;font-weight:400;">Σ سلوك ÷ ن</span></th>';
   html+='<th title="مجموع درجات الاختبارات">متوسط<br><span style="font-size:7px;color:#fbbf24;">اختبارات/30</span></th>';
   html+='<th>مجموع<span class="ml">/'+tmax+'</span></th>';
+  html+='<th title="عدد الدرجات المخصومة من المجموع بسبب الغياب">خصم<br><span style="font-size:7px;color:#f97316;">الغياب</span></th>';
   html+='<th>غياب</th><th>توزيع</th><th>تحريك</th><th>حذف</th>';
   html+='</tr></thead><tbody>';
 
   filtered.forEach(function(s){
     var idx=students.indexOf(s);
-    var res=calcStudent(s);
+    var res=calcStudent(s,cls);
     var isAbsent=s._totalAbsent;
     var isDictHL=!!GS.dictHL[s.id];
     var absPer=countStudentAbsencePeriods(cls,s.id);
@@ -291,7 +335,13 @@ function renderGrades(){
     html+='<td class="avg-cell gv-exam">'+res.exTotal+'</td>';
     // Total
     var tot=res.total;
-    html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gc(tot)+'22;color:'+gc(tot)+';border:1.5px solid '+gc(tot)+'">'+tot+'</span></td>';
+    var _absDed=res.absenceDeduct||0;
+    html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gc(tot)+'22;color:'+gc(tot)+';border:1.5px solid '+gc(tot)+'" title="'+(_absDed>0?'خصم غياب: −'+_absDed:'')+'">';
+    html+=tot;
+    if(_absDed>0)html+='<sup style="font-size:7px;color:#f97316;margin-right:1px;">−'+_absDed+'</sup>';
+    html+='</span></td>';
+    // Absence deduction column
+    html+='<td>'+(_absDed>0?'<span style="color:#f97316;font-weight:700;font-size:11px;">−'+_absDed+'</span>':'<span style="color:#475569;">—</span>')+'</td>';
     // Absence
     html+='<td>';
     html+='<button class="abs-btn" onclick="switchPage(\'absence\')">'+( absPer>0?'<span class="abs-cnt">'+absPer+'</span>':"")+' 📋</button>';
@@ -406,7 +456,7 @@ function _gradesUpdateTotCell(cls,idx){
   var s=DB.data[cls]&&DB.data[cls][idx];
   if(!s)return;
   var tmax=totalMax();
-  var total=calcStudent(s).total;
+  var total=calcStudent(s,cls).total;
   var cell=document.getElementById('tot_'+idx);
   if(!cell)return;
   var isFail=total<Math.round(tmax/2);
@@ -1482,8 +1532,7 @@ function gradesExportCustom(){
       var totals=[];
       students.forEach(function(s,i){
         var r=DATA_START+i;
-        var res=calcStudent(s);
-        var absVal=countStudentAbsencePeriods(cls,s.id)||0;
+        var res=calcStudent(s,cls);
         var tot=res.total;
         totals.push(tot);
 

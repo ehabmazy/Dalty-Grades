@@ -109,7 +109,7 @@ function toggleAbsence(cls,studentId,week,colIndex){
   var k="w"+week+"_ci"+colIndex;
   if(abs[k]){delete abs[k];}
   else abs[k]="abs";
-  applyAbsenceToGrades(cls,studentId);
+  applyAbsenceToGrades(cls,studentId,week);
   saveDB();
   _refreshCurrentAndRelated();
 }
@@ -118,7 +118,7 @@ function toggleSickCol(cls,studentId,week,colIndex){
   var k="w"+week+"_ci"+colIndex;
   if(abs[k]==="sick"){delete abs[k];}
   else abs[k]="sick";
-  applyAbsenceToGrades(cls,studentId);
+  applyAbsenceToGrades(cls,studentId,week);
   saveDB();
   _refreshCurrentAndRelated();
 }
@@ -129,6 +129,7 @@ function clearAbsenceCol(cls,week,colIndex){
     var abs=getStudentAbsences(cls,s.id);
     var k="w"+week+"_ci"+colIndex;
     if(abs[k])delete abs[k];
+    applyAbsenceToGrades(cls,s.id,week);
   });
   saveDB();
   _refreshCurrentAndRelated();
@@ -140,6 +141,7 @@ function markAllAbsenceCol(cls,week,colIndex){
     var abs=getStudentAbsences(cls,s.id);
     var k="w"+week+"_ci"+colIndex;
     abs[k]="abs";
+    applyAbsenceToGrades(cls,s.id,week);
   });
   saveDB();
   _refreshCurrentAndRelated();
@@ -238,10 +240,58 @@ function _refreshCurrentAndRelated(){
   if(_currentPage==="grades")renderGrades();
 }
 
-function applyAbsenceToGrades(cls,studentId){
-  // فُكّ الربط التلقائي بين فترات الغياب وحقول الواجب/التقييم.
-  // الآن يتم تحديد الحقل المتأثر (واجب/تقييم) من خلال الراصد حسب الحقل المحدد في بطاقة الطالب فقط.
-  return;
+// نوع كل عمود/فترة في صفحة الغياب: 'attendance' (بدون ربط، الافتراضي) | 'hw' (واجب) | 'assess' (تقييم)
+// يُخزَّن برقم الفترة (ci) فقط — نفس النوع لكل الفصول، لأن عدد الفترات أسبوعياً إعداد عام مشترك.
+function getAbsColType(ci){
+  var t=(DB.meta.absColTypes||{})[String(ci)];
+  return (t==='hw'||t==='assess')?t:'attendance';
+}
+function setAbsColType(ci,type){
+  if(!DB.meta.absColTypes)DB.meta.absColTypes={};
+  if(type==='attendance')delete DB.meta.absColTypes[String(ci)];
+  else DB.meta.absColTypes[String(ci)]=type;
+  saveDB();
+  // أعد مزامنة كل الفصول/الأسابيع التي فيها غياب مسجَّل، لتعكس نوع الفترة الجديد فوراً
+  DB.classes.forEach(function(cls){
+    (DB.data[cls]||[]).filter(function(s){return s.name;}).forEach(function(s){
+      var abs=getStudentAbsences(cls,s.id);
+      var weeksSeen={};
+      Object.keys(abs).forEach(function(k){var m=k.match(/^w(\d+)_/);if(m)weeksSeen[m[1]]=true;});
+      Object.keys(weeksSeen).forEach(function(w){applyAbsenceToGrades(cls,s.id,Number(w));});
+    });
+  });
+  saveDB();
+  if(_currentPage==='absence')renderAbsence();
+  if(_currentPage==='weekly')renderWeekly();
+  if(_currentPage==='grades')renderGrades();
+  showSnack('✅ تم تحديث نوع الفترة ومزامنة الدرجات المرتبطة بها');
+}
+
+function applyAbsenceToGrades(cls,studentId,week){
+  // ── ربط فترات الغياب بحقول الواجب/التقييم، حسب نوع كل فترة (يُضبط من رأس
+  // كل عمود في صفحة الغياب). فترة من نوع "واجب" أو "تقييم" وغائب فيها الطالب
+  // هذا الأسبوع → الحقل المقابل لذلك الأسبوع يُعلَّم "غ" تلقائياً، ويظهر هذا
+  // فوراً وبنفس القيمة في كل الصفحات (الغياب/الأسبوعي/الدرجات) لأنه يُكتب
+  // مباشرة في بيانات الطالب الموحّدة. فترات "غياب" العادية لا تؤثر على أي درجة.
+  if(!week)return;
+  var sts=DB.data[cls]||[];
+  var idx=-1;
+  for(var i=0;i<sts.length;i++){if(sts[i].id===studentId){idx=i;break;}}
+  if(idx<0)return;
+  var s=sts[idx];
+  var abs=getStudentAbsences(cls,studentId);
+  var hwAbsent=false,assessAbsent=false;
+  Object.keys(abs).forEach(function(k){
+    if(abs[k]!=="abs")return;
+    var m=k.match(/^w(\d+)_ci(\d+)$/);
+    if(!m||Number(m[1])!==Number(week))return;
+    var t=getAbsColType(m[2]);
+    if(t==='hw')hwAbsent=true;
+    else if(t==='assess')assessAbsent=true;
+  });
+  var aF='a'+week,hF='h'+week;
+  if(assessAbsent)s[aF]='غ'; else if(s[aF]==='غ')s[aF]='';
+  if(hwAbsent)s[hF]='غ'; else if(s[hF]==='غ')s[hF]='';
 }
 
 
@@ -1066,7 +1116,7 @@ function renderAbsClsBar(){
   var h='<span class="cls-bar-lbl">الفصول:</span>';
   DB.classes.forEach(function(c){
     var absCnt=totalClassAbsencePeriods(c);
-    h+='<button class="cls-bar-tab'+(c===cls?" active":"")+'" onclick="AS.activeClass=\''+esc(c)+'\';AS.activeWeek=1;renderAbsence();renderAbsClsBar();renderAbsWeeksBar();">'+esc(c)+(absCnt?' <span class="badge badge-red">'+absCnt+'</span>':"")+'</button>';
+    h+='<button class="cls-bar-tab'+(c===cls?" active":"")+'" onclick="AS.activeClass=\''+esc(c)+'\';AS.activeWeek=1;if(window.GS)GS.activeClass=AS.activeClass;renderAbsence();renderAbsClsBar();renderAbsWeeksBar();">'+esc(c)+(absCnt?' <span class="badge badge-red">'+absCnt+'</span>':"")+'</button>';
   });
   bar.innerHTML=h;
 }
@@ -1188,10 +1238,17 @@ function renderAbsence(){
     html+='<div style="padding:5px 3px;text-align:center;font-size:8px;color:#475569;">📷</div>';
     html+='<div style="padding:5px 7px;border-left:none;">الطالب — أسبوع '+week+weekStartStr+'</div>';
     activePeriodDays.forEach(function(col){
+      var _absColType=getAbsColType(col._ci);
+      var _typeColor=_absColType==='hw'?'#34d399':(_absColType==='assess'?'#a78bfa':'#64748b');
       html+='<div style="font-size:8px;line-height:1.3;'+(col.isScheduled?"color:#60a5fa;font-weight:700;":"")+'">';
       html+=esc(col.period.label||col.period.id)+'<br/>'+DAYS_SHORT[col.dayIdx];
       if(col.period.time)html+='<br/><span style="font-size:7px;color:#475569;">'+esc(col.period.time)+'</span>';
-      html+='<br/><div style="display:flex;gap:2px;margin-top:3px;justify-content:center;">';
+      html+='<br/><select onchange="setAbsColType('+col._ci+',this.value)" title="نوع الفترة: يربط الغياب بدرجة الواجب أو التقييم لهذا الأسبوع" style="margin-top:3px;width:100%;max-width:54px;font-size:7px;background:#0f172a;color:'+_typeColor+';border:1px solid #1e3a5f;border-radius:4px;padding:1px;font-family:inherit;cursor:pointer;">';
+      html+='<option value="attendance"'+(_absColType==='attendance'?' selected':'')+'>غياب</option>';
+      html+='<option value="hw"'+(_absColType==='hw'?' selected':'')+'>واجب</option>';
+      html+='<option value="assess"'+(_absColType==='assess'?' selected':'')+'>تقييم</option>';
+      html+='</select>';
+      html+='<div style="display:flex;gap:2px;margin-top:3px;justify-content:center;">';
       html+='<button onclick="clearAbsenceCol(\''+esc(cls)+'\','+week+','+col._ci+')" title="مسح كل العمود" style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:5px;cursor:pointer;font-size:9px;padding:1px 5px;font-family:inherit;line-height:1.4;" onmouseover="this.style.background=\'rgba(239,68,68,.3)\'" onmouseout="this.style.background=\'rgba(239,68,68,.15)\'">🗑</button>';
       html+='<button onclick="markAllAbsenceCol(\''+esc(cls)+'\','+week+','+col._ci+')" title="تسجيل الكل غائب" style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;border-radius:5px;cursor:pointer;font-size:9px;padding:1px 5px;font-family:inherit;line-height:1.4;" onmouseover="this.style.background=\'rgba(239,68,68,.3)\'" onmouseout="this.style.background=\'rgba(239,68,68,.15)\'">✗</button>';
       html+='</div>';
@@ -1240,6 +1297,7 @@ function renderAbsence(){
   html+='<span style="background:rgba(245,158,11,.15);color:#fbbf24;padding:2px 9px;border-radius:6px;border:1px solid rgba(245,158,11,.25);">م مريض (مستثنى)</span>';
   html+='<span style="background:rgba(29,78,216,.1);color:#60a5fa;padding:2px 9px;border-radius:6px;border:1px solid rgba(29,78,216,.25);">· فترة مجدولة</span>';
   html+='<span style="color:#475569;font-size:8.5px;margin-top:1px;">اضغط: مرة=غائب، مرتين=مريض، ثلاث=إلغاء</span>';
+  html+='<span style="color:#475569;font-size:8.5px;margin-top:1px;">| اختر نوع كل فترة من رأس العمود (واجب/تقييم) لربط غيابها تلقائياً بدرجة ذلك الأسبوع</span>';
   html+='</div>';
 
   html+='</div></div>';

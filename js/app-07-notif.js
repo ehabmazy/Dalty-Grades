@@ -2867,41 +2867,11 @@ function allCols(){
   return r;
 }
 
-function calcStudent(s){
-  if(!DB)return{total:0,avgAssess:0,avgHw:0,avgBeh:'—',exTotal:0};
-  if(s._totalAbsent)return{total:0,avgAssess:0,avgHw:0,avgBeh:'—',exTotal:0};
-  var aSum=0,aC=0,hSum=0,hC=0,bSum=0,bC=0,exSum=0;
-  var aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  var awList=ALL_WEEKS.slice(0,aw);
-  // حساب متوسط السلوك من حقول bw الأسبوعية
-  awList.forEach(function(w){
-    var bwv=s['bw'+w];
-    if(bwv===''||bwv===undefined||bwv===null)return;
-    if(bwv==='م')return;
-    var bwn=bwv==='غ'?0:Math.min(Number(bwv)||0,10);
-    bSum+=bwn;bC++;
-  });
-  allCols().forEach(function(c){
-    if(c.id.match(/^a\d+$/)){var wn=parseInt(c.id.slice(1));if(awList.indexOf(wn)<0)return;}
-    if(c.id.match(/^h\d+$/)){var wn=parseInt(c.id.slice(1));if(awList.indexOf(wn)<0)return;}
-    if(c.id.match(/^bw\d+$/))return;
-    if(c.id==='beh1'||c.id==='beh2')return;
-    if(!c.visible&&c.id!=='ex1'&&c.id!=='ex2')return;
-    var raw=s[c.field];
-    if(raw===''||raw===undefined||raw===null)return;
-    if(raw==='م')return;
-    var v=raw==='غ'?0:Math.min(Number(raw)||0,c.max);
-    if(c.id.charAt(0)==='a'&&c.id!=='abs'){aSum+=v;aC++;}
-    else if(c.id.charAt(0)==='h'){hSum+=v;hC++;}
-    else if(c.id==='ex1'||c.id==='ex2')exSum+=Math.min(v,c.max);
-  });
-  var avgA=aC?Math.round(aSum/aC):0;
-  var avgH=hC?Math.round(hSum/hC):0;
-  var beh=bC>0?Math.round(bSum/bC):0;
-  var avgBehDisp=bC>0?beh:'—';
-  var ex=Math.min(exSum,30);
-  return{total:avgA+avgH+beh+ex,avgAssess:avgA,avgHw:avgH,avgBeh:avgBehDisp,exTotal:ex};
-}
+// ملاحظة: تم حذف نسخة قديمة مكررة من calcStudent من هنا — كانت تتجاوز
+// (override) النسخة الصحيحة في app-01-core.js وتُسبب تجاهل إعدادات
+// تأثير الغياب (absenceMode / absenceAllowed / absenceDeductPer) في كل
+// الصفحات، بما فيها صفحة الدرجات. الدالة الصحيحة الوحيدة الآن موجودة
+// في app-01-core.js وتُستخدم من هنا تلقائياً (نفس الاسم، نطاق عام).
 
 function gradeColor(pct){
   if(pct>=85)return'#10b981';
@@ -2967,7 +2937,7 @@ function renderGeneralReport(cls){
   var color=CLS_COLORS[clsIdx%CLS_COLORS.length];
 
   // Compute stats
-  var scores=students.map(function(s){return calcStudent(s).total;});
+  var scores=students.map(function(s){return calcStudent(s,cls).total;});
   var avg=totalStudents?Math.round(scores.reduce(function(a,b){return a+b;},0)/totalStudents):0;
   var maxScore=totalStudents?Math.max.apply(null,scores):0;
   var minScore=totalStudents?Math.min.apply(null,scores):0;
@@ -2989,7 +2959,7 @@ function renderGeneralReport(cls){
 
   // Ranked students
   var ranked=students.map(function(s){
-    var c=calcStudent(s);
+    var c=calcStudent(s,cls);
     return{s:s,total:c.total,avgAssess:c.avgAssess,avgHw:c.avgHw,avgBeh:c.avgBeh,exTotal:c.exTotal,abs:countAbsences(cls,s.id),sick:countSick(cls,s.id)};
   }).sort(function(a,b){return b.total-a.total;});
 
@@ -3184,7 +3154,7 @@ function renderStudentList(cls){
   var color=CLS_COLORS[clsIdx%CLS_COLORS.length];
 
   var ranked=students.map(function(s){
-    var c=calcStudent(s);
+    var c=calcStudent(s,cls);
     return{s:s,total:c.total,abs:countAbsences(cls,s.id)};
   }).sort(function(a,b){return b.total-a.total;});
 
@@ -3265,14 +3235,14 @@ function renderStudentReport(cls,sid){
   if(!s){document.getElementById('mainContent').innerHTML='<div class="empty-state"><div class="es-icon">❓</div><div class="es-msg">لم يُعثر على الطالب</div></div>';return;}
 
   var tmax=70;
-  var calc=calcStudent(s);
+  var calc=calcStudent(s,cls);
   var pct=Math.round(calc.total/tmax*100);
   var color=gradeColor(pct);
   var absCount=countAbsences(cls,s.id);
   var sickCount=countSick(cls,s.id);
 
   // Rank
-  var ranked=(DB.data[cls]||[]).filter(function(x){return x.name;}).map(function(x){return{id:x.id,total:calcStudent(x).total};}).sort(function(a,b){return b.total-a.total;});
+  var ranked=(DB.data[cls]||[]).filter(function(x){return x.name;}).map(function(x){return{id:x.id,total:calcStudent(x,cls).total};}).sort(function(a,b){return b.total-a.total;});
   var rank=1;
   ranked.forEach(function(r,i){if(r.id===sid)rank=i+1;});
   var totalInCls=ranked.length;
@@ -3413,7 +3383,7 @@ function renderStudentReport(cls,sid){
   // Compare with class average
   html+='<div class="section-title" style="margin-top:4px;">📊 المقارنة مع متوسط الفصل</div>';
   var clsStudents=(DB.data[cls]||[]).filter(function(x){return x.name;});
-  var clsAvg=clsStudents.length?Math.round(clsStudents.map(function(x){return calcStudent(x).total;}).reduce(function(a,b){return a+b;},0)/clsStudents.length):0;
+  var clsAvg=clsStudents.length?Math.round(clsStudents.map(function(x){return calcStudent(x,cls).total;}).reduce(function(a,b){return a+b;},0)/clsStudents.length):0;
   var diff=calc.total-clsAvg;
   html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">';
   html+='<div style="flex:1;text-align:center;">';
