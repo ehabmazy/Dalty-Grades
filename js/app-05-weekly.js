@@ -997,16 +997,15 @@ function wkGradesTablePrint(){
 
   var now=new Date();
   var dateStr=now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
-  var win=window.open('','_blank');
-  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>جدول الرصد</title>'
+  var _rHtml='';
+  _rHtml=('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>جدول الرصد</title>'
     +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;color:#111;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#064e3b;color:white;}</style>'
     +'</head><body>'
     +'<h1>📋 جدول الرصد — '+esc(colLabel)+' — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
     +'<div style="font-size:11px;color:#555;margin-bottom:8px;">تاريخ الطباعة: '+dateStr+'</div>'
     +'<table><thead><tr><th>#</th><th>الاسم</th><th>الدرجة /'+colMax+'</th><th>الحضور</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'</body></html>');
-  win.document.close();
-  win.print();
+  _openReportBlob(_rHtml);
 }
 
 
