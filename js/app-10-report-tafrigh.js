@@ -6,10 +6,25 @@
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
     setTimeout(function(){
-      navigator.serviceWorker.register('/grades-project/sw.js')
+      /* ── استخراج مسار sw.js ديناميكياً بناءً على موقع التطبيق الفعلي ──
+         يحل مشكلة: مسار ثابت /grades-project/sw.js لا يتطابق مع
+         أسماء مستودعات مختلفة على GitHub Pages أو رفع مباشر ── */
+      var swPath = (function(){
+        var scripts = document.querySelectorAll('script[src]');
+        for(var i=0; i<scripts.length; i++){
+          var src = scripts[i].getAttribute('src');
+          if(src && src.indexOf('app-10') !== -1){
+            /* مجلد js/ داخل مجلد التطبيق → ارجع مستوى للأعلى */
+            return src.replace(/\/js\/app-10[^/]*$/, '/sw.js');
+          }
+        }
+        /* احتياطي: مسار نسبي من الصفحة الحالية */
+        return './sw.js';
+      })();
+
+      navigator.serviceWorker.register(swPath)
         .then(function(reg){
-          console.log('SW registered');
-          // فرض تحديث الكاش وتحميل أحدث نسخة من الملفات (app.js, index.html, ...)
+          console.log('[SW] مُسجَّل على:', reg.scope);
           reg.update();
           if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
           reg.addEventListener('updatefound', function(){
@@ -22,9 +37,9 @@ if('serviceWorker' in navigator){
             });
           });
         })
-        .catch(function(err){ console.log('SW error', err); });
+        .catch(function(err){ console.warn('[SW] فشل التسجيل:', err); });
 
-      // إعادة تحميل الصفحة تلقائياً عند تفعيل نسخة جديدة من الـ Service Worker
+      /* إعادة تحميل عند تفعيل نسخة جديدة */
       var _swRefreshed = false;
       navigator.serviceWorker.addEventListener('controllerchange', function(){
         if(_swRefreshed) return;
@@ -1311,3 +1326,50 @@ window.tfrExportExcel = tfrExportExcel;
 // ══════════════════════════════
 
 
+
+// ══════════════════════════════
+// PWA Install Prompt — تثبيت التطبيق
+// يلتقط حدث beforeinstallprompt ويحفظه لعرض زر التثبيت عند الطلب
+// ══════════════════════════════
+
+(function(){
+  var _deferredPrompt = null;
+
+  /* التقاط حدث التثبيت قبل أن يختفي */
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    _deferredPrompt = e;
+    /* إظهار زر التثبيت في الشريط الجانبي */
+    var bar = document.getElementById('pwaInstallBar');
+    if(bar) bar.style.display = 'block';
+    console.log('[PWA] زر التثبيت جاهز');
+  });
+
+  /* إخفاء الزر بعد التثبيت الناجح */
+  window.addEventListener('appinstalled', function(){
+    _deferredPrompt = null;
+    var bar = document.getElementById('pwaInstallBar');
+    if(bar) bar.style.display = 'none';
+    console.log('[PWA] تم تثبيت التطبيق بنجاح');
+  });
+
+  /* الدالة التي يستدعيها زر التثبيت */
+  window.triggerPwaInstall = function(){
+    if(!_deferredPrompt){
+      /* إذا لم يكن الحدث متاحاً — أعطِ إرشادات يدوية */
+      var msg = 'لتثبيت التطبيق يدوياً:\n\n' +
+        '📱 أندرويد: اضغط القائمة ⋮ ← "إضافة إلى الشاشة الرئيسية"\n' +
+        '🍎 آيفون: اضغط زر المشاركة ↑ ← "إضافة إلى الشاشة الرئيسية"\n' +
+        '💻 كمبيوتر: انقر أيقونة ⊕ في شريط العنوان';
+      alert(msg);
+      return;
+    }
+    _deferredPrompt.prompt();
+    _deferredPrompt.userChoice.then(function(result){
+      console.log('[PWA] اختيار المستخدم:', result.outcome);
+      _deferredPrompt = null;
+      var bar = document.getElementById('pwaInstallBar');
+      if(bar) bar.style.display = 'none';
+    });
+  };
+})();
