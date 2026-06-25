@@ -719,7 +719,7 @@
     <aside class="app-sidebar collapsed" id="appSidebar">
       <div class="sidebar-inner">
         <div class="sidebar-header">
-          <div class="sidebar-logo" style="display:flex;align-items:center;"><img src="images/logo.jpg" style="width:36px;height:36px;object-fit:contain;border-radius:50%;background:#000;"/></div>
+          <div class="sidebar-logo" style="display:flex;align-items:center;cursor:pointer;" onclick="triggerPwaInstall();" title="اضغط لتثبيت التطبيق"><img src="images/logo.jpg" id="sidebarLogoImg" style="width:36px;height:36px;object-fit:contain;border-radius:50%;background:#000;box-shadow:0 0 0 2px #22c55e;transition:box-shadow .3s;" /></div>
           <div class="sidebar-title" id="sidebarSchoolName">Dalty Grades</div>
           <div class="sidebar-sub">الإعدادية</div>
         </div>
@@ -814,9 +814,6 @@
               }
             }
           </script>
-        <div class="sidebar-footer">
-          v2.0 — نظام المعلمين
-        </div>
       </div>
     </aside>
     <!-- PAGES -->
