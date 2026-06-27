@@ -1671,7 +1671,7 @@ var _homeTimer=null;
 function bnSetActive(page){
   // أزل النشاط من كل أزرار الدوك
   var allDockIds = ['home','grades','sched','weekly','cards','notifs','absence','stats',
-    'curric','report','tafrigh','sick','dict','witness','backup','settings'];
+    'curric','tafrigh','sick','dict','witness','backup','settings'];
   allDockIds.forEach(function(p){
     var b=document.getElementById('bni_'+p);
     if(b){
@@ -2610,7 +2610,6 @@ var _HNG_ALL = [
   { id:'notifs',   icon:'🔔', lbl:'الإشعارات',        fn:function(){ switchPage('notifs');  bnSetActive('notifs');  }, badge:true },
   { id:'sick',     icon:'🤒', lbl:'المرضى',            fn:function(){ switchPage('sick');    bnSetActive('sick');    } },
   { id:'curric',   icon:'📖', lbl:'توزيع المنهج',     fn:function(){ switchPage('curric');  bnSetActive('curric');  } },
-  { id:'report',   icon:'📄', lbl:'كشف الدرجات',      fn:function(){ switchPage('report');  bnSetActive('report');  } },
   { id:'tafrigh',  icon:'🗃', lbl:'كشف التفريغ',      fn:function(){ switchPage('tafrigh'); bnSetActive('tafrigh'); } },
   { id:'dict',     icon:'🎤', lbl:'الإملاء',           fn:function(){ switchPage('dict');    bnSetActive('dict');    } },
   { id:'witness',  icon:'✍️', lbl:'توقيع المتابع',    fn:function(){ switchPage('witness'); bnSetActive('witness'); } },

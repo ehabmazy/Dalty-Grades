@@ -46,6 +46,7 @@ function renderGrades(){
   html+='<div class="g-info-right">';
   html+='<span class="badge badge-blue">'+filtered.length+' طالب</span>';
   html+='<button class="btn btn-sm" style="background:#0e7490;color:white;border:none;" onclick="gradesSortAlpha()">🔤 أبجدي</button>';
+  html+='<button class="btn btn-sm" style="background:#7c3aed;color:white;border:none;" onclick="showStudentFormLinks()">📲 روابط التسجيل</button>';
   html+='<button class="btn btn-primary btn-sm" onclick="gradesAddStudent()">+ جديد</button>';
   html+='</div></div>';
 
@@ -1083,9 +1084,18 @@ function gradesExportExcel(){
         if(av!==""&&av!==undefined&&av!==null&&av!=="م"){var n=av==="غ"?0:Math.min(Number(av)||0,20);aSum+=n;aC++;}
         if(hv!==""&&hv!==undefined&&hv!==null&&hv!=="م"){var m=hv==="غ"?0:Math.min(Number(hv)||0,10);hSum+=m;hC++;}
       });
-      var b1=s.beh1,b2=s.beh2,e1=s.ex1,e2=s.ex2;
+      var e1=s.ex1,e2=s.ex2;
       function nv(v,mx){if(v===""||v===undefined||v===null||v==="م")return 0;if(v==="غ")return 0;return Math.min(Number(v)||0,mx);}
-      var beh=Math.min(nv(b1,5)+nv(b2,5),10);
+      // متوسط درجات السلوك الأسبوعية (bw1..bwN) للأسابيع المُدرجة فقط
+      var bwSum=0,bwCnt=0;
+      weeks.forEach(function(w){
+        var bv=s["bw"+w];
+        if(bv!==""&&bv!==undefined&&bv!==null&&bv!=="م"&&(bv==="غ"||!isNaN(Number(bv)))){
+          var bn=bv==="غ"?0:Math.min(Number(bv)||0,10);
+          bwSum+=bn;bwCnt++;
+        }
+      });
+      var beh=bwCnt>0?Math.round(bwSum/bwCnt):0;
       var ex =Math.min(nv(e1,15)+nv(e2,15),30);
       var avgA=aC?Math.round(aSum/aC):0;
       var avgH=hC?Math.round(hSum/hC):0;
@@ -1646,3 +1656,255 @@ window.gradesExportCustom=gradesExportCustom;
 
 
 // ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+// روابط استمارة تسجيل بيانات الطلاب
+// ══════════════════════════════════════════════════════
+
+function showStudentFormLinks(){
+  var cls = GS.activeClass;
+  if(!cls){ alert('اختاري فصلاً أولاً'); return; }
+  var students = DB.data[cls] || [];
+  if(!students.length){ alert('لا يوجد طلاب في هذا الفصل'); return; }
+
+  // رابط أساسي للتطبيق (نفس النطاق)
+  var baseUrl = location.origin + location.pathname.replace('index.html','') + 'student-form.html';
+
+  var modal = document.createElement('div');
+  modal.id = 'formLinksModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto;';
+
+  var inner = document.createElement('div');
+  inner.style.cssText = 'background:#111827;border:1px solid #1e3a5f;border-radius:16px;width:100%;max-width:480px;margin:auto;overflow:hidden;';
+
+  // رأس النافذة
+  var head = '<div style="background:#0d1a35;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1e3a5f;">'
+    + '<span style="font-weight:900;font-size:15px;">📲 روابط التسجيل — '+esc(cls)+'</span>'
+    + '<button onclick="document.getElementById(\'formLinksModal\').remove()" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;line-height:1;">✕</button>'
+    + '</div>';
+
+  // زر "نسخ كل الروابط"
+  var allLinks = students.map(function(s){
+    return s.name + ':\n' + buildFormUrl(baseUrl, s, cls);
+  }).join('\n\n');
+
+  var controls = '<div style="padding:12px 14px;background:#0a0f1e;border-bottom:1px solid #1e3a5f;display:flex;gap:8px;">'
+    + '<button onclick="copyText(\''+encodeAllLinks(allLinks)+'\',this)" style="flex:1;padding:9px;background:#7c3aed;color:white;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📋 نسخ كل الروابط</button>'
+    + '<button onclick="shareAllWhatsApp(\''+encodeAllLinks(allLinks)+'\')" style="flex:1;padding:9px;background:#16a34a;color:white;border:none;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">💬 واتساب</button>'
+    + '</div>';
+
+  // قائمة الطلاب
+  var list = '<div style="padding:10px 14px;max-height:55vh;overflow-y:auto;">';
+  students.forEach(function(s, i){
+    var url = buildFormUrl(baseUrl, s, cls);
+    list += '<div style="background:#0d1526;border:1px solid #1e3a5f;border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">'
+      + '<span style="background:#1e3a5f;color:#7dd3fc;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0;">'+(i+1)+'</span>'
+      + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:13px;font-weight:700;margin-bottom:4px;">'+esc(s.name)+'</div>'
+        + '<div style="font-size:10px;color:#475569;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+url+'</div>'
+      + '</div>'
+      + '<div style="display:flex;gap:5px;flex-shrink:0;">'
+        + '<button onclick="copyText(\''+encodeURIComponent(url)+'\',this)" title="نسخ" style="padding:6px 8px;background:#1e3a5f;color:#7dd3fc;border:none;border-radius:7px;cursor:pointer;font-size:13px;">📋</button>'
+        + '<button onclick="shareWhatsApp(\''+encodeURIComponent(s.name)+'\',\''+encodeURIComponent(url)+'\')" title="واتساب" style="padding:6px 8px;background:#14532d;color:#86efac;border:none;border-radius:7px;cursor:pointer;font-size:13px;">💬</button>'
+      + '</div>'
+      + '</div>';
+  });
+  list += '</div>';
+
+  inner.innerHTML = head + controls + list;
+  modal.appendChild(inner);
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function buildFormUrl(base, student, cls){
+  return base
+    + '?id=' + encodeURIComponent(student.id)
+    + '&name=' + encodeURIComponent(student.name)
+    + '&cls=' + encodeURIComponent(cls);
+}
+
+function encodeAllLinks(text){
+  return encodeURIComponent(text);
+}
+
+function copyText(encodedText, btn){
+  var text = decodeURIComponent(encodedText);
+  navigator.clipboard.writeText(text).then(function(){
+    var orig = btn.innerHTML;
+    btn.innerHTML = '✅ تم النسخ';
+    btn.style.background = '#14532d';
+    setTimeout(function(){ btn.innerHTML = orig; btn.style.background=''; }, 1800);
+  }).catch(function(){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    var orig = btn.innerHTML;
+    btn.innerHTML = '✅ تم النسخ';
+    setTimeout(function(){ btn.innerHTML = orig; }, 1800);
+  });
+}
+
+function shareWhatsApp(encodedName, encodedUrl){
+  var name = decodeURIComponent(encodedName);
+  var url  = decodeURIComponent(encodedUrl);
+  var msg  = 'السلام عليكم ورحمة الله 🌟\nيُرجى تعبئة بيانات الطالب *' + name + '* عبر الرابط التالي:\n' + url;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+function shareAllWhatsApp(encodedText){
+  var text = decodeURIComponent(encodedText);
+  var msg = 'السلام عليكم ورحمة الله 🌟\nيُرجى تعبئة بيانات طالبكم عبر الرابط الخاص به:\n\n' + text;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+}
+
+window.showStudentFormLinks = showStudentFormLinks;
+window.copyText = copyText;
+window.shareWhatsApp = shareWhatsApp;
+window.shareAllWhatsApp = shareAllWhatsApp;
+
+// ══════════════════════════════════════════════════════
+// مشاركة الدرجات مع الطلاب — صفحة داخل التطبيق
+// ══════════════════════════════════════════════════════
+
+function _sgBuildUrl(uid, selWeeks, selCols) {
+  var base = location.origin + location.pathname.replace('index.html','') + 'grades-viewer.html';
+  var p = '?uid=' + encodeURIComponent(uid);
+  if (selWeeks && selWeeks.length) p += '&weeks=' + selWeeks.join(',');
+  if (selCols  && selCols.length)  p += '&cols='  + selCols.join(',');
+  return base + p;
+}
+
+function _sgUpdateUrl() {
+  var uid = window._sgUID; if(!uid) return;
+  var weeks = [], cols = [];
+  document.querySelectorAll('#sgWeekChips .sg-chip.active').forEach(function(el){ weeks.push(el.dataset.w); });
+  document.querySelectorAll('#sgColChips .sg-chip.active').forEach(function(el){ cols.push(el.dataset.c); });
+  var url = _sgBuildUrl(uid, weeks, cols);
+  window._sgCurrentUrl = url;
+  var el = document.getElementById('sgViewerUrl');
+  if(el) el.textContent = url;
+  var btn = document.getElementById('sgCopyBtn');
+  if(btn){ btn.innerHTML = '📋 نسخ الرابط'; btn.style.background = '#1d4ed8'; }
+}
+
+function copyViewerLink(){
+  var user = firebase.auth && firebase.auth().currentUser;
+  if(!user){ alert('يجب تسجيل الدخول أولاً'); return; }
+  window._sgUID = user.uid;
+
+  var totalWeeks = (DB && DB.meta && DB.meta.activeWeeks) ? Number(DB.meta.activeWeeks) : 14;
+  var allWeeks = []; for(var i=1;i<=totalWeeks;i++) allWeeks.push(i);
+
+  var colDefs = [
+    {id:'a',   label:'تقييم'},
+    {id:'h',   label:'واجب'},
+    {id:'bw',  label:'سلوك'},
+    {id:'ex1', label:'اختبار 1'},
+    {id:'ex2', label:'اختبار 2'},
+    {id:'total',label:'المجموع'}
+  ];
+
+  // رقائق الأسابيع
+  var weeksHtml = allWeeks.map(function(w){
+    return '<button class="sg-chip active" data-w="'+w+'" onclick="this.classList.toggle(\'active\');_sgUpdateUrl()">'+w+'</button>';
+  }).join('');
+
+  // رقائق الأعمدة
+  var colsHtml = colDefs.map(function(c){
+    return '<button class="sg-chip active" data-c="'+c.id+'" onclick="this.classList.toggle(\'active\');_sgUpdateUrl()">'+c.label+'</button>';
+  }).join('');
+
+  var initUrl = _sgBuildUrl(user.uid, allWeeks, colDefs.map(function(c){return c.id;}));
+  window._sgCurrentUrl = initUrl;
+
+  var overlay = document.createElement('div');
+  overlay.id  = 'shareGradesOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#0a0f1e;z-index:9999;display:flex;flex-direction:column;overflow:hidden;font-family:Cairo,sans-serif;direction:rtl;';
+
+  overlay.innerHTML =
+    // ── رأس ──
+    '<div style="background:#0d1a35;border-bottom:1px solid #1e3a5f;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<span style="font-size:20px;">🔗</span>'+
+        '<div>'+
+          '<div style="font-weight:900;font-size:15px;color:#60a5fa;">مشاركة الدرجات مع الطلاب</div>'+
+          '<div style="font-size:10px;color:#64748b;margin-top:2px;">رابط عرض القراءة فقط — للطلاب والأولياء</div>'+
+        '</div>'+
+      '</div>'+
+      '<button onclick="document.getElementById(\'shareGradesOverlay\').remove()" style="background:rgba(255,255,255,.08);border:1px solid #1e3a5f;color:#94a3b8;border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;font-family:Cairo,sans-serif;">✕ إغلاق</button>'+
+    '</div>'+
+
+    // ── محتوى قابل للتمرير ──
+    '<div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;align-items:center;gap:14px;">'+
+
+      // تخصيص الأسابيع
+      '<div style="background:#0f1e35;border:1px solid #1e3a5f;border-radius:14px;padding:16px 18px;width:100%;max-width:560px;">'+
+        '<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:10px;">📅 الأسابيع المعروضة</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">'+
+          '<button onclick="document.querySelectorAll(\'#sgWeekChips .sg-chip\').forEach(function(e){e.classList.add(\'active\')});_sgUpdateUrl()" style="padding:4px 10px;background:#1e3a5f;color:#7dd3fc;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif;">تحديد الكل</button>'+
+          '<button onclick="document.querySelectorAll(\'#sgWeekChips .sg-chip\').forEach(function(e){e.classList.remove(\'active\')});_sgUpdateUrl()" style="padding:4px 10px;background:#1e1e2e;color:#64748b;border:1px solid #1e3a5f;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif;">إلغاء الكل</button>'+
+        '</div>'+
+        '<div id="sgWeekChips" style="display:flex;flex-wrap:wrap;gap:6px;">'+weeksHtml+'</div>'+
+      '</div>'+
+
+      // تخصيص الأعمدة
+      '<div style="background:#0f1e35;border:1px solid #1e3a5f;border-radius:14px;padding:16px 18px;width:100%;max-width:560px;">'+
+        '<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:10px;">📊 الأعمدة المعروضة</div>'+
+        '<div id="sgColChips" style="display:flex;flex-wrap:wrap;gap:8px;">'+colsHtml+'</div>'+
+      '</div>'+
+
+      // الرابط
+      '<div style="background:#0f1e35;border:1px solid #1e3a5f;border-radius:14px;padding:16px 18px;width:100%;max-width:560px;">'+
+        '<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;">📎 رابط العرض</div>'+
+        '<div id="sgViewerUrl" style="background:#0a0f1e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 14px;font-size:10px;color:#7dd3fc;word-break:break-all;line-height:1.7;margin-bottom:12px;">'+initUrl+'</div>'+
+        '<div style="display:flex;gap:10px;">'+
+          '<button id="sgCopyBtn" onclick="sgCopy()" style="flex:1;padding:11px;background:#1d4ed8;color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif;">📋 نسخ الرابط</button>'+
+          '<button onclick="window.open(window._sgCurrentUrl,\'_blank\')" style="padding:11px 16px;background:#0f2a5e;color:#7dd3fc;border:1px solid #1e3a5f;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif;">🔍 معاينة</button>'+
+        '</div>'+
+      '</div>'+
+
+      // تعليمات
+      '<div style="background:#0f1e35;border:1px solid #1e3a5f;border-radius:14px;padding:14px 18px;width:100%;max-width:560px;">'+
+        '<div style="font-size:11px;color:#64748b;font-weight:700;margin-bottom:8px;">ℹ️ تعليمات</div>'+
+        '<div style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#94a3b8;line-height:1.7;">'+
+          '<div>📤 <strong style="color:#e2e8f0;">انسخ الرابط</strong> وأرسله للطلاب — يفتح مباشرة بالأعمدة والأسابيع التي اخترتها</div>'+
+          '<div>👁️ <strong style="color:#e2e8f0;">للقراءة فقط</strong> — لا يمكن للطلاب تعديل أي بيانات</div>'+
+          '<div>🔄 <strong style="color:#e2e8f0;">يتحدث تلقائياً</strong> — أي تغيير تجريه يظهر فوراً للطلاب</div>'+
+        '</div>'+
+      '</div>'+
+
+    '</div>';
+
+  // CSS الرقائق
+  if(!document.getElementById('sgChipCSS')){
+    var st=document.createElement('style'); st.id='sgChipCSS';
+    st.textContent='.sg-chip{padding:5px 12px;background:#0a1628;border:1px solid #1e3a5f;border-radius:20px;color:#64748b;font-size:12px;font-weight:700;cursor:pointer;font-family:Cairo,sans-serif;transition:all .15s;}'
+      +'.sg-chip.active{background:#1d4ed8;border-color:#3b82f6;color:#fff;}';
+    document.head.appendChild(st);
+  }
+
+  document.body.appendChild(overlay);
+}
+
+function sgCopy(){
+  var url  = window._sgCurrentUrl || '';
+  var btn  = document.getElementById('sgCopyBtn');
+  if(!btn) return;
+  navigator.clipboard ? navigator.clipboard.writeText(url).then(function(){
+    btn.innerHTML='✅ تم النسخ'; btn.style.background='#16a34a';
+    setTimeout(function(){ btn.innerHTML='📋 نسخ الرابط'; btn.style.background='#1d4ed8'; },2500);
+  }) : (function(){
+    var ta=document.createElement('textarea'); ta.value=url;
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.innerHTML='✅ تم النسخ'; btn.style.background='#16a34a';
+    setTimeout(function(){ btn.innerHTML='📋 نسخ الرابط'; btn.style.background='#1d4ed8'; },2500);
+  })();
+}
+
+window.copyViewerLink = copyViewerLink;
+window.sgCopy = sgCopy;
+window._sgUpdateUrl = _sgUpdateUrl;

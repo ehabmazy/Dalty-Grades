@@ -54,7 +54,7 @@ var _PAGE_TITLES={
   witness:"✍️ توقيع المتابع",
   tafrigh:"📋 كشف التفريغ"
 };
-var _ALL_PAGES=["home","grades","weekly","sched","absence","sick","dict","stats","settings","notifs","curric","backup","witness","report","tafrigh"];
+var _ALL_PAGES=["home","grades","weekly","sched","absence","sick","dict","stats","settings","notifs","curric","backup","witness","tafrigh"];
 var _currentPage="home";
 
 function _tryRequestNotifPermission(){
@@ -86,8 +86,8 @@ function switchPage(p){
   var tt=document.getElementById("topPageTitle");
   if(tt)tt.textContent=_PAGE_TITLES[p]||p;
   var _topBrand=document.getElementById("topBrand");
-  if(_topBrand)_topBrand.style.display=(p==="weekly")?"none":"flex";
-  if(tt)tt.style.display=(p==="weekly")?"none":"";
+  if(_topBrand)_topBrand.style.display=(p==="weekly"||p==="tafrigh")?"none":"flex";
+  if(tt)tt.style.display=(p==="weekly"||p==="tafrigh")?"none":"";
   if(p==="grades")   renderGrades();
   if(p==="weekly")   renderWeekly();
   if(p==="sched")    renderSched();
@@ -100,7 +100,6 @@ function switchPage(p){
   if(p==="home")      renderHomePage();
   if(p==="curric")    renderCurric();
   if(p==="backup")    { if(typeof renderBackupPage==="function") renderBackupPage(); }
-  if(p==="report")    { if(typeof renderReportPage==="function") renderReportPage(); }
   if(p==="witness")   renderWitnessPage();
   if(p==="tafrigh")   { if(typeof renderTafrighPage==="function") renderTafrighPage(); }
   if(p!=="notifs"&&p!=="home"&&typeof _stopClock!=="undefined") _stopClock();
@@ -115,7 +114,7 @@ function switchPage(p){
   var _tbTools=document.getElementById("tbMenuTools");
   var _tbGWeeks=document.getElementById("tbMenuGradeWeeks");
   if(_tbEdit)_tbEdit.style.display=(_isHome)?"none":"flex";
-  if(_tbCls)_tbCls.style.display=(_isHome||p==="dict"||p==="absence")?"none":"flex";
+  if(_tbCls)_tbCls.style.display=(_isHome||p==="dict"||p==="absence"||p==="tafrigh")?"none":"flex";
   var _tbDict=document.getElementById("tbDictBtns");
   if(_tbDict)_tbDict.style.display=(p==="dict")?"flex":"none";
   if(_tbPages)_tbPages.style.display=_isGrades?"flex":"none";
@@ -130,6 +129,10 @@ function switchPage(p){
   if(_tbWeeks)_tbWeeks.style.display=_isWeekly?"flex":"none";
   var _tbView=document.getElementById("tbViewBtn");
   if(_tbView)_tbView.style.display=_isWeekly?"flex":"none";
+  var _isTafrigh=(p==="tafrigh");
+  var _tfrIds=["tbMenuTfrCls","tbMenuTfrWeeks","tbMenuTfrCols","tbMenuTfrMeta","tbMenuTfrPrint","tbMenuTfrCF","tbMenuTfrExcel","tbMenuTfrFont"];
+  _tfrIds.forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=_isTafrigh?"flex":"none";});
+  if(!_isTafrigh&&typeof tfrAllBarsClose==="function") tfrAllBarsClose();
   var _isAbsence=(p==="absence");
   var _tbAbsCls=document.getElementById("tbMenuAbsCls");
   var _tbAbsWeeks=document.getElementById("tbMenuAbsWeeks");
@@ -405,6 +408,7 @@ function calcStudent(s,cls){
     var bwv=s["bw"+w];
     if(bwv===""||bwv===undefined||bwv===null)return;
     if(bwv==="م")return;
+    if(bwv!=="غ"&&isNaN(Number(bwv)))return; // تجاهل قيم غير صالحة (D وغيرها)
     var bwn=bwv==="غ"?0:Math.min(Number(bwv)||0,10);
     bSum+=bwn;bC++;
   });
