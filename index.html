@@ -134,6 +134,31 @@
     <div class="tb-menu-wrap" id="tbMenuDev">
       <button class="tb-menu-btn tb-dev-btn" id="tbDevBtn" onclick="devBarToggle()" style="display:none;">⚡ تطوير</button>
     </div>
+    <!-- ══ أزرار كشف التفريغ ══ -->
+    <div class="tb-menu-wrap" id="tbMenuTfrCls" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrClsBtn" onclick="tfrClsBarToggle()">🏫 <span class="btn-txt">الفصول</span></button>
+    </div>
+    <div class="tb-menu-wrap" id="tbMenuTfrWeeks" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrWeeksBtn" onclick="tfrWeeksBarToggle()">📅 <span class="btn-txt">الأسابيع</span> <span id="tfrWeeksBadge" style="background:#3b82f6;color:white;border-radius:8px;padding:0 5px;font-size:8px;margin-right:2px;"></span></button>
+    </div>
+    <div class="tb-menu-wrap" id="tbMenuTfrCols" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrColsBtn" onclick="tfrColsBarToggle()">🎛 <span class="btn-txt">الأعمدة</span> <span id="tfrColsBadge" style="background:#0f766e;color:white;border-radius:8px;padding:0 5px;font-size:8px;margin-right:2px;"></span></button>
+    </div>
+    <div class="tb-menu-wrap" id="tbMenuTfrMeta" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrMetaBtn" onclick="tfrMetaBarToggle()">📝 <span class="btn-txt">بيانات الكشف</span></button>
+    </div>
+    <div class="tb-menu-wrap" id="tbMenuTfrPrint" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrPrintBtn" onclick="tfrPrint()" style="background:rgba(21,128,61,.25);border-color:rgba(21,128,61,.6);color:#86efac;">🖨️ <span class="btn-txt">طباعة</span></button>
+    </div>
+    <div class="tb-menu-wrap" id="tbMenuTfrCF" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrCFBtn" onclick="tfrOpenCFModal()" style="background:rgba(139,92,246,.18);border-color:rgba(139,92,246,.6);color:#c4b5fd;">🎨 <span class="btn-txt">تنسيق</span></button>
+    </div>
+    <div class="tb-menu-wrap" id="tbMenuTfrExcel" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrExcelBtn" onclick="tfrExportExcel()" style="background:rgba(15,118,110,.25);border-color:rgba(15,118,110,.6);color:#5eead4;">⬇️ <span class="btn-txt">Excel</span></button>
+    </div>
+    <div class="tb-menu-wrap" id="tbMenuTfrFont" style="display:none;">
+      <button class="tb-menu-btn" id="tbTfrFontBtn" onclick="openTfrFontSettings()" style="background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.4);color:#93c5fd;">⚙</button>
+    </div>
     <div style="flex:1;min-width:4px;"></div>
     <div class="top-user-area">
       <button id="cardsViewBtn" onclick="switchPage('weekly');setTimeout(function(){WKS.viewMode='numpad';WKS.numpadStudent=null;WKS.numpadInput='';renderWeekly();renderViewBar();},80);" title="عرض الراصد" style="display:none;background:none;border:none;color:#94a3b8;font-size:16px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#f1f5f9';this.style.background='rgba(255,255,255,.08)';" onmouseout="this.style.color='#94a3b8';this.style.background='none';">🎯</button>
@@ -201,6 +226,11 @@
   <div id="gradeWeeksBar"></div>
   <!-- HOME COLS BAR -->
   <div id="homeColsBar"></div>
+  <!-- TAFRIGH BARS -->
+  <div id="tfrClsBar"></div>
+  <div id="tfrWeeksBar"></div>
+  <div id="tfrColsBar"></div>
+  <div id="tfrMetaBar"></div>
   <!-- FONT SETTINGS MODAL -->
   <div id="fontSettingsModal">
     <div class="fs-card">
@@ -758,9 +788,6 @@
           <button class="sb-btn" id="nb_backup" onclick="switchPage('backup');closeSidebarMobile();">
             <span class="sb-icon">💾</span><span class="sb-label">النسخ الاحتياطي</span>
           </button>
-          <button class="sb-btn" id="nb_report" onclick="switchPage('report');closeSidebarMobile();">
-            <span class="sb-icon">📄</span><span class="sb-label">كشف الدرجات</span>
-          </button>
           <button class="sb-btn" id="nb_tafrigh" onclick="switchPage('tafrigh');closeSidebarMobile();">
             <span class="sb-icon">📋</span><span class="sb-label">كشف التفريغ</span>
           </button>
@@ -795,7 +822,6 @@
               <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('backup');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">💾</span><span class="sb-label">النسخ الاحتياطي</span></button>
               <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('notifs');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">🔔</span><span class="sb-label">الإشعارات</span></button>
               <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('sig');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">✍️</span><span class="sb-label">توقيع المتابع</span></button>
-              <button class="sb-btn" style="padding-right:30px;font-size:10px;" onclick="_showHelpFor('kashef');closeSidebarMobile();"><span class="sb-icon" style="font-size:13px;">📄</span><span class="sb-label">كشف الدرجات</span></button>
             </div>
           </div>
         </nav>
@@ -830,7 +856,6 @@
       <div class="page" id="page_settings"><div id="settingsRoot" style="flex:1;overflow-y:auto;height:100%;width:100%;"></div></div>
       <div class="page" id="page_curric"><div id="curricRoot" style="flex:1;display:flex;flex-direction:column;overflow:hidden;"></div></div>
       <div class="page" id="page_backup"><div id="backupRoot" style="overflow-y:auto;height:100%;width:100%;"></div></div>
-      <div class="page" id="page_report"><div id="reportRoot" style="overflow-y:auto;height:100%;width:100%;"></div></div>
       <div class="page" id="page_witness"><div id="witnessRoot" style="flex:1;overflow-y:auto;height:100%;width:100%;"></div></div>
       <div class="page" id="page_tafrigh"><div id="tafrighRoot" style="overflow-y:auto;height:100%;width:100%;"></div></div>
     </div>
@@ -1128,20 +1153,6 @@ var HELP = {
     ]
   },
 
-  kashef: {
-    icon: '📄', title: 'كشف الدرجات',
-    desc: 'كشف درجات رسمي قابل للطباعة',
-    groups: [
-      { h:'🖨 إعداد الكشف', items: [
-        'كشف درجات رسمي بتنسيق A4 عمودي يضم رأس المدرسة وخانة توقيع.',
-        'اختر وضع العرض (اختبار / سلوك) ونطاق الأعمدة المطلوب طباعتها.'
-      ]},
-      { h:'📌 ملاحظة', items: [
-        'يُبنى الكشف من البيانات الفعلية المخزّنة مباشرة، لضمان دقة الأرقام عند الطباعة.'
-      ]}
-    ]
-  },
-
   tafrigh: {
     icon: '🗃', title: 'كشف التفريغ',
     desc: 'كشف مبسّط لإعادة تفريغ الدرجات',
@@ -1205,7 +1216,7 @@ function showPageHelp(){
     page_home:'home', page_grades:'grades', page_weekly:'weekly', page_sched:'sched',
     page_absence:'absence', page_sick:'sick', page_dict:'dict', page_stats:'stats',
     page_notifs:'notifs', page_settings:'settings', page_curric:'curric', page_backup:'backup',
-    page_report:'kashef', page_witness:'sig', page_tafrigh:'tafrigh'
+    page_witness:'sig', page_tafrigh:'tafrigh'
   };
   var activeEl = document.querySelector('.page.active');
   var key = (activeEl && map[activeEl.id]) || 'home';
