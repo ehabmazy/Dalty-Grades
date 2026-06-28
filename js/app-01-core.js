@@ -54,7 +54,7 @@ var _PAGE_TITLES={
   witness:"✍️ توقيع المتابع",
   tafrigh:"📋 كشف التفريغ"
 };
-var _ALL_PAGES=["home","grades","weekly","sched","absence","sick","dict","stats","settings","notifs","curric","backup","witness","tafrigh"];
+var _ALL_PAGES=["home","grades","weekly","sched","absence","sick","dict","stats","settings","notifs","curric","backup","witness","report","tafrigh"];
 var _currentPage="home";
 
 function _tryRequestNotifPermission(){
@@ -86,8 +86,8 @@ function switchPage(p){
   var tt=document.getElementById("topPageTitle");
   if(tt)tt.textContent=_PAGE_TITLES[p]||p;
   var _topBrand=document.getElementById("topBrand");
-  if(_topBrand)_topBrand.style.display=(p==="weekly"||p==="tafrigh")?"none":"flex";
-  if(tt)tt.style.display=(p==="weekly"||p==="tafrigh")?"none":"";
+  if(_topBrand)_topBrand.style.display=(p==="weekly")?"none":"flex";
+  if(tt)tt.style.display=(p==="weekly")?"none":"";
   if(p==="grades")   renderGrades();
   if(p==="weekly")   renderWeekly();
   if(p==="sched")    renderSched();
@@ -100,6 +100,7 @@ function switchPage(p){
   if(p==="home")      renderHomePage();
   if(p==="curric")    renderCurric();
   if(p==="backup")    { if(typeof renderBackupPage==="function") renderBackupPage(); }
+  if(p==="report")    { if(typeof renderReportPage==="function") renderReportPage(); }
   if(p==="witness")   renderWitnessPage();
   if(p==="tafrigh")   { if(typeof renderTafrighPage==="function") renderTafrighPage(); }
   if(p!=="notifs"&&p!=="home"&&typeof _stopClock!=="undefined") _stopClock();
@@ -114,7 +115,7 @@ function switchPage(p){
   var _tbTools=document.getElementById("tbMenuTools");
   var _tbGWeeks=document.getElementById("tbMenuGradeWeeks");
   if(_tbEdit)_tbEdit.style.display=(_isHome)?"none":"flex";
-  if(_tbCls)_tbCls.style.display=(_isHome||p==="dict"||p==="absence"||p==="tafrigh")?"none":"flex";
+  if(_tbCls)_tbCls.style.display=(_isHome||p==="dict"||p==="absence")?"none":"flex";
   var _tbDict=document.getElementById("tbDictBtns");
   if(_tbDict)_tbDict.style.display=(p==="dict")?"flex":"none";
   if(_tbPages)_tbPages.style.display=_isGrades?"flex":"none";
@@ -129,10 +130,6 @@ function switchPage(p){
   if(_tbWeeks)_tbWeeks.style.display=_isWeekly?"flex":"none";
   var _tbView=document.getElementById("tbViewBtn");
   if(_tbView)_tbView.style.display=_isWeekly?"flex":"none";
-  var _isTafrigh=(p==="tafrigh");
-  var _tfrIds=["tbMenuTfrCls","tbMenuTfrWeeks","tbMenuTfrCols","tbMenuTfrMeta","tbMenuTfrPrint","tbMenuTfrCF","tbMenuTfrExcel","tbMenuTfrFont"];
-  _tfrIds.forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=_isTafrigh?"flex":"none";});
-  if(!_isTafrigh&&typeof tfrAllBarsClose==="function") tfrAllBarsClose();
   var _isAbsence=(p==="absence");
   var _tbAbsCls=document.getElementById("tbMenuAbsCls");
   var _tbAbsWeeks=document.getElementById("tbMenuAbsWeeks");
@@ -244,15 +241,6 @@ function initDB(){
   if(DB.meta.defaultStudentPhoto===undefined)DB.meta.defaultStudentPhoto='images/logo.jpg';
   if(!DB.meta.semester)DB.meta.semester=1;
   if(!DB.meta.schoolYear)DB.meta.schoolYear='2025 / 2026';
-  if(DB.meta.absenceAllowed===undefined)DB.meta.absenceAllowed=0;
-  if(DB.meta.absenceDeductPer===undefined)DB.meta.absenceDeductPer=0;
-  // absenceMode: 'none' | 'zero' | 'deduct'
-  if(!DB.meta.absenceMode)DB.meta.absenceMode='none';
-  // examAbsenceMode: 'zero' | 'exclude'
-  // zero    = غ في الاختبار يُحتسب صفراً (الوضع الافتراضي)
-  // exclude = غ يُحذف الاختبار من الحساب (كأنه لم يُجرَ)
-  if(!DB.meta.examAbsenceMode)DB.meta.examAbsenceMode='zero';
-  if(DB.meta.examAbsenceMode==='max')DB.meta.examAbsenceMode='zero'; // إزالة وضع قديم غير منطقي
   if(!DB.curric)DB.curric={units:[],weeks:[],holidays:[],exams:[]};
   if(!DB.curric.units)DB.curric.units=[];
   if(!DB.curric.weeks)DB.curric.weeks=[];
@@ -398,8 +386,8 @@ function calcBehHalves(s){
   return{beh1:avgHalf(firstList),beh2:avgHalf(secondList)};
 }
 
-function calcStudent(s,cls){
-  if(s._totalAbsent)return{total:0,avgAssess:0,avgHw:0,avgBeh:0,absenceDeduct:0,absencePeriods:0};
+function calcStudent(s){
+  if(s._totalAbsent)return{total:0,avgAssess:0,avgHw:0,avgBeh:0};
   var aSum=0,aC=0,hSum=0,hC=0,bSum=0,bC=0,exSum=0;
   var _aw=DB&&DB.meta?Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length):14;
   var _awList=ALL_WEEKS.slice(0,_aw);
@@ -408,7 +396,6 @@ function calcStudent(s,cls){
     var bwv=s["bw"+w];
     if(bwv===""||bwv===undefined||bwv===null)return;
     if(bwv==="م")return;
-    if(bwv!=="غ"&&isNaN(Number(bwv)))return; // تجاهل قيم غير صالحة (D وغيرها)
     var bwn=bwv==="غ"?0:Math.min(Number(bwv)||0,10);
     bSum+=bwn;bC++;
   });
@@ -417,43 +404,15 @@ function calcStudent(s,cls){
     if(c.id.match(/^a\d+$/)){var wn=parseInt(c.id.slice(1));if(_awList.indexOf(wn)<0)return;}
     if(c.id.match(/^h\d+$/)){var wn=parseInt(c.id.slice(1));if(_awList.indexOf(wn)<0)return;}
     if(c.id.match(/^bw\d+$/))return;
-    if(c.id==="beh1"||c.id==="beh2")return;
+    if(c.id==="beh1"||c.id==="beh2")return; // تجاهل - لم تعد مستخدمة
     if(!c.visible&&c.id!=="ex1"&&c.id!=="ex2")return;
     var raw=s[c.field];
     if(raw===""||raw===undefined||raw===null)return;
     if(raw==="م")return;
-    // الاختبارات تُعالَج لاحقاً بمنطق خاص
-    if(c.id==="ex1"||c.id==="ex2")return;
     var v=raw==="غ"?0:Math.min(Number(raw)||0,c.max);
     if(c.id.charAt(0)==="a"&&c.id!=="abs"){aSum+=v;aC++;}
     else if(c.id.charAt(0)==="h"){hSum+=v;hC++;}
-  });
-
-  // ── حساب الاختبارات مع مراعاة examAbsenceMode ──
-  var _exMode=DB&&DB.meta?DB.meta.examAbsenceMode:'zero';
-  var exCols=[]; // جمع أعمدة الاختبارات المرئية
-  allCols().forEach(function(c){if(c.id==="ex1"||c.id==="ex2")exCols.push(c);});
-  var exVals={}; // {ex1: value_or_null, ex2: value_or_null}  null = غياب
-  exCols.forEach(function(c){
-    var raw=s[c.field];
-    if(raw===""||raw===undefined||raw===null||raw==="م")return; // فراغ/استثناء = يُتجاهل
-    if(raw==="غ"){exVals[c.id]=null;} // غياب
-    else{exVals[c.id]=Math.min(Number(raw)||0,c.max);}
-  });
-  // تطبيق القاعدة
-  exCols.forEach(function(c){
-    if(!(c.id in exVals))return; // لم يُدخَل بعد — تُتجاهل
-    var val=exVals[c.id];
-    if(val===null){
-      // غياب في هذا الاختبار
-      if(_exMode==='zero'){
-        exSum+=0; // صفر
-      } else if(_exMode==='exclude'){
-        // لا تضيف شيئاً — كأن الاختبار لم يوجد
-      }
-    } else {
-      exSum+=val;
-    }
+    else if(c.id==="ex1"||c.id==="ex2")exSum+=Math.min(v,c.max);
   });
   var avgA=aC?Math.round(aSum/aC):0;
   var avgH=hC?Math.round(hSum/hC):0;
@@ -462,38 +421,7 @@ function calcStudent(s,cls){
   var avgBehDisp=hasBwData?beh:'—';
   var ex=Math.min(exSum,30);
   var total=avgA+avgH+beh+ex;
-
-  // ── تأثير الغياب على المجموع ──
-  var absenceDeduct=0;
-  var absencePeriods=0;
-  var _mode=DB&&DB.meta?DB.meta.absenceMode:'none';
-
-  if(_mode==='zero'){
-    // وضع "غ = صفر": إذا كان الطالب غائباً (أي فترة مسجّلة) يأخذ صفراً
-    var _cls0=cls||(window.GS?GS.activeClass:'');
-    if(!_cls0&&window.WKS)_cls0=WKS.activeClass;
-    if(_cls0&&s.id&&DB.absences&&DB.absences[_cls0]){
-      absencePeriods=countStudentAbsencePeriods(_cls0,s.id);
-      if(absencePeriods>0){total=0;absenceDeduct=avgA+avgH+(hasBwData?beh:0)+ex;}
-    }
-  } else if(_mode==='deduct'){
-    // وضع "خصم بالفترات": خصم درجات لكل فترة تتجاوز الحد المسموح
-    var _allowed=DB&&DB.meta?Math.max(0,Number(DB.meta.absenceAllowed)||0):0;
-    var _deductPer=DB&&DB.meta?Math.max(0,Number(DB.meta.absenceDeductPer)||0):0;
-    if(_deductPer>0){
-      var _cls=cls||(window.GS?GS.activeClass:'');
-      if(!_cls&&window.WKS)_cls=WKS.activeClass;
-      if(_cls&&s.id&&DB.absences&&DB.absences[_cls]){
-        absencePeriods=countStudentAbsencePeriods(_cls,s.id);
-        var extraPeriods=Math.max(0,absencePeriods-_allowed);
-        absenceDeduct=extraPeriods*_deductPer;
-        total=Math.max(0,total-absenceDeduct);
-      }
-    }
-  }
-  // وضع 'none': لا يتغير المجموع
-
-  return{total:total,avgAssess:avgA,avgHw:avgH,avgBeh:avgBehDisp,exTotal:ex,absenceDeduct:absenceDeduct,absencePeriods:absencePeriods};
+  return{total:total,avgAssess:avgA,avgHw:avgH,avgBeh:avgBehDisp,exTotal:ex};
 }
 
 function distributeTotal(target,s){

@@ -717,14 +717,6 @@ _bkpLoadFolderHandle(function(){
     .wt-rk{color:#475569!important;}\
     .wt-rv{color:#0f172a!important;}\
     .wt-receipt-table{background:white!important;border:1px solid #e2e8f0!important;}\
-    .wt-tbl td{color:#0f172a!important;background:white!important;border-color:#e2e8f0!important;}\
-    .wt-tbl th{background:#0f2a5e!important;color:white!important;}\
-    .wt-tbl .td-name{color:#0f2a5e!important;font-weight:700!important;background:#eff6ff!important;}\
-    .wt-tbl tr:hover td{background:white!important;}\
-    .wt-card{background:white!important;border:1px solid #e2e8f0!important;}\
-    .wt-card-title,.wt-card-sub{color:#0f172a!important;}\
-    .wt-grade-chip{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}\
-    .wt-chip{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}\
   }\
   ';
   document.head.appendChild(s);
@@ -740,7 +732,6 @@ var WT={
   sigHas:false,
   witnessName:'',
   witnessTitle:'',
-  witnessNotes:'',
 };
 var WT_SIG_KEY='wt_sigs_v1';
 
@@ -863,13 +854,6 @@ function _wtStep1(container){
     _wtRenderStep(2);
   };
   container.appendChild(btn);
-
-  var regBtn=document.createElement('button');
-  regBtn.className='wt-btn wt-btn-gold';
-  regBtn.style.marginTop='6px';
-  regBtn.innerHTML='📋 سجل المتابعين';
-  regBtn.onclick=_wtShowRegistry;
-  container.appendChild(regBtn);
 }
 
 /* ══ STEP 2: عرض الدرجات ══ */
@@ -995,30 +979,15 @@ function _wtStep3(container){
   card2.appendChild(actions);
   container.appendChild(card2);
 
-  // Notes card
-  var card3=document.createElement('div');card3.className='wt-card';
-  card3.innerHTML=
-    '<div class="wt-card-hdr">'+
-    '<div class="wt-card-icon" style="background:rgba(5,150,105,.2);">📝</div>'+
-    '<div><div class="wt-card-title">ملاحظات المتابع</div>'+
-    '<div class="wt-card-sub">اختياري — تُطبع في المحضر الرسمي</div></div></div>'+
-    '<textarea id="wtWitnessNotes" placeholder="أكتب ملاحظاتك هنا..." style="'+
-    'width:100%;min-height:90px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.1);'+
-    'border-radius:10px;padding:10px 12px;color:#e2e8f0;font-family:Cairo,sans-serif;font-size:11.5px;'+
-    'resize:vertical;outline:none;direction:rtl;line-height:1.7;box-sizing:border-box;">'+
-    _esc(WT.witnessNotes||'')+'</textarea>';
-  container.appendChild(card3);
-
-  var row=document.createElement('div');row.style.cssText='display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;';
-  var back=document.createElement('button');back.className='wt-btn wt-btn-ghost';back.innerHTML='← رجوع';
-  back.onclick=function(){WT.witnessNotes=(document.getElementById('wtWitnessNotes')||{}).value||'';_wtRenderStep(2);};
-  var regBtn=document.createElement('button');regBtn.className='wt-btn wt-btn-gold';regBtn.innerHTML='📋 سجل المتابعين';
-  regBtn.onclick=_wtShowRegistry;
+  var row=document.createElement('div');row.style.cssText='display:flex;gap:8px;margin-top:4px;';
+  var back=document.createElement('button');back.className='wt-btn wt-btn-ghost';back.innerHTML='← رجوع';back.onclick=function(){_wtRenderStep(2);};
   var confirm=document.createElement('button');confirm.className='wt-btn wt-btn-primary';confirm.id='wtConfirmBtn';
   confirm.innerHTML='✅ تأكيد الاطلاع والتوقيع';
   confirm.onclick=_wtConfirm;
-  row.appendChild(back);row.appendChild(regBtn);row.appendChild(confirm);
+  row.appendChild(back);row.appendChild(confirm);
   container.appendChild(row);
+
+  // Set date text
   var dn=document.getElementById('wtNowDate');
   if(dn){var now=new Date();dn.textContent=now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});}
 
@@ -1077,21 +1046,12 @@ function _wtClearSig(){
 function _wtConfirm(){
   if(!WT.witnessName.trim()){_wtToast('⚠ اسم المتابع مطلوب',true);return;}
   if(!WT.sigHas){_wtToast('⚠ التوقيع مطلوب',true);return;}
-  WT.witnessNotes=(document.getElementById('wtWitnessNotes')||{}).value||'';
   var sigData=WT.sigCanvas.toDataURL('image/png');
   var now=new Date();
   var students=(DB.data[WT.cls]||[]);
   var totals=[];
   students.forEach(function(s){if(!s._totalAbsent){var c=calcStudent(s);totals.push(c.total);}});
   var classAvg=totals.length?Math.round(totals.reduce(function(a,b){return a+b;},0)/totals.length):0;
-  // بناء بيانات الصفوف للطباعة
-  var rowsData=students.filter(function(s){return s.name;}).map(function(s,i){
-    var c=calcStudent(s);
-    var absent=!!s._totalAbsent;
-    var tot=absent?null:c.total;
-    var totType=(!absent&&tot>=42)?'tot':((!absent&&tot>=28)?'warn':'fail');
-    return{n:i+1,name:s.name||'—',absent:absent,avgAssess:absent?'غ':(c.avgAssess||0),avgHw:absent?'غ':(c.avgHw||0),avgBeh:absent?'غ':(c.avgBeh||0),exTotal:absent?'غ':(c.exTotal||0),total:absent?'غائب':tot,totType:absent?'absent':totType};
-  });
   var entry={
     ts:now.toISOString(),
     cls:WT.cls,
@@ -1101,11 +1061,9 @@ function _wtConfirm(){
     teacher:(DB&&DB.meta)?DB.meta.teacherName||'':'',
     witnessName:WT.witnessName,
     witnessTitle:WT.witnessTitle||'متابع',
-    witnessNotes:WT.witnessNotes||'',
     studentCount:students.length,
     classAvg:classAvg,
-    sig:sigData,
-    rows:rowsData
+    sig:sigData
   };
   // save
   var sigs=[];
@@ -1142,7 +1100,6 @@ function _wtStep4(container){
     _wtRRow('متوسط الفصل',e.classAvg+' / 70')+
     _wtRRow('التاريخ',dateStr)+
     _wtRRow('الوقت',timeStr)+
-    (e.witnessNotes?_wtRRow('ملاحظات المتابع',e.witnessNotes):'')+
     '</div>'+
     '<div style="margin-bottom:8px;font-size:10px;color:#475569;font-weight:700;">توقيع المتابع</div>'+
     '<div class="wt-sig-preview">'+
@@ -1152,17 +1109,14 @@ function _wtStep4(container){
   container.appendChild(receipt);
 
   var row=document.createElement('div');
-  row.style.cssText='display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;';
+  row.style.cssText='display:flex;gap:8px;margin-top:14px;';
   var printBtn=document.createElement('button');
   printBtn.className='wt-btn wt-btn-ghost';printBtn.innerHTML='🖨 طباعة المحضر';
   printBtn.onclick=_wtPrint;
-  var regBtn2=document.createElement('button');
-  regBtn2.className='wt-btn wt-btn-gold';regBtn2.innerHTML='📋 سجل المتابعين';
-  regBtn2.onclick=_wtShowRegistry;
   var newBtn=document.createElement('button');
   newBtn.className='wt-btn wt-btn-primary';newBtn.innerHTML='↩ توقيع جديد';
-  newBtn.onclick=function(){WT.cls=null;WT.witnessName='';WT.witnessTitle='';WT.witnessNotes='';WT.sigHas=false;WT._lastEntry=null;_wtRenderStep(1);};
-  row.appendChild(printBtn);row.appendChild(regBtn2);row.appendChild(newBtn);
+  newBtn.onclick=function(){WT.cls=null;WT.witnessName='';WT.witnessTitle='';WT.sigHas=false;WT._lastEntry=null;_wtRenderStep(1);};
+  row.appendChild(printBtn);row.appendChild(newBtn);
   container.appendChild(row);
 
   // History
@@ -1188,472 +1142,98 @@ function _wtStep4(container){
   }
 }
 
-/* ── Registry Modal ── */
-function _wtShowRegistry(){
-  var sigs=[];
-  try{var s=localStorage.getItem(WT_SIG_KEY);if(s)sigs=JSON.parse(s);}catch(e){}
-
-  // حفظ المدخل في متغير عام مؤقت للطباعة
-  window._wtRegEntries=sigs;
-
-  // Overlay
-  var overlay=document.createElement('div');
-  overlay.id='wtRegOverlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
-  overlay.onclick=function(ev){if(ev.target===overlay)overlay.remove();};
-
-  var modal=document.createElement('div');
-  modal.style.cssText='background:#0f1e3d;border:1.5px solid #1e3a5f;border-radius:16px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;direction:rtl;font-family:Cairo,sans-serif;';
-
-  // Header
-  var hdr=document.createElement('div');
-  hdr.style.cssText='padding:14px 18px;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;';
-  hdr.innerHTML=
-    '<div style="display:flex;align-items:center;gap:10px;">'+
-    '<div style="width:36px;height:36px;border-radius:10px;background:rgba(217,119,6,.2);display:flex;align-items:center;justify-content:center;font-size:18px;">📋</div>'+
-    '<div><div style="font-size:14px;font-weight:900;color:#f1f5f9;">سجل المتابعين</div>'+
-    '<div style="font-size:9.5px;color:#64748b;">'+(sigs.length)+' زيارة مسجّلة — انقر على اسم المتابع لعرض المحضر</div></div></div>'+
-    '<div style="display:flex;gap:8px;align-items:center;">'+
-    (sigs.length?'<button onclick="if(confirm(\'هل تريد حذف كامل السجل؟\')){localStorage.removeItem(\''+WT_SIG_KEY+'\');document.getElementById(\'wtRegOverlay\').remove();}" style="background:#450a0a;border:1px solid #7f1d1d;color:#fca5a5;padding:5px 12px;border-radius:8px;font-size:10px;font-family:Cairo,sans-serif;cursor:pointer;">🗑 حذف الكل</button>':'')+
-    '<button onclick="document.getElementById(\'wtRegOverlay\').remove()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#e2e8f0;width:30px;height:30px;border-radius:8px;font-size:14px;cursor:pointer;font-family:Cairo,sans-serif;">✕</button>'+
-    '</div>';
-  modal.appendChild(hdr);
-
-  // Body
-  var body=document.createElement('div');
-  body.style.cssText='overflow-y:auto;flex:1;padding:12px 16px;';
-
-  if(!sigs.length){
-    body.innerHTML='<div style="text-align:center;padding:40px 20px;"><div style="font-size:40px;margin-bottom:10px;">📭</div><div style="color:#475569;font-size:12px;">لا توجد زيارات مسجّلة بعد</div></div>';
-  } else {
-    sigs.slice().reverse().forEach(function(sig,idx){
-      var realIdx=sigs.length-1-idx; // الفهرس الحقيقي في المصفوفة الأصلية
-      var d=new Date(sig.ts);
-      var dateS=d.toLocaleDateString('ar-EG',{weekday:'short',year:'numeric',month:'short',day:'numeric'});
-      var timeS=d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-      var card=document.createElement('div');
-      card.style.cssText='background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;margin-bottom:10px;transition:border-color .2s;';
-
-      // رأس البطاقة: اسم قابل للنقر + زر طباعة
-      var topRow=document.createElement('div');
-      topRow.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:8px;';
-
-      var badge=document.createElement('div');
-      badge.style.cssText='width:32px;height:32px;border-radius:8px;background:rgba(5,150,105,.2);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;';
-      badge.textContent='✅';
-
-      var nameWrap=document.createElement('div');
-      nameWrap.style.cssText='flex:1;cursor:pointer;';
-      nameWrap.title='انقر لعرض محضر الزيارة';
-      nameWrap.innerHTML=
-        '<div style="font-size:12.5px;font-weight:900;color:#60a5fa;text-decoration:underline;text-decoration-style:dotted;">'+_esc(sig.witnessName)+'</div>'+
-        '<div style="font-size:9.5px;color:#64748b;">'+_esc(sig.witnessTitle)+' — '+_esc(dateS)+' '+_esc(timeS)+'</div>';
-      nameWrap.onclick=(function(entry){
-        return function(){
-          document.getElementById('wtRegOverlay').remove();
-          _wtShowEntryPreview(entry);
-        };
-      })(sig);
-
-      var printBtnEl=document.createElement('button');
-      printBtnEl.style.cssText='background:#16a34a;border:none;color:white;padding:5px 12px;border-radius:8px;font-size:10px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0;';
-      printBtnEl.innerHTML='🖨 طباعة';
-      printBtnEl.onclick=(function(entry){
-        return function(ev){ev.stopPropagation();_wtPrintEntry(entry);};
-      })(sig);
-
-      topRow.appendChild(badge);
-      topRow.appendChild(nameWrap);
-      topRow.appendChild(printBtnEl);
-      card.appendChild(topRow);
-
-      // تفاصيل
-      var details=document.createElement('div');
-      details.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:10px;margin-bottom:'+(sig.witnessNotes?'8':'0')+'px;';
-      details.innerHTML=
-        '<div><span style="color:#64748b;font-weight:700;">الفصل: </span><span style="color:#93c5fd;font-weight:700;">'+_esc(sig.cls)+'</span></div>'+
-        '<div><span style="color:#64748b;font-weight:700;">المادة: </span><span style="color:#e2e8f0;">'+_esc(sig.subject)+'</span></div>'+
-        '<div><span style="color:#64748b;font-weight:700;">عدد الطلاب: </span><span style="color:#e2e8f0;">'+_esc(sig.studentCount)+' طالب</span></div>'+
-        '<div><span style="color:#64748b;font-weight:700;">متوسط الفصل: </span><span style="color:'+(sig.classAvg>=42?'#34d399':sig.classAvg>=28?'#fbbf24':'#f87171')+';">'+_esc(sig.classAvg)+' / 70</span></div>';
-      card.appendChild(details);
-
-      if(sig.witnessNotes){
-        var notesEl=document.createElement('div');
-        notesEl.style.cssText='background:rgba(5,150,105,.1);border:1px solid rgba(5,150,105,.2);border-radius:8px;padding:7px 10px;font-size:10.5px;color:#6ee7b7;line-height:1.7;margin-bottom:8px;';
-        notesEl.innerHTML='📝 '+_esc(sig.witnessNotes);
-        card.appendChild(notesEl);
-      }
-
-      var sigRow=document.createElement('div');
-      sigRow.style.cssText='display:flex;gap:6px;align-items:center;';
-      sigRow.innerHTML='<img src="'+_esc(sig.sig)+'" style="height:38px;border:1px dashed #334155;border-radius:6px;background:white;padding:2px;" alt="توقيع"/>'+
-        '<span style="font-size:8.5px;color:#334155;">✍️ '+_esc(sig.witnessName)+'</span>';
-      card.appendChild(sigRow);
-
-      body.appendChild(card);
-    });
-  }
-  modal.appendChild(body);
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-}
-
-/* ── Entry Preview Modal ── */
-function _wtShowEntryPreview(e){
-  var now=new Date(e.ts);
-  var dateStr=now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  var timeStr=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-
-  var overlay=document.createElement('div');
-  overlay.id='wtPreviewOverlay';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:10000;display:flex;align-items:center;justify-content:center;padding:12px;';
-  overlay.onclick=function(ev){if(ev.target===overlay)overlay.remove();};
-
-  var modal=document.createElement('div');
-  modal.style.cssText='background:#0f1e3d;border:1.5px solid #1e3a5f;border-radius:16px;width:100%;max-width:700px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;direction:rtl;font-family:Cairo,sans-serif;';
-
-  // Header
-  var hdr=document.createElement('div');
-  hdr.style.cssText='padding:12px 16px;border-bottom:1px solid #1e3a5f;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:#0a1628;';
-  hdr.innerHTML=
-    '<div style="display:flex;align-items:center;gap:10px;">'+
-    '<div style="width:36px;height:36px;border-radius:10px;background:rgba(29,78,216,.25);display:flex;align-items:center;justify-content:center;font-size:18px;">📜</div>'+
-    '<div><div style="font-size:13px;font-weight:900;color:#f1f5f9;">محضر زيارة — '+_esc(e.witnessName)+'</div>'+
-    '<div style="font-size:9px;color:#64748b;">'+_esc(e.cls)+' · '+_esc(e.subject)+' · '+_esc(dateStr)+'</div></div></div>'+
-    '<div style="display:flex;gap:8px;">'+
-    '<button id="wtPreviewPrintBtn" style="background:#16a34a;border:none;color:white;padding:6px 14px;border-radius:8px;font-size:10.5px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;">🖨 طباعة المحضر</button>'+
-    '<button onclick="document.getElementById(\'wtPreviewOverlay\').remove()" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#e2e8f0;width:30px;height:30px;border-radius:8px;font-size:14px;cursor:pointer;font-family:Cairo,sans-serif;">✕</button>'+
-    '</div>';
-  modal.appendChild(hdr);
-
-  // Body
-  var body=document.createElement('div');
-  body.style.cssText='overflow-y:auto;flex:1;padding:14px 16px;';
-
-  // بيانات المحضر
-  var infoCard=document.createElement('div');
-  infoCard.style.cssText='background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 14px;margin-bottom:12px;';
-  infoCard.innerHTML=
-    '<div style="font-size:11px;font-weight:900;color:#93c5fd;margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:6px;">📋 بيانات الاطلاع</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 16px;font-size:10.5px;">'+
-    '<div><span style="color:#64748b;font-weight:700;">المتابع: </span><span style="color:#fcd34d;font-weight:900;">'+_esc(e.witnessName)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">الصفة: </span><span style="color:#e2e8f0;">'+_esc(e.witnessTitle)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">المدرسة: </span><span style="color:#e2e8f0;">'+_esc(e.school)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">المادة: </span><span style="color:#93c5fd;">'+_esc(e.subject)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">الفصل: </span><span style="color:#93c5fd;font-weight:700;">'+_esc(e.cls)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">المعلم: </span><span style="color:#e2e8f0;">'+_esc(e.teacher)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">التاريخ: </span><span style="color:#e2e8f0;">'+_esc(dateStr)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">الوقت: </span><span style="color:#e2e8f0;">'+_esc(timeStr)+'</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">عدد الطلاب: </span><span style="color:#e2e8f0;">'+_esc(e.studentCount)+' طالب</span></div>'+
-    '<div><span style="color:#64748b;font-weight:700;">متوسط الفصل: </span><span style="color:'+(e.classAvg>=42?'#34d399':e.classAvg>=28?'#fbbf24':'#f87171')+';font-weight:900;">'+_esc(e.classAvg)+' / 70</span></div>'+
-    '</div>'+
-    (e.witnessNotes?'<div style="margin-top:10px;background:rgba(5,150,105,.12);border:1px solid rgba(5,150,105,.25);border-radius:8px;padding:8px 12px;font-size:10.5px;color:#6ee7b7;line-height:1.8;"><span style="font-weight:900;">📝 ملاحظات المتابع:<br></span>'+_esc(e.witnessNotes)+'</div>':'')+
-    '<div style="margin-top:10px;display:flex;align-items:center;gap:8px;">'+
-    '<span style="font-size:9px;color:#475569;font-weight:700;">توقيع المتابع:</span>'+
-    '<img src="'+_esc(e.sig)+'" style="height:42px;border:1px dashed #334155;border-radius:6px;background:white;padding:2px;" alt="توقيع"/>'+
-    '</div>';
-  body.appendChild(infoCard);
-
-  // جدول الطلاب
-  if(e.rows && e.rows.length){
-    var tblCard=document.createElement('div');
-    tblCard.style.cssText='background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:10px;overflow:hidden;';
-    var tblTitle=document.createElement('div');
-    tblTitle.style.cssText='padding:8px 14px;font-size:10.5px;font-weight:900;color:#93c5fd;border-bottom:1px solid rgba(255,255,255,.06);';
-    tblTitle.textContent='📊 كشف الدرجات';
-    tblCard.appendChild(tblTitle);
-    var tblWrap=document.createElement('div');
-    tblWrap.style.cssText='overflow-x:auto;';
-    var tbl=document.createElement('table');
-    tbl.style.cssText='width:100%;border-collapse:collapse;font-size:10px;font-family:Cairo,sans-serif;direction:rtl;';
-    tbl.innerHTML=
-      '<thead><tr style="background:#1e3a8a;">'+
-      '<th style="padding:5px 4px;color:white;font-weight:700;border:1px solid #334155;width:28px;">#</th>'+
-      '<th style="padding:5px 8px;color:white;font-weight:700;border:1px solid #334155;text-align:right;min-width:120px;">اسم الطالب</th>'+
-      '<th style="padding:5px 4px;color:#93c5fd;font-weight:700;border:1px solid #334155;background:#0f3460;">تقييم<br><small>/20</small></th>'+
-      '<th style="padding:5px 4px;color:#67e8f9;font-weight:700;border:1px solid #334155;background:#1e4080;">واجب<br><small>/10</small></th>'+
-      '<th style="padding:5px 4px;color:#a78bfa;font-weight:700;border:1px solid #334155;background:#2d1b69;">م.سلوك<br><small>/10</small></th>'+
-      '<th style="padding:5px 4px;color:#fdba74;font-weight:700;border:1px solid #334155;background:#14532d;">اختبار<br><small>/30</small></th>'+
-      '<th style="padding:5px 4px;color:#fef3c7;font-weight:900;border:1px solid #334155;background:#78350f;">المجموع<br><small>/70</small></th>'+
-      '</tr></thead><tbody>';
-    var tbody='';
-    e.rows.forEach(function(row,ri){
-      var bg=ri%2===0?'rgba(255,255,255,.02)':'transparent';
-      var totBg=row.totType==='tot'?'rgba(254,243,199,.15)':row.totType==='warn'?'rgba(255,237,213,.15)':'rgba(254,226,226,.15)';
-      var totColor=row.totType==='tot'?'#fbbf24':row.totType==='warn'?'#fb923c':'#f87171';
-      if(row.absent){
-        tbody+='<tr style="background:'+bg+';">'+
-          '<td style="text-align:center;color:#475569;border:1px solid rgba(255,255,255,.05);padding:4px 2px;">'+row.n+'</td>'+
-          '<td style="text-align:right;font-weight:700;color:#e2e8f0;border:1px solid rgba(255,255,255,.05);padding:4px 8px;background:rgba(239,246,255,.05);">'+_esc(row.name)+'</td>'+
-          '<td colspan="6" style="text-align:center;color:#94a3b8;font-style:italic;border:1px solid rgba(255,255,255,.05);padding:4px;">غائب كلياً</td>'+
-          '</tr>';
-      } else {
-        tbody+='<tr style="background:'+bg+';">'+
-          '<td style="text-align:center;color:#475569;border:1px solid rgba(255,255,255,.05);padding:4px 2px;">'+row.n+'</td>'+
-          '<td style="text-align:right;font-weight:700;color:#93c5fd;border:1px solid rgba(255,255,255,.05);padding:4px 8px;background:rgba(239,246,255,.05);">'+_esc(row.name)+'</td>'+
-          '<td style="text-align:center;color:#60a5fa;border:1px solid rgba(255,255,255,.05);padding:4px;">'+_esc(row.avgAssess)+'</td>'+
-          '<td style="text-align:center;color:#34d399;border:1px solid rgba(255,255,255,.05);padding:4px;">'+_esc(row.avgHw)+'</td>'+
-          '<td style="text-align:center;color:#a78bfa;border:1px solid rgba(255,255,255,.05);padding:4px;">'+_esc(row.avgBeh)+'</td>'+
-          '<td style="text-align:center;color:#fb923c;border:1px solid rgba(255,255,255,.05);padding:4px;">'+_esc(row.exTotal)+'</td>'+
-          '<td style="text-align:center;font-weight:900;color:'+totColor+';border:1px solid rgba(255,255,255,.05);padding:4px;background:'+totBg+';">'+_esc(row.total)+'</td>'+
-          '</tr>';
-      }
-    });
-    tbl.innerHTML+=tbody+'</tbody>';
-    tblWrap.appendChild(tbl);
-    tblCard.appendChild(tblWrap);
-    body.appendChild(tblCard);
-  }
-
-  modal.appendChild(body);
-  overlay.appendChild(modal);
-  document.body.appendChild(overlay);
-
-  // زر الطباعة
-  setTimeout(function(){
-    var pb=document.getElementById('wtPreviewPrintBtn');
-    if(pb) pb.onclick=function(){_wtPrintEntry(e);};
-  },50);
-}
-
-/* ── Print (tafrigh-style) ── */
+/* ── Print ── */
 function _wtPrint(){
   var e=WT._lastEntry;
   if(!e) return;
-  _wtPrintEntry(e);
-}
-
-function _wtPrintEntry(e){
   var now=new Date(e.ts);
   var dateStr=now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   var timeStr=now.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+  var win=window.open('','_blank','width=700,height=900');
+  var students=(DB.data[e.cls]||[]);
+  var rows='';
+  students.forEach(function(s,i){
+    var c=calcStudent(s);
+    var color=c.total>=42?'#065f46':c.total>=28?'#92400e':'#b91c1c';
+    rows+='<tr>'+
+      '<td style="text-align:center;color:#94a3b8;font-size:9px;">'+(i+1)+'</td>'+
+      '<td style="text-align:right;font-weight:700;padding-right:8px;">'+_esc(s.name||'—')+'</td>'+
+      '<td style="text-align:center;">'+_esc(s._totalAbsent?'غ':(c.avgAssess||0))+'</td>'+
+      '<td style="text-align:center;">'+_esc(s._totalAbsent?'غ':(c.avgHw||0))+'</td>'+
+      '<td style="text-align:center;">'+_esc(s._totalAbsent?'غ':(c.avgBeh||0))+'</td>'+
+      '<td style="text-align:center;">'+_esc(s._totalAbsent?'غ':(c.exTotal||0))+'</td>'+
+      '<td style="text-align:center;font-weight:900;color:'+color+';">'+_esc(s._totalAbsent?'غائب':c.total)+'</td>'+
+      '</tr>';
+  });
+  win.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head>'+
+    '<meta charset="UTF-8"/><title>محضر الاطلاع</title>'+
+    '<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet"/>'+
+    '<style>'+
+    '*{box-sizing:border-box;margin:0;padding:0;}'+
+    'body{font-family:Cairo,sans-serif;direction:rtl;padding:24px;color:#0f172a;background:white;font-size:11px;}'+
+    'h1{font-size:17px;font-weight:900;color:#0f2a5e;text-align:center;margin-bottom:3px;}'+
+    'h2{font-size:12px;font-weight:700;color:#1d4ed8;text-align:center;margin-bottom:14px;}'+
+    '.meta{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:14px;}'+
+    '.chip{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:12px;padding:3px 12px;font-size:10px;color:#475569;}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:10.5px;}'+
+    'th{background:#0f2a5e;color:white;padding:6px 5px;text-align:center;font-weight:700;border:1px solid #1d4ed8;}'+
+    'td{border:1px solid #e2e8f0;padding:5px;vertical-align:middle;}'+
+    'tr:nth-child(even) td{background:#f8fafc;}'+
+    '.section{background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:14px;}'+
+    '.section h3{font-size:11px;font-weight:900;color:#0f2a5e;margin-bottom:10px;}'+
+    '.info-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:10.5px;}'+
+    '.info-row:last-child{border-bottom:none;}'+
+    '.info-key{color:#64748b;font-weight:700;}'+
+    '.info-val{font-weight:900;color:#0f172a;}'+
+    '.sig-area{text-align:center;margin-top:8px;}'+
+    '.sig-area img{max-width:220px;border:1px dashed #94a3b8;border-radius:6px;padding:4px;}'+
+    '.sig-line{border-top:1.5px dashed #94a3b8;margin:20px 40px 6px;color:#94a3b8;}'+
+    '.footer{text-align:center;font-size:9px;color:#94a3b8;margin-top:10px;border-top:1px solid #e2e8f0;padding-top:8px;}'+
+    '.badge-ok{color:#065f46;} .badge-fail{color:#b91c1c;}'+
+    '@media print{body{padding:14px;}@page{margin:1cm;}}'+
+    '</style></head><body>'+
 
-  // استخدم الصفوف المحفوظة في الـ entry، أو أعد بناءها من DB إن وُجد
-  var rowsData=e.rows||[];
-  if(!rowsData.length && DB && DB.data && DB.data[e.cls]){
-    var students=(DB.data[e.cls]||[]).filter(function(s){return s.name;});
-    rowsData=students.map(function(s,i){
-      var c=calcStudent(s);
-      var absent=!!s._totalAbsent;
-      var tot=absent?null:c.total;
-      var totType=(!absent&&tot>=42)?'tot':((!absent&&tot>=28)?'warn':'fail');
-      return{n:i+1,name:s.name||'—',absent:absent,avgAssess:absent?'غ':(c.avgAssess||0),avgHw:absent?'غ':(c.avgHw||0),avgBeh:absent?'غ':(c.avgBeh||0),exTotal:absent?'غ':(c.exTotal||0),total:absent?'غائب':tot,totType:absent?'absent':totType};
-    });
-  }
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;"><img src="images/logo.jpg" style="width:60px;height:60px;object-fit:contain;border-radius:50%;background:#000;"/><h1 style="margin:0;">'+_esc(e.school)+'</h1></div>'+
+    '<h2>محضر اطلاع رسمي على درجات مادة '+_esc(e.subject)+'</h2>'+
+    '<div class="meta">'+
+    '<span class="chip">📚 '+_esc(e.subject)+'</span>'+
+    '<span class="chip">🏫 '+_esc(e.cls)+'</span>'+
+    '<span class="chip">👤 '+_esc(e.teacher)+'</span>'+
+    '<span class="chip">📅 '+_esc(e.year)+'</span>'+
+    '<span class="chip">🗓 '+_esc(dateStr)+'</span>'+
+    '</div>'+
 
-  var pageData={
-    school:e.school||'',
-    cls:e.cls||'',
-    subject:e.subject||'',
-    teacher:e.teacher||'',
-    year:e.year||'',
-    dateStr:dateStr,
-    timeStr:timeStr,
-    witnessName:e.witnessName||'',
-    witnessTitle:e.witnessTitle||'',
-    witnessNotes:e.witnessNotes||'',
-    studentCount:e.studentCount,
-    classAvg:e.classAvg,
-    sig:e.sig||'',
-    rows:rowsData
-  };
+    '<table>'+
+    '<thead><tr><th>م</th><th style="text-align:right;padding-right:8px;">اسم الطالب</th><th>تقييم<br>/20</th><th>واجب<br>/10</th><th title="متوسط السلوك = Σ سلوك ÷ ن">م.سلوك<br>/10</th><th>اختبار<br>/30</th><th>المجموع<br>/70</th></tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+    '</table>'+
 
-  var win=window.open('','_blank','width=900,height=950');
-  var html='<!DOCTYPE html><html dir="rtl" lang="ar"><head>'
-    +'<meta charset="UTF-8"><title>محضر الاطلاع — '+_esc(e.cls)+'</title>'
-    +'<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">'
-    +'<style>'
-    +'*{box-sizing:border-box;margin:0;padding:0;}'
-    +'body{font-family:Cairo,sans-serif;background:#f1f5f9;direction:rtl;}'
-    // شريط التحكم
-    +'.ctrl{background:#0f1e3d;color:white;padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:100;border-bottom:2px solid #1e3a5f;}'
-    +'.ctrl-group{display:flex;flex-direction:column;gap:2px;}'
-    +'.ctrl-label{font-size:7.5px;color:#94a3b8;font-weight:700;}'
-    +'.ctrl select,.ctrl input[type=range]{background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:3px 6px;border-radius:5px;font-size:10px;font-family:inherit;outline:none;}'
-    +'.ctrl input[type=range]{width:80px;}'
-    +'.ctrl-val{font-size:9px;color:#93c5fd;text-align:center;font-weight:700;}'
-    +'.sep{width:1px;height:32px;background:#1e3a5f;margin:0 4px;flex-shrink:0;}'
-    +'.btn-print{background:#16a34a;border:none;color:white;padding:7px 18px;border-radius:7px;font-size:11px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;white-space:nowrap;}'
-    +'.btn-close{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:white;padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;}'
-    // الصفحة
-    +'.page{width:210mm;margin:6px auto;background:white;padding:4mm 4mm;}'
-    // رأس
-    +'.hdr{border:1.5px solid #1e40af;border-radius:4px;padding:5px 10px;margin-bottom:5px;background:#eff6ff;}'
-    +'.hdr-top{display:flex;justify-content:space-between;align-items:center;}'
-    +'.hdr-school{font-size:14px;font-weight:900;color:#0f2a5e;}'
-    +'.hdr-cls{font-size:13px;font-weight:900;color:#0f2a5e;}'
-    +'.hdr-title{font-size:13px;font-weight:900;color:#1e40af;text-align:center;margin-top:3px;}'
-    +'.hdr-meta{display:flex;justify-content:space-between;gap:4px;font-size:8px;color:#374151;flex-wrap:wrap;margin-top:3px;}'
-    +'.hdr-meta span{background:#dbeafe;border-radius:3px;padding:1px 6px;white-space:nowrap;}'
-    // جدول
-    +'table{border-collapse:collapse;width:100%;direction:rtl;table-layout:fixed;margin-bottom:5px;}'
-    +'th{border:0.5px solid #94a3b8;padding:3px 2px;text-align:center;vertical-align:middle;line-height:1.2;overflow:hidden;}'
-    +'td{border:0.5px solid #94a3b8;padding:2px 1px;text-align:center;vertical-align:middle;line-height:1.2;overflow:hidden;}'
-    +'.td-name{text-align:right!important;color:#0f2a5e;background:#eff6ff!important;padding:2px 5px!important;}'
-    +'.td-num{color:#64748b;}'
-    +'.td-assess{background:#eff6ff!important;color:#1e40af;}'
-    +'.td-hw{background:#f0fdf4!important;color:#15803d;}'
-    +'.td-beh{background:#f5f3ff!important;color:#6d28d9;}'
-    +'.td-tot{background:#fef3c7!important;color:#92400e;font-weight:900;}'
-    +'.td-warn{background:#ffedd5!important;color:#c2410c;font-weight:900;}'
-    +'.td-fail{background:#fee2e2!important;color:#b91c1c;font-weight:900;}'
-    +'.td-absent{background:#f1f5f9!important;color:#94a3b8;font-style:italic;}'
-    +'.gab{color:#ef4444;font-weight:900;}'
-    +'tr:nth-child(even) td:not(.td-name){filter:brightness(.97);}'
-    // قسم المعلومات
-    +'.info-section{border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;margin-bottom:5px;background:#f8fafc;}'
-    +'.info-section-title{font-size:10px;font-weight:900;color:#0f2a5e;margin-bottom:6px;border-bottom:1px solid #e2e8f0;padding-bottom:4px;}'
-    +'.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 16px;}'
-    +'.info-row{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #f1f5f9;font-size:9.5px;}'
-    +'.info-row:last-child{border-bottom:none;}'
-    +'.info-key{color:#64748b;font-weight:700;}'
-    +'.info-val{font-weight:900;color:#0f172a;}'
-    // توقيعات
-    +'.sigs{display:flex;gap:6px;margin-top:5px;}'
-    +'.sig{flex:1;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;text-align:center;}'
-    +'.sig-t{font-size:8px;font-weight:700;color:#374151;margin-bottom:3px;}'
-    +'.sig-n{font-size:9px;font-weight:900;color:#1e40af;margin-bottom:14px;}'
-    +'.sig-img{border:1px dashed #94a3b8;border-radius:4px;padding:3px;max-width:180px;}'
-    +'.sig-l{border-top:1px solid #94a3b8;padding-top:3px;font-size:7px;color:#64748b;}'
-    +'.note{font-size:6.5px;color:#475569;background:#e0e7ff;border:0.5px solid #bfdbfe;border-radius:3px;padding:2px 6px;margin-top:3px;}'
-    +'@media print{'
-    +'  @page{size:A4 portrait;margin:4mm 3mm;}'
-    +'  html,body{width:210mm;background:white;}'
-    +'  .ctrl{display:none!important;}'
-    +'  .page{margin:0;width:210mm;padding:2mm 2mm;}'
-    +'  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}'
-    +'}'
-    +'</style></head><body>'
+    '<div class="section">'+
+    '<h3>بيانات الاطلاع</h3>'+
+    '<div class="info-row"><span class="info-key">المتابع / المفتش</span><span class="info-val">'+_esc(e.witnessName)+'</span></div>'+
+    '<div class="info-row"><span class="info-key">الصفة الوظيفية</span><span class="info-val">'+_esc(e.witnessTitle)+'</span></div>'+
+    '<div class="info-row"><span class="info-key">عدد الطلاب</span><span class="info-val">'+e.studentCount+' طالب</span></div>'+
+    '<div class="info-row"><span class="info-key">متوسط الفصل</span><span class="info-val">'+e.classAvg+' / 70</span></div>'+
+    '<div class="info-row"><span class="info-key">تاريخ الاطلاع</span><span class="info-val">'+_esc(dateStr)+'</span></div>'+
+    '<div class="info-row"><span class="info-key">الوقت</span><span class="info-val">'+_esc(timeStr)+'</span></div>'+
+    '</div>'+
 
-    // شريط التحكم
-    +'<div class="ctrl">'
-    +'<button class="btn-print" onclick="window.print()">🖨️ طباعة / PDF</button>'
-    +'<button class="btn-close" onclick="window.close()">✕</button>'
-    +'<div class="sep"></div>'
-    +'<div class="ctrl-group"><span class="ctrl-label">نوع الخط</span>'
-    +'<select id="pFamily" onchange="applySettings()">'
-    +'<option value="Cairo,sans-serif">Cairo</option>'
-    +'<option value="Tajawal,sans-serif">Tajawal</option>'
-    +'<option value="Tahoma,Arial,sans-serif">Tahoma</option>'
-    +'<option value="Arial,sans-serif">Arial</option>'
-    +'</select></div>'
-    +'<div class="sep"></div>'
-    +'<div class="ctrl-group"><span class="ctrl-label">الخلايا</span>'
-    +'<input type="range" id="pTable" min="6" max="16" step="1" value="10" oninput="document.getElementById(\'pTableV\').textContent=this.value;applySettings()">'
-    +'<span class="ctrl-val" id="pTableV">10</span></div>'
-    +'<div class="ctrl-group"><span class="ctrl-label">الاسم</span>'
-    +'<input type="range" id="pName" min="6" max="16" step="1" value="10" oninput="document.getElementById(\'pNameV\').textContent=this.value;applySettings()">'
-    +'<span class="ctrl-val" id="pNameV">10</span></div>'
-    +'<div class="ctrl-group"><span class="ctrl-label">المجموع</span>'
-    +'<input type="range" id="pTot" min="7" max="18" step="1" value="12" oninput="document.getElementById(\'pTotV\').textContent=this.value;applySettings()">'
-    +'<span class="ctrl-val" id="pTotV">12</span></div>'
-    +'<div class="ctrl-group"><span class="ctrl-label">السُّمك</span>'
-    +'<select id="pWeight" onchange="applySettings()">'
-    +'<option value="400">عادي</option><option value="600">شبه عريض</option><option value="700" selected>عريض</option><option value="900">أسود</option>'
-    +'</select></div>'
-    +'<div class="sep"></div>'
-    +'<div class="ctrl-group"><span class="ctrl-label">عرض الاسم (mm)</span>'
-    +'<input type="range" id="pNameW" min="25" max="80" step="1" value="50" oninput="document.getElementById(\'pNameWV\').textContent=this.value;applySettings()">'
-    +'<span class="ctrl-val" id="pNameWV">50</span></div>'
-    +'</div>'
+    '<div class="section">'+
+    '<h3>توقيع المتابع</h3>'+
+    '<div class="sig-area">'+
+    '<img src="'+e.sig+'" alt="توقيع"/>'+
+    '<div style="font-size:10px;font-weight:700;margin-top:6px;">'+_esc(e.witnessName)+' — '+_esc(e.witnessTitle)+'</div>'+
+    '</div>'+
+    '<div style="margin-top:18px;display:flex;justify-content:space-around;text-align:center;font-size:10px;color:#475569;">'+
+    '<div><div class="sig-line"></div><div>معلم المادة / '+_esc(e.teacher)+'</div></div>'+
+    '<div><div class="sig-line"></div><div>مدير المدرسة</div></div>'+
+    '</div>'+
+    '</div>'+
 
-    // الصفحة
-    +'<div class="page" id="thePage"></div>'
-
-    +'<script>'
-    +'var DATA='+JSON.stringify(pageData)+';'
-    +'function esc(v){return String(v||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}'
-    +'function fmtV(v){'
-    +'  if(v===null||v===undefined||v==="")return "—";'
-    +'  if(v==="غ")return "<span class=\'gab\'>غ</span>";'
-    +'  return esc(v);'
-    +'}'
-    +'function applySettings(){'
-    +'  var fam=document.getElementById("pFamily").value;'
-    +'  var ts=Number(document.getElementById("pTable").value);'
-    +'  var ns=Number(document.getElementById("pName").value);'
-    +'  var tot=Number(document.getElementById("pTot").value);'
-    +'  var fw=document.getElementById("pWeight").value;'
-    +'  var nw=Number(document.getElementById("pNameW").value);'
-    +'  buildPage(fam,ts,ns,tot,fw,nw);'
-    +'}'
-    +'function buildPage(fam,ts,ns,tot,fw,nw){'
-    +'  var D=DATA;'
-    +'  var numCols=6;'
-    +'  var remainMm=204-6-nw;'
-    +'  var colW=(remainMm/numCols).toFixed(1);'
-    +'  var h="";'
-    // رأس
-    +'  h+=\'<div class="hdr">\';'
-    +'  h+=\'<div class="hdr-top"><div class="hdr-school">\'+esc(D.school)+\'</div><div class="hdr-cls">\'+esc(D.cls)+\'</div></div>\';'
-    +'  h+=\'<div class="hdr-title">محضر اطلاع رسمي — مادة \'+esc(D.subject)+\'</div>\';'
-    +'  h+=\'<div class="hdr-meta">\';'
-    +'  h+=\'<span>👤 \'+esc(D.teacher)+\'</span>\';'
-    +'  h+=\'<span>📅 \'+esc(D.year)+\'</span>\';'
-    +'  h+=\'<span>🗓 \'+esc(D.dateStr)+\'</span>\';'
-    +'  h+=\'<span>🕐 \'+esc(D.timeStr)+\'</span>\';'
-    +'  h+=\'</div></div>\';'
-    // جدول
-    +'  h+=\'<table style="font-family:\'+fam+\';font-size:\'+ts+\'px;">\';'
-    +'  h+=\'<colgroup><col style="width:6mm;"><col style="width:\'+nw+\'mm;">\';'
-    +'  for(var ci=0;ci<numCols;ci++) h+=\'<col style="width:\'+colW+\'mm;">\';'
-    +'  h+=\'</colgroup>\';'
-    +'  h+=\'<thead><tr>\';'
-    +'  h+=\'<th style="background:#1e3a8a;color:white;">#</th>\';'
-    +'  h+=\'<th style="background:#1e3a8a;color:white;text-align:right;padding-right:4px;">اسم الطالب</th>\';'
-    +'  h+=\'<th style="background:#0f3460;color:#93c5fd;">تقييم<br>/20</th>\';'
-    +'  h+=\'<th style="background:#1e4080;color:#67e8f9;">واجب<br>/10</th>\';'
-    +'  h+=\'<th style="background:#2d1b69;color:#a78bfa;">م.سلوك<br>/10</th>\';'
-    +'  h+=\'<th style="background:#14532d;color:#fdba74;">اختبار<br>/30</th>\';'
-    +'  h+=\'<th style="background:#78350f;color:#fef3c7;font-size:\'+tot+\'px;">المجموع<br>/70</th>\';'
-    +'  h+=\'</tr></thead><tbody>\';'
-    +'  D.rows.forEach(function(row){'
-    +'    h+=\'<tr>\';'
-    +'    h+=\'<td class="td-num" style="font-size:8px;">\'+row.n+\'</td>\';'
-    +'    h+=\'<td class="td-name" style="font-size:\'+ns+\'px;font-weight:\'+fw+\';">\'+esc(row.name)+\'</td>\';'
-    +'    if(row.absent){'
-    +'      h+=\'<td colspan="6" class="td-absent" style="text-align:center;font-size:\'+ts+\'px;">غائب كلياً</td>\';'
-    +'    } else {'
-    +'      h+=\'<td class="td-assess" style="font-size:\'+ts+\'px;font-weight:\'+fw+\';">\'+fmtV(row.avgAssess)+\'</td>\';'
-    +'      h+=\'<td class="td-hw" style="font-size:\'+ts+\'px;font-weight:\'+fw+\';">\'+fmtV(row.avgHw)+\'</td>\';'
-    +'      h+=\'<td class="td-beh" style="font-size:\'+ts+\'px;font-weight:\'+fw+\';">\'+fmtV(row.avgBeh)+\'</td>\';'
-    +'      h+=\'<td class="td-assess" style="font-size:\'+ts+\'px;font-weight:\'+fw+\';">\'+fmtV(row.exTotal)+\'</td>\';'
-    +'      h+=\'<td class="td-\'+row.totType+\'" style="font-size:\'+tot+\'px;font-weight:900;">\'+fmtV(row.total)+\'</td>\';'
-    +'    }'
-    +'    h+=\'</tr>\';'
-    +'  });'
-    +'  h+=\'</tbody></table>\';'
-    +'  h+=\'<div class="note">📌 المج = م.تقييم(20) + م.واجب(10) + م.سلوك(10) + اختبارات(30) = 70</div>\';'
-    // معلومات الاطلاع
-    +'  h+=\'<div class="info-section" style="margin-top:5px;">\';'
-    +'  h+=\'<div class="info-section-title">📋 بيانات الاطلاع</div>\';'
-    +'  h+=\'<div class="info-grid">\';'
-    +'  h+=\'<div class="info-row"><span class="info-key">المتابع / المفتش</span><span class="info-val">\'+esc(D.witnessName)+\'</span></div>\';'
-    +'  h+=\'<div class="info-row"><span class="info-key">الصفة الوظيفية</span><span class="info-val">\'+esc(D.witnessTitle)+\'</span></div>\';'
-    +'  h+=\'<div class="info-row"><span class="info-key">عدد الطلاب</span><span class="info-val">\'+D.studentCount+\' طالب</span></div>\';'
-    +'  h+=\'<div class="info-row"><span class="info-key">متوسط الفصل</span><span class="info-val">\'+D.classAvg+\' / 70</span></div>\';'
-    +'  h+=\'</div>\';'
-    +'  if(D.witnessNotes) h+=\'<div style="margin-top:6px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:5px;padding:6px 10px;font-size:9.5px;color:#065f46;"><span style="font-weight:700;">📝 ملاحظات المتابع: </span>\'+esc(D.witnessNotes)+\'</div>\';'
-    +'  h+=\'</div>\';'
-    // التوقيعات
-    +'  h+=\'<div class="sigs">\';'
-    +'  h+=\'<div class="sig"><div class="sig-t">توقيع معلم المادة</div><div class="sig-n">ا/ \'+esc(D.teacher||"................")+\'</div><div class="sig-l">التوقيع</div></div>\';'
-    +'  h+=\'<div class="sig" style="flex:1.5;">\';'
-    +'  h+=\'<div class="sig-t">توقيع المتابع / المفتش</div>\';'
-    +'  h+=\'<div class="sig-n">\'+esc(D.witnessName)+\' — \'+esc(D.witnessTitle)+\'</div>\';'
-    +'  if(D.sig) h+=\'<div style="text-align:center;"><img src="\'+D.sig+\'" class="sig-img" style="max-height:60px;width:auto;"/></div>\';'
-    +'  h+=\'<div class="sig-l">\'+esc(D.witnessName)+\'</div></div>\';'
-    +'  h+=\'<div class="sig"><div class="sig-t">مدير المدرسة</div><div class="sig-n">&nbsp;</div><div class="sig-l">التوقيع</div></div>\';'
-    +'  h+=\'</div>\';'
-    +'  document.getElementById("thePage").innerHTML=h;'
-    +'  document.getElementById("thePage").style.fontFamily=fam;'
-    +'}'
-    +'buildPage("Cairo,sans-serif",10,10,12,"700",50);'
-    +'<\/script>'
-    +'</body></html>';
-
-  win.document.write(html);
+    '<div class="footer">نظام إدارة الدرجات المدرسي — تم التوقيع الإلكتروني بتاريخ '+_esc(dateStr)+' الساعة '+_esc(timeStr)+'</div>'+
+    '<\/body><\/html>');
   win.document.close();
+  setTimeout(function(){win.print();},600);
 }
 
 /* ── Helpers ── */

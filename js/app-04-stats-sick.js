@@ -9,7 +9,7 @@ function renderStats(){
   html+='<div class="stats-grid">';
   DB.classes.forEach(function(cls){
     var sts=(DB.data[cls]||[]).filter(function(s){return s.name;});
-    var tots=sts.map(function(s){return calcStudent(s,cls).total;}).filter(function(t){return t!=="غ";});
+    var tots=sts.map(function(s){return calcStudent(s).total;}).filter(function(t){return t!=="غ";});
     var avg=tots.length?Math.round(tots.reduce(function(a,b){return a+b;},0)/tots.length):0;
     var above60=tots.filter(function(t){return t>=60;}).length;
     var absPer=totalClassAbsencePeriods(cls);
@@ -63,7 +63,7 @@ function renderSick(){
   // Class tabs
   html+='<div class="sick-cls-tabs">';
   DB.classes.forEach(function(cl){
-    html+='<button class="sick-cls-tab'+(cl===cls?" active":"")+'" onclick="SKS.activeClass=\''+esc(cl)+'\';if(window.GS)GS.activeClass=SKS.activeClass;renderSick();">'+esc(cl)+'</button>';
+    html+='<button class="sick-cls-tab'+(cl===cls?" active":"")+'" onclick="SKS.activeClass=\''+esc(cl)+'\';renderSick();">'+esc(cl)+'</button>';
   });
   html+='</div>';
 
@@ -228,8 +228,7 @@ var DS={dictDate:"",
   nameOnly:false,
   nameOnlyMarked:{},
   addStudentMode:false,
-  addSep:"التالي",
-  dictAbsColIdx:0
+  addSep:"التالي"
 };
 
 function dAllStudents(){
@@ -313,18 +312,22 @@ function dApplyGrade(student,colId,grade){
   var p;
   if(grade==="غ"){
     p=colId==="total"?setAllAbsent(s):Object.assign({},s,(function(){var x={};if(colDef)x[colDef.field]="غ";return x;})());
-    // Record in absence system — unified w{n}_ci{n} key, single selected period
+    // Record in absence system if it's a weekly assess col
     if(colId!=="total"&&colDef&&colDef.field){
-      var wm2=colDef.field.match(/^(?:a|h|bw)(\d+)$/);
-      if(wm2){
-        var wnum2=parseInt(wm2[1]);
-        var absCols2=buildAbsCols(cls,wnum2);
+      var wm=colDef.field.match(/^a(\d+)$/);
+      if(wm){
+        var wnum=parseInt(wm[1]);
+        var sched2=DB.schedule[cls]||{periods:[],slots:{}};
+        if(!sched2.periods)sched2.periods=[];
+        if(!sched2.slots)sched2.slots={};
+        var periods2=sched2.periods||[];
         var absData2=getStudentAbsences(cls,student.id);
-        var ci2=DS.dictAbsColIdx||0;
-        if(ci2>=absCols2.length)ci2=0;
-        var absKey2='w'+wnum2+'_ci'+ci2;
-        if(!absData2[absKey2])absData2[absKey2]='abs';
-        applyAbsenceToGrades(cls,student.id,wnum2);
+        if(periods2.length){
+          periods2.forEach(function(period){if(!period||!period.id)return;DAYS_AR.forEach(function(_,di){var slot=sched2.slots[period.id+"_d"+di]||"";if(slot.trim()){var dt2=DS.dictDate||null;var k=absKey(wnum,period.id,di,dt2);if(!absData2[k])absData2[k]="abs";}});});
+        } else {
+          var ppw2=Math.max(1,Number(DB.meta.periodsPerWeek)||3);
+          for(var pi2=0;pi2<ppw2;pi2++){var dt3=DS.dictDate||null;var k2=absKey(wnum,"g"+pi2,pi2%5,dt3);if(!absData2[k2])absData2[k2]="abs";}
+        }
       }
     }
   }
@@ -808,26 +811,8 @@ function renderDict(){
   // اختيار العمود
   if(!isAttendMode){
     html+='<div style="flex:1;min-width:100px;">';
-    html+='<select class="col-sel-dark" style="width:100%;" id="dColSel" onchange="DS.selectedCol=this.value;DS.dictAbsColIdx=0;renderDict()">'+colOpts+'</select>';
+    html+='<select class="col-sel-dark" style="width:100%;" id="dColSel" onchange="DS.selectedCol=this.value;renderDict()">'+colOpts+'</select>';
     html+='</div>';
-    // منسدلة اختيار الفترة — تظهر فقط عند العمود الأسبوعي وعدد الفترات > 1
-    if(selCol&&selCol.field&&/^(?:a|h|bw)\d+$/.test(selCol.field)){
-      var _wnum=parseInt(selCol.field.match(/\d+$/)[0]);
-      var _absCols=buildAbsCols(cls,_wnum);
-      if(_absCols.length>1){
-        var _absColSelOpts='';
-        _absCols.forEach(function(col,ci){
-          var lbl=col.label||('ف'+(ci+1));
-          _absColSelOpts+='<option value="'+ci+'"'+(ci===(DS.dictAbsColIdx||0)?' selected':'')+'>'+esc(lbl)+'</option>';
-        });
-        html+='<div style="flex:1;min-width:100px;">';
-        html+='<div style="display:flex;align-items:center;gap:5px;background:rgba(239,68,68,.07);border:1.5px solid #7f1d1d;border-radius:7px;padding:4px 8px;">';
-        html+='<span style="font-size:9px;font-weight:700;color:#fca5a5;white-space:nowrap;">📋 الفترة:</span>';
-        html+='<select style="flex:1;background:#0f172a;border:1px solid #7f1d1d;color:#fca5a5;padding:3px 6px;border-radius:5px;font-size:10px;outline:none;font-family:inherit;" onchange="DS.dictAbsColIdx=Number(this.value);renderDict();">'+_absColSelOpts+'</select>';
-        html+='</div>';
-        html+='</div>';
-      }
-    }
   }
   html+='</div>';
   html+='</div>';

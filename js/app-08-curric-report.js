@@ -959,6 +959,7 @@ function _repBuildNav() {
     { p: 'curric',  icon: '📖', lbl: 'توزيع المنهج',     extra: '' },
     { p: 'settings',icon: '⚙️', lbl: 'الإعدادات',        extra: '' },
     { p: 'backup',  icon: '💾', lbl: 'النسخ الاحتياطي', extra: '' },
+    { p: 'report',  icon: '📄', lbl: 'كشف الدرجات',     extra: '' },
     { p: 'tafrigh', icon: '📋', lbl: 'كشف التفريغ',     extra: '' },
     { p: 'witness', icon: '✍️', lbl: 'توقيع المتابع',    extra: '' },
     { p: 'notifs',  icon: '🔔', lbl: 'الإشعارات',       extra: '' },
