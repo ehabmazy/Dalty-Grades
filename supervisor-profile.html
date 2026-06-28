@@ -405,6 +405,63 @@ select.inp{cursor:pointer;}
 .share-btn span:first-child{font-size:24px;}
 
 /* ════════════════════════════════════
+   CAMERA MODAL
+════════════════════════════════════ */
+#cameraModal .modal-sheet{border-radius:20px 20px 0 0;padding:16px 16px 24px;}
+.cam-preview-wrap{
+  position:relative;border-radius:14px;overflow:hidden;
+  background:#000;margin-bottom:12px;
+  aspect-ratio:4/3;width:100%;
+}
+#camVideo{width:100%;height:100%;object-fit:cover;display:block;}
+#camCanvas{display:none;}
+.cam-overlay{
+  position:absolute;inset:0;pointer-events:none;
+  border:2px solid rgba(255,255,255,.15);border-radius:14px;
+}
+.cam-overlay::after{
+  content:'';position:absolute;
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  width:70%;height:70%;
+  border:1.5px dashed rgba(255,255,255,.25);border-radius:8px;
+}
+.cam-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.cam-shutter{
+  width:64px;height:64px;border-radius:50%;
+  background:#fff;border:4px solid rgba(255,255,255,.3);
+  cursor:pointer;flex-shrink:0;transition:.15s;
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;box-shadow:0 4px 20px rgba(0,0,0,.5);
+}
+.cam-shutter:active{transform:scale(.92);}
+.cam-flip{
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  color:#fff;border-radius:50%;width:44px;height:44px;
+  cursor:pointer;font-size:20px;
+  display:flex;align-items:center;justify-content:center;
+}
+.cam-close-btn{
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  color:#fff;border-radius:50%;width:44px;height:44px;
+  cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:Cairo,sans-serif;
+}
+.cam-captured-grid{
+  display:flex;gap:8px;overflow-x:auto;padding:4px 0;margin-top:10px;
+}
+.cam-captured-grid img{
+  width:72px;height:72px;object-fit:cover;border-radius:8px;
+  border:2px solid rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;
+}
+.cam-flash{
+  position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;
+  border-radius:14px;transition:opacity .05s;
+}
+.cam-flash.flash{opacity:.8;}
+.cam-save-bar{margin-top:10px;display:flex;gap:8px;}
+
+/* ════════════════════════════════════
    PRINT STYLES
 ════════════════════════════════════ */
 @media print{
@@ -621,13 +678,19 @@ select.inp{cursor:pointer;}
 
     <!-- Photos panel -->
     <div class="media-panel active" id="panel-photos">
-      <div class="drop-zone" id="photoDropZone" onclick="document.getElementById('photoInput').click()">
-        <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files)"/>
-        <div class="drop-icon">🖼</div>
-        <div class="drop-text">اضغط لإضافة صور من الحصة</div>
-        <div class="drop-hint">JPG, PNG, WEBP — يمكن إضافة أكثر من صورة</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:0;">
+        <div class="drop-zone" id="photoDropZone" onclick="document.getElementById('photoInput').click()" style="margin-bottom:0;">
+          <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files)"/>
+          <div class="drop-icon">🖼</div>
+          <div class="drop-text">اضغط لإضافة صور</div>
+          <div class="drop-hint">من المعرض</div>
+        </div>
+        <div class="drop-zone" onclick="openCamera()" style="margin-bottom:0;min-width:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:rgba(29,78,216,.05);border-color:rgba(59,130,246,.3);">
+          <div class="drop-icon">📷</div>
+          <div class="drop-text" style="font-size:11px;">الكاميرا</div>
+        </div>
       </div>
-      <div class="media-grid" id="photoGrid"></div>
+      <div class="media-grid" id="photoGrid" style="margin-top:10px;"></div>
     </div>
 
     <!-- Audio panel -->
@@ -735,6 +798,35 @@ select.inp{cursor:pointer;}
       <button class="share-btn" onclick="closeShareModal()">
         <span>✕</span><span>إغلاق</span>
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CAMERA MODAL ── -->
+<div class="modal-overlay" id="cameraModal" style="align-items:flex-end;background:rgba(0,0,0,.85);">
+  <div class="modal-sheet" style="background:#111827;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:14px;font-weight:900;color:#fff;">📷 التقاط صورة</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="camCounter" style="font-size:11px;color:rgba(255,255,255,.5);"></span>
+        <button class="cam-close-btn" onclick="closeCamera()">✕</button>
+      </div>
+    </div>
+    <div class="cam-preview-wrap">
+      <video id="camVideo" autoplay playsinline muted></video>
+      <canvas id="camCanvas"></canvas>
+      <div class="cam-overlay"></div>
+      <div class="cam-flash" id="camFlash"></div>
+    </div>
+    <div class="cam-captured-grid" id="camCapturedGrid"></div>
+    <div class="cam-controls" style="margin-top:14px;">
+      <button class="cam-close-btn" onclick="closeCamera()" style="font-size:14px;font-family:Cairo,sans-serif;width:auto;padding:0 14px;border-radius:20px;">إلغاء</button>
+      <button class="cam-shutter" onclick="capturePhoto()" title="التقاط">📸</button>
+      <button class="cam-flip" onclick="flipCamera()" title="قلب الكاميرا">🔄</button>
+    </div>
+    <div class="cam-save-bar" id="camSaveBar" style="display:none;">
+      <button class="act-btn save" style="flex:1;" onclick="saveCapturedPhotos()">✅ إضافة الصور (<span id="camSaveCount">0</span>)</button>
+      <button class="act-btn print" onclick="clearCaptured()">🗑 مسح</button>
     </div>
   </div>
 </div>
@@ -1581,6 +1673,147 @@ function clearAllRecords(){
   closeConfirmModal();
   toast('✅ تم مسح جميع المتابعات','ok');
 }
+
+// ════════════════════════════════════
+//  CAMERA
+// ════════════════════════════════════
+var _camStream = null;
+var _camFacing = 'environment'; // back camera by default
+var _camCaptured = []; // [{dataUrl, name}]
+
+function openCamera(){
+  _camCaptured = [];
+  renderCamCaptured();
+  document.getElementById('cameraModal').classList.add('open');
+  startCamStream();
+}
+
+function startCamStream(){
+  // Stop previous stream
+  if(_camStream){ _camStream.getTracks().forEach(function(t){t.stop();}); _camStream=null; }
+
+  var constraints = {
+    video: {
+      facingMode: { ideal: _camFacing },
+      width: { ideal: 1280 },
+      height: { ideal: 960 }
+    },
+    audio: false
+  };
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(function(stream){
+      _camStream = stream;
+      var video = document.getElementById('camVideo');
+      video.srcObject = stream;
+      video.play();
+    })
+    .catch(function(err){
+      // Fallback: any camera
+      navigator.mediaDevices.getUserMedia({video:true, audio:false})
+        .then(function(stream){
+          _camStream = stream;
+          var video = document.getElementById('camVideo');
+          video.srcObject = stream;
+          video.play();
+        })
+        .catch(function(err2){
+          closeCamera();
+          toast('⚠ لا يمكن الوصول للكاميرا: ' + err2.message, 'err');
+        });
+    });
+}
+
+function closeCamera(){
+  if(_camStream){ _camStream.getTracks().forEach(function(t){t.stop();}); _camStream=null; }
+  document.getElementById('cameraModal').classList.remove('open');
+  document.getElementById('camVideo').srcObject = null;
+}
+
+function flipCamera(){
+  _camFacing = _camFacing === 'environment' ? 'user' : 'environment';
+  startCamStream();
+}
+
+function capturePhoto(){
+  var video = document.getElementById('camVideo');
+  var canvas = document.getElementById('camCanvas');
+  if(!video.videoWidth){ toast('⚠ الكاميرا غير جاهزة بعد','err'); return; }
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  var ctx = canvas.getContext('2d');
+
+  // Mirror front camera
+  if(_camFacing === 'user'){
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(video, 0, 0);
+
+  var dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+  var name = 'كاميرا_' + new Date().toLocaleTimeString('ar-EG').replace(/:/g,'-') + '.jpg';
+  _camCaptured.push({dataUrl: dataUrl, name: name});
+
+  // Flash effect
+  var flash = document.getElementById('camFlash');
+  flash.classList.add('flash');
+  setTimeout(function(){ flash.classList.remove('flash'); }, 120);
+
+  renderCamCaptured();
+  toast('✅ تم الالتقاط ('+ _camCaptured.length +')','ok');
+}
+
+function renderCamCaptured(){
+  var grid = document.getElementById('camCapturedGrid');
+  var saveBar = document.getElementById('camSaveBar');
+  var counter = document.getElementById('camCounter');
+  var saveCount = document.getElementById('camSaveCount');
+
+  grid.innerHTML = '';
+  _camCaptured.forEach(function(p, i){
+    var img = document.createElement('img');
+    img.src = p.dataUrl;
+    img.title = p.name;
+    img.onclick = (function(idx){ return function(){
+      if(confirm('حذف هذه الصورة؟')){ _camCaptured.splice(idx,1); renderCamCaptured(); }
+    }; })(i);
+    grid.appendChild(img);
+  });
+
+  var hasPhotos = _camCaptured.length > 0;
+  saveBar.style.display = hasPhotos ? 'flex' : 'none';
+  counter.textContent = hasPhotos ? _camCaptured.length + ' صورة' : '';
+  if(saveCount) saveCount.textContent = _camCaptured.length;
+}
+
+function saveCapturedPhotos(){
+  if(!_camCaptured.length) return;
+  _camCaptured.forEach(function(p){
+    SP.photos.push({name: p.name, dataUrl: p.dataUrl});
+  });
+  renderPhotoGrid();
+  var count = _camCaptured.length;
+  _camCaptured = [];
+  closeCamera();
+  // Switch to photos tab
+  document.querySelectorAll('.media-tab').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.media-panel').forEach(function(p){p.classList.remove('active');});
+  document.querySelector('.media-tab').classList.add('active');
+  document.getElementById('panel-photos').classList.add('active');
+  toast('✅ تمت إضافة ' + count + ' صورة', 'ok');
+}
+
+function clearCaptured(){
+  _camCaptured = [];
+  renderCamCaptured();
+}
+
+// Close camera on overlay click
+document.getElementById('cameraModal').addEventListener('click', function(e){
+  if(e.target === this) closeCamera();
+});
+
 </script>
 </body>
 </html>
