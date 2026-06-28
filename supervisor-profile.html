@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ملف المتابعة — دفتري</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+/* ════════════════════════════════════
+   RESET & BASE
+════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#080f1e;
+  --bg2:#0d1b30;
+  --bg3:#111f38;
+  --border:rgba(255,255,255,.09);
+  --gold:#f59e0b;
+  --gold2:#fcd34d;
+  --blue:#3b82f6;
+  --blue2:#1d4ed8;
+  --green:#22c55e;
+  --red:#ef4444;
+  --purple:#a855f7;
+  --text:#e2e8f0;
+  --text2:#94a3b8;
+  --text3:#64748b;
+  --r:14px;
+  --shadow:0 4px 24px rgba(0,0,0,.5);
+}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'Cairo',sans-serif;font-size:14px;}
+
+/* ════════════════════════════════════
+   TOPBAR
+════════════════════════════════════ */
+.topbar{
+  position:sticky;top:0;z-index:100;
+  background:rgba(8,15,30,.9);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);
+  padding:10px 16px;
+  display:flex;align-items:center;gap:10px;
+}
+.topbar-logo{font-size:20px;}
+.topbar-title{font-size:13px;font-weight:900;color:var(--gold);}
+.topbar-sub{font-size:10px;color:var(--text3);margin-top:1px;}
+.topbar-actions{margin-right:auto;display:flex;gap:8px;}
+.tb-btn{
+  background:rgba(255,255,255,.07);border:1px solid var(--border);
+  color:var(--text2);border-radius:8px;padding:6px 12px;
+  font-family:'Cairo',sans-serif;font-size:11px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;gap:5px;transition:.2s;
+}
+.tb-btn:hover{background:rgba(255,255,255,.13);color:var(--text);}
+.tb-btn.gold{background:rgba(245,158,11,.15);border-color:rgba(245,158,11,.4);color:var(--gold);}
+.tb-btn.gold:hover{background:rgba(245,158,11,.25);}
+.tb-btn.blue{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4);color:var(--blue);}
+
+/* ════════════════════════════════════
+   HERO HEADER
+════════════════════════════════════ */
+.hero{
+  background:linear-gradient(160deg,#071428 0%,#0f2a5e 50%,#1a0a2e 100%);
+  padding:28px 20px 22px;text-align:center;position:relative;overflow:hidden;
+  border-bottom:2px solid rgba(59,130,246,.2);
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 0%,rgba(29,78,216,.3) 0%,transparent 70%),
+    radial-gradient(circle at 85% 70%,rgba(168,85,247,.1) 0%,transparent 50%),
+    radial-gradient(circle at 10% 80%,rgba(245,158,11,.08) 0%,transparent 50%);
+}
+.hero-seal{
+  width:72px;height:72px;border-radius:50%;
+  background:linear-gradient(135deg,#1d4ed8,#7c3aed);
+  border:3px solid rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:32px;margin:0 auto 14px;
+  box-shadow:0 8px 40px rgba(29,78,216,.6);
+  position:relative;z-index:1;
+}
+.hero-title{font-size:20px;font-weight:900;color:#fff;margin-bottom:4px;position:relative;z-index:1;}
+.hero-sub{font-size:11px;color:var(--text3);margin-bottom:14px;position:relative;z-index:1;}
+.hero-chips{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;position:relative;z-index:1;}
+.chip{
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+  border-radius:20px;padding:4px 14px;font-size:10.5px;color:var(--text2);
+}
+.chip strong{color:var(--text);}
+.chip.gold{border-color:rgba(245,158,11,.4);color:var(--gold2);}
+
+/* ════════════════════════════════════
+   PAGE BODY
+════════════════════════════════════ */
+.page-body{max-width:620px;margin:0 auto;padding:16px 14px 40px;}
+
+/* ════════════════════════════════════
+   SECTION HEADER
+════════════════════════════════════ */
+.sec-hdr{
+  display:flex;align-items:center;gap:8px;
+  margin:20px 0 10px;
+  border-right:3px solid var(--gold);padding-right:10px;
+}
+.sec-hdr-icon{font-size:16px;}
+.sec-hdr-title{font-size:13px;font-weight:900;color:var(--gold);}
+
+/* ════════════════════════════════════
+   CARD
+════════════════════════════════════ */
+.card{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:16px;margin-bottom:14px;
+  box-shadow:var(--shadow);
+}
+.card-hdr{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:14px;padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+}
+.card-icon{
+  width:36px;height:36px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;font-size:17px;
+}
+.card-title{font-size:13px;font-weight:900;color:var(--text);}
+.card-sub{font-size:10px;color:var(--text3);margin-top:2px;}
+
+/* ════════════════════════════════════
+   FORM INPUTS
+════════════════════════════════════ */
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+.field label{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;}
+.inp{
+  background:rgba(255,255,255,.05);border:1px solid var(--border);
+  border-radius:9px;padding:10px 12px;
+  color:var(--text);font-family:'Cairo',sans-serif;font-size:13px;
+  outline:none;transition:.2s;width:100%;
+}
+.inp:focus{border-color:rgba(59,130,246,.5);background:rgba(59,130,246,.05);}
+.inp::placeholder{color:var(--text3);}
+textarea.inp{resize:vertical;min-height:80px;}
+select.inp{cursor:pointer;}
+
+/* ════════════════════════════════════
+   INFO GRID (read-only data)
+════════════════════════════════════ */
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.info-row{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;padding:10px 12px;}
+.info-lbl{font-size:9.5px;color:var(--text3);font-weight:700;margin-bottom:3px;}
+.info-val{font-size:12.5px;font-weight:700;color:var(--text);}
+.info-row.full{grid-column:1/-1;}
+.info-row.highlight .info-val{color:var(--gold2);}
+
+/* ════════════════════════════════════
+   GRADES TABLE
+════════════════════════════════════ */
+.grades-wrap{overflow-x:auto;border-radius:9px;border:1px solid var(--border);}
+.grades-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.grades-table th{
+  background:rgba(29,78,216,.2);color:var(--blue);
+  padding:8px 10px;text-align:center;font-weight:700;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.grades-table th:first-child{text-align:right;}
+.grades-table td{
+  padding:7px 10px;text-align:center;
+  border-bottom:1px solid rgba(255,255,255,.04);color:var(--text2);
+}
+.grades-table td:first-child{text-align:right;font-weight:700;color:var(--text);}
+.grades-table tr:last-child td{border-bottom:none;}
+.grades-table tr:hover td{background:rgba(255,255,255,.03);}
+.grade-pill{
+  display:inline-block;min-width:32px;padding:2px 6px;border-radius:6px;
+  font-weight:700;font-size:11px;
+}
+.grade-pill.hi{background:rgba(34,197,94,.15);color:#4ade80;}
+.grade-pill.mid{background:rgba(245,158,11,.15);color:var(--gold2);}
+.grade-pill.lo{background:rgba(239,68,68,.15);color:#f87171;}
+.grade-total{font-size:13px;font-weight:900;color:var(--gold2);}
+
+/* ════════════════════════════════════
+   MEDIA UPLOAD AREA
+════════════════════════════════════ */
+.media-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.media-tab{
+  background:rgba(255,255,255,.06);border:1px solid var(--border);
+  border-radius:20px;padding:5px 14px;font-size:11px;font-weight:700;
+  color:var(--text3);cursor:pointer;transition:.2s;
+  font-family:'Cairo',sans-serif;
+}
+.media-tab.active{background:rgba(59,130,246,.2);border-color:rgba(59,130,246,.5);color:var(--blue);}
+.media-panel{display:none;}
+.media-panel.active{display:block;}
+
+/* Drop zone */
+.drop-zone{
+  border:2px dashed rgba(255,255,255,.15);border-radius:12px;
+  padding:24px;text-align:center;cursor:pointer;transition:.2s;
+  background:rgba(255,255,255,.02);position:relative;
+}
+.drop-zone:hover,.drop-zone.drag{
+  border-color:rgba(59,130,246,.5);background:rgba(59,130,246,.05);
+}
+.drop-icon{font-size:32px;margin-bottom:8px;}
+.drop-text{font-size:11.5px;color:var(--text3);}
+.drop-hint{font-size:10px;color:var(--text3);margin-top:4px;opacity:.7;}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+
+/* Media grid */
+.media-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-top:10px;}
+.media-item{
+  position:relative;border-radius:10px;overflow:hidden;
+  border:1px solid var(--border);aspect-ratio:1;
+  background:var(--bg2);cursor:pointer;
+}
+.media-item img,.media-item video{width:100%;height:100%;object-fit:cover;}
+.media-item .media-del{
+  position:absolute;top:4px;left:4px;
+  background:rgba(239,68,68,.8);border:none;border-radius:50%;
+  width:22px;height:22px;color:#fff;font-size:12px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:.2s;
+}
+.media-item:hover .media-del{opacity:1;}
+.media-item .media-type-badge{
+  position:absolute;bottom:4px;right:4px;
+  background:rgba(0,0,0,.7);border-radius:5px;padding:2px 5px;
+  font-size:9px;color:#fff;
+}
+
+/* Audio list */
+.audio-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+.audio-item{
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:9px;padding:10px 12px;
+  display:flex;align-items:center;gap:10px;
+}
+.audio-item audio{flex:1;height:32px;}
+.audio-item audio::-webkit-media-controls-panel{background:rgba(30,40,60,.9);}
+.audio-del{
+  background:none;border:1px solid rgba(239,68,68,.3);color:#f87171;
+  border-radius:7px;padding:4px 8px;cursor:pointer;font-size:11px;
+  font-family:'Cairo',sans-serif;
+}
+
+/* Video embeds */
+.video-embed-wrap{display:flex;gap:8px;margin-bottom:8px;}
+.video-embed-wrap .inp{flex:1;}
+.video-add-btn{
+  background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.4);
+  color:var(--blue);border-radius:9px;padding:0 14px;cursor:pointer;
+  font-size:18px;font-weight:700;font-family:'Cairo',sans-serif;
+}
+.video-list{display:flex;flex-direction:column;gap:10px;margin-top:8px;}
+.video-embed-item{border-radius:10px;overflow:hidden;border:1px solid var(--border);position:relative;}
+.video-embed-item iframe{width:100%;aspect-ratio:16/9;display:block;border:none;}
+.video-embed-del{
+  position:absolute;top:6px;left:6px;
+  background:rgba(239,68,68,.85);border:none;border-radius:6px;
+  color:#fff;padding:3px 8px;font-size:11px;cursor:pointer;font-family:'Cairo',sans-serif;
+}
+
+/* ════════════════════════════════════
+   RECORD BUTTON
+════════════════════════════════════ */
+.rec-bar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:10px;padding:12px;margin-bottom:10px;
+}
+.rec-btn{
+  background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);
+  color:#f87171;border-radius:9px;padding:8px 16px;
+  font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;gap:6px;transition:.2s;
+}
+.rec-btn.recording{background:rgba(239,68,68,.3);border-color:#f87171;animation:pulse-rec 1s infinite;}
+@keyframes pulse-rec{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4);}50%{box-shadow:0 0 0 8px rgba(239,68,68,0);}}
+.rec-timer{font-size:13px;font-weight:900;color:#f87171;font-variant-numeric:tabular-nums;min-width:45px;}
+.rec-status{font-size:10.5px;color:var(--text3);}
+
+/* ════════════════════════════════════
+   OBSERVATION / RATING
+════════════════════════════════════ */
+.rating-stars{display:flex;gap:6px;flex-direction:row-reverse;justify-content:flex-end;}
+.rating-stars input{display:none;}
+.rating-stars label{font-size:26px;cursor:pointer;color:rgba(255,255,255,.15);transition:.15s;}
+.rating-stars label:hover,.rating-stars label:hover~label,
+.rating-stars input:checked~label{color:var(--gold);}
+
+/* Aspect chips */
+.aspect-grid{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.aspect-chip{
+  background:rgba(255,255,255,.06);border:1px solid var(--border);
+  border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;
+  color:var(--text3);transition:.15s;font-family:'Cairo',sans-serif;
+  user-select:none;
+}
+.aspect-chip.sel{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.4);color:#4ade80;}
+.aspect-chip.neg{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.3);color:#f87171;}
+
+/* ════════════════════════════════════
+   SIGNATURE CANVAS
+════════════════════════════════════ */
+.sig-wrap{
+  border:2px dashed rgba(255,255,255,.15);border-radius:12px;
+  background:rgba(255,255,255,.02);overflow:hidden;position:relative;
+}
+.sig-wrap canvas{display:block;width:100%;cursor:crosshair;touch-action:none;}
+.sig-ghost{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;pointer-events:none;
+  transition:.3s;
+}
+.sig-ghost-icon{font-size:36px;opacity:.25;}
+.sig-ghost-text{font-size:11px;color:var(--text3);margin-top:6px;opacity:.5;}
+.sig-tools{display:flex;gap:6px;margin-top:8px;}
+.sig-tool{
+  background:rgba(255,255,255,.07);border:1px solid var(--border);
+  color:var(--text2);border-radius:8px;padding:5px 12px;
+  font-family:'Cairo',sans-serif;font-size:11px;cursor:pointer;
+}
+
+/* ════════════════════════════════════
+   SAVE / SHARE BAR
+════════════════════════════════════ */
+.action-bar{
+  position:sticky;bottom:0;
+  background:rgba(8,15,30,.95);backdrop-filter:blur(12px);
+  border-top:1px solid var(--border);
+  padding:12px 16px;display:flex;gap:8px;
+  max-width:100%;
+}
+.act-btn{
+  flex:1;border:none;border-radius:10px;padding:12px;
+  font-family:'Cairo',sans-serif;font-size:13px;font-weight:900;
+  cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:7px;
+}
+.act-btn.save{background:linear-gradient(135deg,#1d4ed8,#7c3aed);color:#fff;}
+.act-btn.save:hover{opacity:.9;}
+.act-btn.share{background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.4);color:var(--gold);}
+.act-btn.print{background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--text2);}
+
+/* ════════════════════════════════════
+   TOAST
+════════════════════════════════════ */
+#spToast{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  background:#1e293b;border:1px solid var(--border);border-radius:10px;
+  padding:10px 20px;font-size:12px;color:var(--text);
+  box-shadow:0 4px 20px rgba(0,0,0,.5);z-index:9999;
+  opacity:0;pointer-events:none;transition:.3s;white-space:nowrap;
+}
+#spToast.show{opacity:1;}
+#spToast.ok{border-color:rgba(34,197,94,.5);color:#4ade80;}
+#spToast.err{border-color:rgba(239,68,68,.5);color:#f87171;}
+
+/* ════════════════════════════════════
+   LIGHTBOX
+════════════════════════════════════ */
+#spLightbox{
+  position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;
+  display:none;align-items:center;justify-content:center;
+}
+#spLightbox.open{display:flex;}
+#spLightbox img{max-width:95vw;max-height:90vh;border-radius:10px;}
+#spLightbox .lb-close{
+  position:absolute;top:16px;left:16px;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:18px;
+  font-family:'Cairo',sans-serif;
+}
+
+/* ════════════════════════════════════
+   SHARE MODAL
+════════════════════════════════════ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;
+  display:none;align-items:flex-end;justify-content:center;
+}
+.modal-overlay.open{display:flex;}
+.modal-sheet{
+  background:var(--bg3);border-radius:20px 20px 0 0;
+  border:1px solid var(--border);width:100%;max-width:500px;
+  padding:20px 16px 30px;
+}
+.modal-handle{width:40px;height:4px;background:rgba(255,255,255,.15);border-radius:2px;margin:0 auto 16px;}
+.modal-title{font-size:14px;font-weight:900;margin-bottom:4px;}
+.modal-sub{font-size:11px;color:var(--text3);margin-bottom:16px;}
+.share-link-box{
+  background:rgba(255,255,255,.05);border:1px solid var(--border);
+  border-radius:9px;padding:10px 12px;font-size:11px;color:var(--text2);
+  word-break:break-all;margin-bottom:12px;
+}
+.share-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.share-btn{
+  border:1px solid var(--border);border-radius:10px;padding:12px;
+  background:rgba(255,255,255,.05);color:var(--text2);
+  font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:5px;transition:.2s;
+}
+.share-btn:hover{background:rgba(255,255,255,.1);}
+.share-btn span:first-child{font-size:24px;}
+
+/* ════════════════════════════════════
+   PRINT STYLES
+════════════════════════════════════ */
+@media print{
+  .topbar,.action-bar,#spToast,.media-tabs,.drop-zone,.rec-bar,
+  .sig-tools,.tb-btn,.media-del,.audio-del,.video-embed-del{display:none!important;}
+  body{background:#fff;color:#000;}
+  .hero{background:linear-gradient(160deg,#1a3a7a,#2d1b69)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .card{border:1px solid #ddd;box-shadow:none;}
+  .grades-table th{background:#e8f0fe!important;}
+}
+
+/* ════════════════════════════════════
+   RESPONSIVE
+════════════════════════════════════ */
+@media(max-width:480px){
+  .info-grid{grid-template-columns:1fr;}
+  .share-btns{grid-template-columns:1fr 1fr;}
+  .topbar-title{font-size:12px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <div class="topbar-logo">📋</div>
+  <div>
+    <div class="topbar-title">ملف المتابعة الرسمي</div>
+    <div class="topbar-sub" id="topSubtitle">دفتري — نظام إدارة الدرجات</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="tb-btn" onclick="window.print()">🖨 طباعة</button>
+    <button class="tb-btn gold" onclick="openShareModal()">↗ مشاركة</button>
+  </div>
+</div>
+
+<!-- ── HERO ── -->
+<div class="hero" id="hero">
+  <div class="hero-seal">📋</div>
+  <div class="hero-title">ملف المتابعة الميدانية</div>
+  <div class="hero-sub">وثيقة رسمية — الإدارة التعليمية / الوزارة</div>
+  <div class="hero-chips" id="heroChips">
+    <div class="chip" id="chipSchool">🏫 <strong>—</strong></div>
+    <div class="chip" id="chipSubject">📚 <strong>—</strong></div>
+    <div class="chip" id="chipTeacher">👤 <strong>—</strong></div>
+    <div class="chip gold" id="chipDate">🗓 <strong id="heroDate"></strong></div>
+  </div>
+</div>
+
+<!-- ── PAGE BODY ── -->
+<div class="page-body">
+
+  <!-- 1. بيانات المتابعة -->
+  <div class="sec-hdr"><div class="sec-hdr-icon">📝</div><div class="sec-hdr-title">بيانات المتابعة</div></div>
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-icon" style="background:rgba(29,78,216,.2)">🏛</div>
+      <div><div class="card-title">بيانات المتابع الرسمي</div><div class="card-sub">يُملأ من المشرف / المفتش / الموجّه</div></div>
+    </div>
+    <div class="info-grid" style="margin-bottom:14px;">
+      <div class="info-row highlight">
+        <div class="info-lbl">المدرسة</div>
+        <div class="info-val" id="dispSchool">—</div>
+      </div>
+      <div class="info-row highlight">
+        <div class="info-lbl">المادة</div>
+        <div class="info-val" id="dispSubject">—</div>
+      </div>
+      <div class="info-row">
+        <div class="info-lbl">المعلمة / المعلم</div>
+        <div class="info-val" id="dispTeacher">—</div>
+      </div>
+      <div class="info-row">
+        <div class="info-lbl">العام الدراسي / الفصل</div>
+        <div class="info-val" id="dispYear">—</div>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label>الفصل الدراسي المتابَع</label>
+      <select class="inp" id="clsSelector" onchange="onClassChange(this.value)">
+        <option value="">— اختر الفصل —</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>اسم المتابع / المشرف</label>
+      <input class="inp" id="supervisorName" placeholder="أ/ اسم المتابع هنا..."/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field">
+        <label>الصفة الوظيفية</label>
+        <input class="inp" id="supervisorTitle" list="titleList" placeholder="مشرف تربوي / موجّه / مفتش..."/>
+        <datalist id="titleList">
+          <option value="مشرف تربوي"/>
+          <option value="موجّه"/>
+          <option value="مفتش"/>
+          <option value="مدير المدرسة"/>
+          <option value="وكيل المدرسة"/>
+          <option value="رئيس قسم"/>
+          <option value="مسؤول إدارة تعليمية"/>
+          <option value="مسؤول مديرية"/>
+        </datalist>
+      </div>
+      <div class="field">
+        <label>تاريخ المتابعة</label>
+        <input class="inp" type="date" id="visitDate"/>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="field">
+        <label>من الساعة</label>
+        <input class="inp" type="time" id="visitFrom"/>
+      </div>
+      <div class="field">
+        <label>إلى الساعة</label>
+        <input class="inp" type="time" id="visitTo"/>
+      </div>
+    </div>
+    <div class="field">
+      <label>جهة المتابعة</label>
+      <input class="inp" id="supervisorOrg" list="orgList" placeholder="الإدارة التعليمية / المديرية / الوزارة..."/>
+      <datalist id="orgList">
+        <option value="الإدارة التعليمية"/>
+        <option value="المديرية التعليمية"/>
+        <option value="الوزارة"/>
+        <option value="مجلس الإدارة"/>
+        <option value="إدارة المدرسة"/>
+        <option value="إدارة دكرنس التعليمية"/>
+        <option value="مديرية الدقهلية"/>
+      </datalist>
+    </div>
+  </div>
+
+  <!-- 2. الدرجات -->
+  <div class="sec-hdr"><div class="sec-hdr-icon">📊</div><div class="sec-hdr-title">الدرجات والأداء الأكاديمي</div></div>
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-icon" style="background:rgba(168,85,247,.2)">🎓</div>
+      <div><div class="card-title">كشف درجات الفصل</div><div class="card-sub">مُستخرج تلقائياً من النظام</div></div>
+    </div>
+    <div id="gradesBlock">
+      <div style="text-align:center;padding:24px;color:var(--text3);">
+        <div style="font-size:36px;margin-bottom:8px;">📂</div>
+        <div>لا توجد بيانات محملة بعد — يتم التحميل من التطبيق الرئيسي</div>
+      </div>
+    </div>
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+      <div class="field">
+        <label>ملاحظات المتابع على الدرجات</label>
+        <textarea class="inp" id="gradesNotes" placeholder="ملاحظات عامة على مستوى الطلاب والدرجات..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. تقييم الحصة -->
+  <div class="sec-hdr"><div class="sec-hdr-icon">⭐</div><div class="sec-hdr-title">تقييم الحصة</div></div>
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-icon" style="background:rgba(245,158,11,.2)">⭐</div>
+      <div><div class="card-title">التقييم العام للحصة</div><div class="card-sub">رأي المتابع في جودة التدريس</div></div>
+    </div>
+    <div class="field">
+      <label>التقييم الإجمالي</label>
+      <div class="rating-stars" id="starRating">
+        <input type="radio" name="stars" id="s5" value="5"/><label for="s5">★</label>
+        <input type="radio" name="stars" id="s4" value="4"/><label for="s4">★</label>
+        <input type="radio" name="stars" id="s3" value="3"/><label for="s3">★</label>
+        <input type="radio" name="stars" id="s2" value="2"/><label for="s2">★</label>
+        <input type="radio" name="stars" id="s1" value="1"/><label for="s1">★</label>
+      </div>
+    </div>
+    <div class="field">
+      <label>جوانب إيجابية</label>
+      <div class="aspect-grid" id="posAspects">
+        <div class="aspect-chip" data-g="pos">حضور الأهداف</div>
+        <div class="aspect-chip" data-g="pos">إدارة الوقت</div>
+        <div class="aspect-chip" data-g="pos">التفاعل مع الطلاب</div>
+        <div class="aspect-chip" data-g="pos">استخدام الوسائل</div>
+        <div class="aspect-chip" data-g="pos">وضوح الشرح</div>
+        <div class="aspect-chip" data-g="pos">التقويم المستمر</div>
+        <div class="aspect-chip" data-g="pos">التمكن من المادة</div>
+        <div class="aspect-chip" data-g="pos">ضبط الفصل</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>جوانب تحتاج تحسين</label>
+      <div class="aspect-grid" id="negAspects">
+        <div class="aspect-chip" data-g="neg">التوقيت والانضباط</div>
+        <div class="aspect-chip" data-g="neg">التنويع في الأنشطة</div>
+        <div class="aspect-chip" data-g="neg">الربط بالحياة</div>
+        <div class="aspect-chip" data-g="neg">الفروق الفردية</div>
+        <div class="aspect-chip" data-g="neg">الواجبات المنزلية</div>
+        <div class="aspect-chip" data-g="neg">توظيف التقنية</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>ملاحظات وتوصيات المتابع</label>
+      <textarea class="inp" id="visitNotes" rows="4" placeholder="اكتب ملاحظاتك وتوصياتك التفصيلية هنا..."></textarea>
+    </div>
+  </div>
+
+  <!-- 4. الصور والوسائط -->
+  <div class="sec-hdr"><div class="sec-hdr-icon">📸</div><div class="sec-hdr-title">صور وتسجيلات الحصة</div></div>
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-icon" style="background:rgba(34,197,94,.2)">📸</div>
+      <div><div class="card-title">وسائط المتابعة</div><div class="card-sub">صور وتسجيلات توثيقية للحصة</div></div>
+    </div>
+    <!-- Tabs -->
+    <div class="media-tabs">
+      <div class="media-tab active" onclick="switchMedia('photos',this)">📷 صور</div>
+      <div class="media-tab" onclick="switchMedia('audio',this)">🎙 تسجيل صوتي</div>
+      <div class="media-tab" onclick="switchMedia('video',this)">🎬 فيديو</div>
+    </div>
+
+    <!-- Photos panel -->
+    <div class="media-panel active" id="panel-photos">
+      <div class="drop-zone" id="photoDropZone" onclick="document.getElementById('photoInput').click()">
+        <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files)"/>
+        <div class="drop-icon">🖼</div>
+        <div class="drop-text">اضغط لإضافة صور من الحصة</div>
+        <div class="drop-hint">JPG, PNG, WEBP — يمكن إضافة أكثر من صورة</div>
+      </div>
+      <div class="media-grid" id="photoGrid"></div>
+    </div>
+
+    <!-- Audio panel -->
+    <div class="media-panel" id="panel-audio">
+      <div class="rec-bar">
+        <button class="rec-btn" id="recBtn" onclick="toggleRecord()">
+          <span id="recIcon">🎙</span>
+          <span id="recLabel">بدء التسجيل</span>
+        </button>
+        <div>
+          <div class="rec-timer" id="recTimer">00:00</div>
+          <div class="rec-status" id="recStatus">اضغط للتسجيل الصوتي مباشرةً</div>
+        </div>
+      </div>
+      <div class="drop-zone" onclick="document.getElementById('audioFileInput').click()" style="padding:16px;">
+        <input type="file" id="audioFileInput" accept="audio/*" multiple style="display:none" onchange="handleAudioFiles(this.files)"/>
+        <div class="drop-icon">🎵</div>
+        <div class="drop-text">أو ارفع ملف صوتي</div>
+        <div class="drop-hint">MP3, WAV, M4A, OGG</div>
+      </div>
+      <div class="audio-list" id="audioList"></div>
+    </div>
+
+    <!-- Video panel -->
+    <div class="media-panel" id="panel-video">
+      <div style="margin-bottom:10px;">
+        <div class="drop-zone" onclick="document.getElementById('videoFileInput').click()" style="padding:16px;">
+          <input type="file" id="videoFileInput" accept="video/*" multiple style="display:none" onchange="handleVideoFiles(this.files)"/>
+          <div class="drop-icon">🎬</div>
+          <div class="drop-text">ارفع ملف فيديو</div>
+          <div class="drop-hint">MP4, MOV, AVI, WEBM</div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:10px;">
+        <label>أو أضف رابط يوتيوب / Google Drive</label>
+        <div class="video-embed-wrap">
+          <input class="inp" id="videoUrl" placeholder="https://www.youtube.com/watch?v=..."/>
+          <button class="video-add-btn" onclick="addVideoEmbed()">+</button>
+        </div>
+      </div>
+      <div class="video-list" id="videoList"></div>
+      <div class="media-grid" id="videoFileGrid"></div>
+    </div>
+  </div>
+
+  <!-- 5. التوقيع -->
+  <div class="sec-hdr"><div class="sec-hdr-icon">✍️</div><div class="sec-hdr-title">توقيع المتابع</div></div>
+  <div class="card">
+    <div class="card-hdr">
+      <div class="card-icon" style="background:rgba(59,130,246,.2)">✍️</div>
+      <div><div class="card-title">التوقيع الرسمي</div><div class="card-sub">وقّع بإصبعك على الشاشة</div></div>
+    </div>
+    <div class="sig-wrap">
+      <canvas id="sigCanvas" height="160"></canvas>
+      <div class="sig-ghost" id="sigGhost">
+        <div class="sig-ghost-icon">✍️</div>
+        <div class="sig-ghost-text">المتابع يوقّع هنا بإصبعه</div>
+      </div>
+    </div>
+    <div class="sig-tools">
+      <button class="sig-tool" onclick="clearSig()">🗑 مسح التوقيع</button>
+    </div>
+    <div class="field" style="margin-top:12px;">
+      <label>التوقيع والختم (نص بديل)</label>
+      <input class="inp" id="sigText" placeholder="اسم المتابع بالكامل — الختم الرسمي"/>
+    </div>
+  </div>
+
+  <!-- spacer for sticky bar -->
+  <div style="height:20px;"></div>
+</div>
+
+<!-- ── ACTION BAR ── -->
+<div class="action-bar">
+  <button class="act-btn save" onclick="saveProfile()">💾 حفظ</button>
+  <button class="act-btn share" onclick="openRecordsModal()">📂 السجل</button>
+  <button class="act-btn print" onclick="window.print()">🖨</button>
+</div>
+
+<!-- ── LIGHTBOX ── -->
+<div id="spLightbox">
+  <div class="lb-close" onclick="closeLightbox()">✕</div>
+  <img id="lbImg" src="" alt=""/>
+</div>
+
+<!-- ── SHARE MODAL ── -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">مشاركة ملف المتابعة</div>
+    <div class="modal-sub">شارك هذا الملف مع المتابع أو الإدارة التعليمية</div>
+    <div class="share-link-box" id="shareLinkBox">
+      يتم إنشاء الرابط...
+    </div>
+    <div class="share-btns">
+      <button class="share-btn" onclick="copyShareLink()">
+        <span>🔗</span><span>نسخ الرابط</span>
+      </button>
+      <button class="share-btn" onclick="shareWhatsApp()">
+        <span>💬</span><span>واتساب</span>
+      </button>
+      <button class="share-btn" onclick="window.print()">
+        <span>🖨</span><span>طباعة PDF</span>
+      </button>
+      <button class="share-btn" onclick="closeShareModal()">
+        <span>✕</span><span>إغلاق</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div id="spToast"></div>
+
+
+<!-- ── RECORDS MODAL ── -->
+<div class="modal-overlay" id="recordsModal">
+  <div class="modal-sheet" style="max-height:85vh;overflow-y:auto;border-radius:20px 20px 0 0;">
+    <div class="modal-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <div class="modal-title">📂 سجل المتابعات المحفوظة</div>
+      <button onclick="closeRecordsModal()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <div class="modal-sub" id="recordsCount">جارٍ التحميل...</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <button class="tb-btn blue" style="flex:1;" onclick="newVisitRecord()">➕ متابعة جديدة</button>
+      <button class="tb-btn" style="color:#f87171;border-color:rgba(239,68,68,.3);" onclick="confirmClearAll()">🗑 مسح الكل</button>
+    </div>
+    <div id="recordsList"></div>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRM MODAL ── -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-sheet" style="border-radius:20px 20px 0 0;">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="confirmTitle">تأكيد الحذف</div>
+    <div class="modal-sub" id="confirmMsg">هل أنت متأكدة؟</div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="act-btn save" style="background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);color:#f87171;" id="confirmYesBtn">نعم، احذف</button>
+      <button class="act-btn print" onclick="closeConfirmModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════
+//  STATE
+// ════════════════════════════════════
+var SP = {
+  photos: [],       // [{name, dataUrl}]
+  audios: [],       // [{name, dataUrl, blob}]
+  videos: [],       // [{type:'embed'|'file', src, name}]
+  sigHas: false,
+};
+var STORE_KEY = 'sp_profile_v1';
+var RECORDS_INDEX_KEY = 'sp_records_index_v1';  // array of {id, label, savedAt, cls, supervisor}
+var _currentRecordId = null;  // null = new unsaved record
+var mediaRecorder = null;
+var recChunks = [];
+var recInterval = null;
+var recSeconds = 0;
+
+// ════════════════════════════════════
+//  INIT
+// ════════════════════════════════════
+window.addEventListener('load', function() {
+  // Set today's date
+  var today = new Date();
+  document.getElementById('visitDate').value = today.toISOString().slice(0,10);
+  document.getElementById('heroDate').textContent = today.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+
+  // Load data from main app (localStorage)
+  loadFromMainApp();
+
+  // Load saved profile
+  loadSavedProfile();
+
+  // Init signature canvas
+  initSigCanvas();
+
+  // Drag & drop for photos
+  initDropZone();
+
+  // Aspect chips
+  document.querySelectorAll('.aspect-chip').forEach(function(chip) {
+    chip.addEventListener('click', function() {
+      var g = this.dataset.g;
+      this.classList.toggle('sel');
+      if(g==='neg') this.classList.toggle('neg');
+    });
+  });
+});
+
+// ════════════════════════════════════
+//  LOAD FROM MAIN APP
+// ════════════════════════════════════
+function loadFromMainApp() {
+  // Try to read from dalty grades localStorage
+  var keys = ['grades_v6','grades_v5','grades_v4','grades_v3'];
+  var DB = null;
+  for(var i=0;i<keys.length;i++){
+    try {
+      var raw = localStorage.getItem(keys[i]);
+      if(raw){ DB = JSON.parse(raw); break; }
+    } catch(e){}
+  }
+  if(!DB) {
+    // Try URL params (shared link)
+    loadFromURL();
+    return;
+  }
+
+  // Populate meta
+  var meta = DB.meta || {};
+  setChip('chipSchool','🏫',meta.schoolName||'المدرسة');
+  setChip('chipSubject','📚',meta.subject||'المادة');
+  setChip('chipTeacher','👤',meta.teacherName||'المعلمة');
+  document.getElementById('dispSchool').textContent = meta.schoolName||'—';
+  document.getElementById('dispSubject').textContent = meta.subject||'—';
+  document.getElementById('dispTeacher').textContent = meta.teacherName||'—';
+  document.getElementById('dispYear').textContent = (meta.schoolYear||'—') + ' — الفصل ' + (meta.semester||'—');
+  document.getElementById('topSubtitle').textContent = (meta.schoolName||'دفتري') + ' — ' + (meta.subject||'');
+
+  // Store DB globally for class switching
+  window._DB = DB;
+
+  // Populate class selector
+  var classes = DB.classes || [];
+  var sel = document.getElementById('clsSelector');
+  sel.innerHTML = '<option value="">— اختر الفصل —</option>';
+  classes.forEach(function(c){
+    var opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+
+  // Pick first class or from URL
+  var urlCls = getURLParam('cls');
+  var activeCls = urlCls && classes.indexOf(urlCls)>=0 ? urlCls : (classes[0]||'');
+  if(activeCls){ sel.value = activeCls; renderGradesTable(DB, activeCls); }
+}
+
+function onClassChange(cls){
+  if(!cls || !window._DB) return;
+  renderGradesTable(window._DB, cls);
+}
+
+function setChip(id, icon, text) {
+  var el = document.getElementById(id);
+  if(el) el.innerHTML = icon + ' <strong>' + esc(text) + '</strong>';
+}
+
+// ════════════════════════════════════
+//  GRADES TABLE
+// ════════════════════════════════════
+function renderGradesTable(DB, cls) {
+  var students = (DB.data && DB.data[cls]) || [];
+  if(!students.length) {
+    document.getElementById('gradesBlock').innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3);">لا توجد بيانات لهذا الفصل</div>';
+    return;
+  }
+  var activeWeeks = Math.min(Math.max(1, Number((DB.meta||{}).activeWeeks)||14), 14);
+  var html = '<div class="grades-wrap"><table class="grades-table"><thead><tr>';
+  html += '<th>م</th><th>اسم الطالب</th>';
+  html += '<th>متوسط التقييم<br><span style="font-weight:400;font-size:9px;">/20</span></th>';
+  html += '<th>متوسط الواجب<br><span style="font-weight:400;font-size:9px;">/10</span></th>';
+  html += '<th>السلوك<br><span style="font-weight:400;font-size:9px;">/10</span></th>';
+  html += '<th>الاختبارات<br><span style="font-weight:400;font-size:9px;">/30</span></th>';
+  html += '<th>المجموع<br><span style="font-weight:400;font-size:9px;">/70</span></th>';
+  html += '</tr></thead><tbody>';
+
+  var sorted = students.slice().sort(function(a,b){
+    return calcTotal(b,activeWeeks) - calcTotal(a,activeWeeks);
+  });
+
+  sorted.forEach(function(s, i) {
+    var res = calcStudentSimple(s, activeWeeks);
+    var totalClass = res.total >= 56 ? 'hi' : res.total >= 35 ? 'mid' : 'lo';
+    html += '<tr>';
+    html += '<td style="color:var(--text3);font-size:11px;">' + (i+1) + '</td>';
+    html += '<td>' + esc(s.name||'—') + '</td>';
+    html += '<td><span class="grade-pill ' + gradeClass(res.avgA,20) + '">' + res.avgA + '</span></td>';
+    html += '<td><span class="grade-pill ' + gradeClass(res.avgH,10) + '">' + res.avgH + '</span></td>';
+    html += '<td><span class="grade-pill ' + gradeClass(res.beh,10) + '">' + res.beh + '</span></td>';
+    html += '<td><span class="grade-pill ' + gradeClass(res.ex,30) + '">' + res.ex + '</span></td>';
+    html += '<td><span class="grade-total">' + res.total + '</span></td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  // Summary stats
+  var totals = sorted.map(function(s){ return calcTotal(s,activeWeeks); });
+  var avg = totals.length ? Math.round(totals.reduce(function(a,b){return a+b;},0)/totals.length) : 0;
+  var max = totals.length ? Math.max.apply(null,totals) : 0;
+  var min = totals.length ? Math.min.apply(null,totals) : 0;
+  var pass = totals.filter(function(t){return t>=35;}).length;
+
+  html += '<div class="info-grid" style="margin-top:12px;">';
+  html += '<div class="info-row"><div class="info-lbl">عدد الطلاب</div><div class="info-val">' + sorted.length + '</div></div>';
+  html += '<div class="info-row"><div class="info-lbl">المتوسط العام</div><div class="info-val">' + avg + ' / 70</div></div>';
+  html += '<div class="info-row"><div class="info-lbl">أعلى درجة</div><div class="info-val" style="color:#4ade80;">' + max + '</div></div>';
+  html += '<div class="info-row"><div class="info-lbl">الناجحون</div><div class="info-val" style="color:#4ade80;">' + pass + ' / ' + sorted.length + '</div></div>';
+  html += '</div>';
+
+  document.getElementById('gradesBlock').innerHTML = html;
+}
+
+function calcStudentSimple(s, aw) {
+  var aSum=0,aC=0,hSum=0,hC=0,bSum=0,bC=0,ex=0;
+  for(var w=1;w<=aw;w++){
+    var av=s['a'+w]; if(av!==''&&av!==undefined&&av!==null&&av!=='م'&&av!=='غ'&&!isNaN(Number(av))){ aSum+=Math.min(Number(av),20);aC++; }
+    var hv=s['h'+w]; if(hv!==''&&hv!==undefined&&hv!==null&&hv!=='م'&&hv!=='غ'&&!isNaN(Number(hv))){ hSum+=Math.min(Number(hv),10);hC++; }
+    var bv=s['bw'+w]; if(bv!==''&&bv!==undefined&&bv!==null&&bv!=='م'&&bv!=='غ'&&!isNaN(Number(bv))){ bSum+=Math.min(Number(bv),10);bC++; }
+  }
+  var e1=s.ex1,e2=s.ex2;
+  if(e1!==''&&e1!==undefined&&!isNaN(Number(e1))) ex+=Math.min(Number(e1),15);
+  if(e2!==''&&e2!==undefined&&!isNaN(Number(e2))) ex+=Math.min(Number(e2),15);
+  var avgA=aC?Math.round(aSum/aC):0;
+  var avgH=hC?Math.round(hSum/hC):0;
+  var beh=bC?Math.round(bSum/bC):0;
+  return {avgA:avgA,avgH:avgH,beh:beh,ex:Math.min(ex,30),total:avgA+avgH+beh+Math.min(ex,30)};
+}
+function calcTotal(s,aw){ return calcStudentSimple(s,aw).total; }
+function gradeClass(v,max){ var p=v/max; return p>=.75?'hi':p>=.5?'mid':'lo'; }
+
+// ════════════════════════════════════
+//  MEDIA TABS
+// ════════════════════════════════════
+function switchMedia(name, tab) {
+  document.querySelectorAll('.media-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.media-panel').forEach(function(p){ p.classList.remove('active'); });
+  tab.classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+}
+
+// ════════════════════════════════════
+//  PHOTOS
+// ════════════════════════════════════
+function initDropZone() {
+  var dz = document.getElementById('photoDropZone');
+  dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', function(){ dz.classList.remove('drag'); });
+  dz.addEventListener('drop', function(e){
+    e.preventDefault(); dz.classList.remove('drag');
+    handlePhotos(e.dataTransfer.files);
+  });
+}
+
+function handlePhotos(files) {
+  Array.from(files).forEach(function(file) {
+    if(!file.type.startsWith('image/')) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      SP.photos.push({name: file.name, dataUrl: e.target.result});
+      renderPhotoGrid();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotoGrid() {
+  var grid = document.getElementById('photoGrid');
+  grid.innerHTML = '';
+  SP.photos.forEach(function(p, i) {
+    var item = document.createElement('div');
+    item.className = 'media-item';
+    item.innerHTML = '<img src="'+p.dataUrl+'" alt="صورة '+(i+1)+'" onclick="openLightbox(\''+i+'\')"/>'+
+      '<button class="media-del" onclick="event.stopPropagation();deletePhoto('+i+')">✕</button>'+
+      '<div class="media-type-badge">📷</div>';
+    grid.appendChild(item);
+  });
+}
+
+function deletePhoto(i) { SP.photos.splice(i,1); renderPhotoGrid(); }
+function openLightbox(i) {
+  document.getElementById('lbImg').src = SP.photos[i].dataUrl;
+  document.getElementById('spLightbox').classList.add('open');
+}
+function closeLightbox() { document.getElementById('spLightbox').classList.remove('open'); }
+document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeLightbox(); });
+
+// ════════════════════════════════════
+//  AUDIO RECORDING
+// ════════════════════════════════════
+function toggleRecord() {
+  if(mediaRecorder && mediaRecorder.state === 'recording') {
+    stopRecord();
+  } else {
+    startRecord();
+  }
+}
+
+function startRecord() {
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream) {
+    recChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = function(e){ if(e.data.size>0) recChunks.push(e.data); };
+    mediaRecorder.onstop = function() {
+      var blob = new Blob(recChunks, {type:'audio/webm'});
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var name = 'تسجيل ' + new Date().toLocaleTimeString('ar-EG') + '.webm';
+        SP.audios.push({name:name, dataUrl:e.target.result});
+        renderAudioList();
+      };
+      reader.readAsDataURL(blob);
+      stream.getTracks().forEach(function(t){t.stop();});
+    };
+    mediaRecorder.start();
+    recSeconds = 0;
+    document.getElementById('recBtn').classList.add('recording');
+    document.getElementById('recIcon').textContent = '⏹';
+    document.getElementById('recLabel').textContent = 'إيقاف التسجيل';
+    document.getElementById('recStatus').textContent = 'جارٍ التسجيل...';
+    recInterval = setInterval(function(){
+      recSeconds++;
+      var m = String(Math.floor(recSeconds/60)).padStart(2,'0');
+      var s = String(recSeconds%60).padStart(2,'0');
+      document.getElementById('recTimer').textContent = m+':'+s;
+    }, 1000);
+    toast('🎙 بدأ التسجيل الصوتي');
+  }).catch(function(err){
+    toast('⚠ لا يمكن الوصول للميكروفون: '+err.message, 'err');
+  });
+}
+
+function stopRecord() {
+  if(mediaRecorder) mediaRecorder.stop();
+  clearInterval(recInterval);
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recIcon').textContent = '🎙';
+  document.getElementById('recLabel').textContent = 'بدء التسجيل';
+  document.getElementById('recStatus').textContent = 'تم حفظ التسجيل';
+  document.getElementById('recTimer').textContent = '00:00';
+  toast('✅ تم حفظ التسجيل الصوتي', 'ok');
+}
+
+function handleAudioFiles(files) {
+  Array.from(files).forEach(function(file){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      SP.audios.push({name:file.name, dataUrl:e.target.result});
+      renderAudioList();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderAudioList() {
+  var list = document.getElementById('audioList');
+  list.innerHTML = '';
+  SP.audios.forEach(function(a, i){
+    var item = document.createElement('div');
+    item.className = 'audio-item';
+    item.innerHTML = '<audio controls src="'+a.dataUrl+'"></audio>'+
+      '<div style="font-size:10px;color:var(--text3);min-width:80px;text-align:center;">'+esc(a.name.slice(0,20))+'</div>'+
+      '<button class="audio-del" onclick="deleteAudio('+i+')">🗑</button>';
+    list.appendChild(item);
+  });
+}
+function deleteAudio(i){ SP.audios.splice(i,1); renderAudioList(); }
+
+// ════════════════════════════════════
+//  VIDEO
+// ════════════════════════════════════
+function handleVideoFiles(files) {
+  Array.from(files).forEach(function(file){
+    var url = URL.createObjectURL(file);
+    SP.videos.push({type:'file', src:url, name:file.name});
+    renderVideoList();
+  });
+}
+
+function addVideoEmbed() {
+  var url = document.getElementById('videoUrl').value.trim();
+  if(!url){ toast('⚠ أدخل رابط الفيديو','err'); return; }
+  var embed = getEmbedUrl(url);
+  if(!embed){ toast('⚠ رابط غير مدعوم (يوتيوب أو Google Drive فقط)','err'); return; }
+  SP.videos.push({type:'embed', src:embed, name:url});
+  document.getElementById('videoUrl').value = '';
+  renderVideoList();
+  toast('✅ تم إضافة الفيديو','ok');
+}
+
+function getEmbedUrl(url) {
+  // YouTube
+  var ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if(ytMatch) return 'https://www.youtube.com/embed/' + ytMatch[1];
+  // YouTube embed already
+  if(url.includes('youtube.com/embed/')) return url;
+  // Google Drive
+  var gMatch = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if(gMatch) return 'https://drive.google.com/file/d/'+gMatch[1]+'/preview';
+  return null;
+}
+
+function renderVideoList() {
+  var list = document.getElementById('videoList');
+  list.innerHTML = '';
+  SP.videos.forEach(function(v, i){
+    var item = document.createElement('div');
+    item.className = 'video-embed-item';
+    if(v.type==='embed'){
+      item.innerHTML = '<iframe src="'+v.src+'" allowfullscreen></iframe>'+
+        '<button class="video-embed-del" onclick="deleteVideo('+i+')">✕ حذف</button>';
+    } else {
+      item.innerHTML = '<video controls src="'+v.src+'" style="width:100%;max-height:200px;"></video>'+
+        '<button class="video-embed-del" onclick="deleteVideo('+i+')">✕ حذف</button>';
+    }
+    list.appendChild(item);
+  });
+}
+function deleteVideo(i){ SP.videos.splice(i,1); renderVideoList(); }
+
+// ════════════════════════════════════
+//  SIGNATURE CANVAS
+// ════════════════════════════════════
+function initSigCanvas() {
+  var canvas = document.getElementById('sigCanvas');
+  var ghost = document.getElementById('sigGhost');
+  var ctx = canvas.getContext('2d');
+  var drawing = false;
+  var lastX = 0, lastY = 0;
+
+  function resize() {
+    var w = canvas.parentElement.clientWidth;
+    canvas.width = w;
+    ctx.strokeStyle = '#fcd34d';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function getPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    if(e.touches) {
+      return { x:(e.touches[0].clientX-rect.left)*scaleX, y:(e.touches[0].clientY-rect.top)*scaleY };
+    }
+    return { x:(e.clientX-rect.left)*scaleX, y:(e.clientY-rect.top)*scaleY };
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    var pos = getPos(e);
+    lastX = pos.x; lastY = pos.y;
+    ghost.style.opacity = '0';
+    SP.sigHas = true;
+  }
+  function draw(e) {
+    if(!drawing) return;
+    e.preventDefault();
+    var pos = getPos(e);
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    lastX = pos.x; lastY = pos.y;
+  }
+  function endDraw(e) { drawing = false; }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('mouseleave', endDraw);
+  canvas.addEventListener('touchstart', startDraw, {passive:false});
+  canvas.addEventListener('touchmove', draw, {passive:false});
+  canvas.addEventListener('touchend', endDraw);
+}
+
+function clearSig() {
+  var canvas = document.getElementById('sigCanvas');
+  canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+  document.getElementById('sigGhost').style.opacity = '1';
+  SP.sigHas = false;
+  toast('تم مسح التوقيع');
+}
+
+// ════════════════════════════════════
+//  SAVE / LOAD
+// ════════════════════════════════════
+// ── Records index helpers ──
+function getRecordsIndex(){
+  try{ var r=localStorage.getItem(RECORDS_INDEX_KEY); return r?JSON.parse(r):[]; }catch(e){return [];}
+}
+function saveRecordsIndex(idx){
+  try{ localStorage.setItem(RECORDS_INDEX_KEY,JSON.stringify(idx)); }catch(e){}
+}
+
+function saveProfile() {
+  var cls = document.getElementById('clsSelector').value;
+  var supName = document.getElementById('supervisorName').value.trim();
+  var visitDate = document.getElementById('visitDate').value;
+
+  // Generate or reuse record ID
+  var rid = _currentRecordId || ('rec_' + Date.now());
+  _currentRecordId = rid;
+
+  var profile = {
+    id: rid,
+    supervisorName: supName,
+    supervisorTitle: document.getElementById('supervisorTitle').value,
+    supervisorOrg: document.getElementById('supervisorOrg').value,
+    visitDate: visitDate,
+    visitFrom: document.getElementById('visitFrom').value,
+    visitTo: document.getElementById('visitTo').value,
+    visitNotes: document.getElementById('visitNotes').value,
+    gradesNotes: document.getElementById('gradesNotes').value,
+    sigText: document.getElementById('sigText').value,
+    stars: (document.querySelector('input[name=stars]:checked')||{}).value || '',
+    posAspects: Array.from(document.querySelectorAll('#posAspects .aspect-chip.sel')).map(function(c){return c.textContent;}),
+    negAspects: Array.from(document.querySelectorAll('#negAspects .aspect-chip.neg')).map(function(c){return c.textContent;}),
+    selectedCls: cls,
+    savedAt: new Date().toISOString(),
+  };
+
+  // Signature canvas
+  var canvas = document.getElementById('sigCanvas');
+  if(SP.sigHas) profile.sigDataUrl = canvas.toDataURL('image/png');
+
+  var saved = false;
+  try {
+    localStorage.setItem(STORE_KEY+'_rec_'+rid, JSON.stringify(profile));
+    saved = true;
+  } catch(e) {
+    try {
+      var minimal = Object.assign({},profile);
+      delete minimal.sigDataUrl;
+      localStorage.setItem(STORE_KEY+'_rec_'+rid, JSON.stringify(minimal));
+      saved = true;
+    } catch(e2){}
+  }
+
+  // Save photos separately for this record
+  try {
+    var photoData = SP.photos.map(function(p){return {name:p.name,dataUrl:p.dataUrl};});
+    localStorage.setItem(STORE_KEY+'_rec_'+rid+'_photos', JSON.stringify(photoData));
+  } catch(e) {
+    localStorage.removeItem(STORE_KEY+'_rec_'+rid+'_photos');
+  }
+
+  // Save audios separately for this record
+  try {
+    localStorage.setItem(STORE_KEY+'_rec_'+rid+'_audios', JSON.stringify(SP.audios));
+  } catch(e) {
+    localStorage.removeItem(STORE_KEY+'_rec_'+rid+'_audios');
+  }
+
+  if(saved){
+    // Update index
+    var idx = getRecordsIndex();
+    var existing = idx.findIndex(function(r){return r.id===rid;});
+    var entry = {
+      id: rid,
+      supervisor: supName || 'بدون اسم',
+      cls: cls || '—',
+      visitDate: visitDate || '',
+      savedAt: profile.savedAt,
+      photosCount: SP.photos.length,
+      audiosCount: SP.audios.length,
+      stars: profile.stars,
+    };
+    if(existing>=0) idx[existing]=entry;
+    else idx.unshift(entry);
+    saveRecordsIndex(idx);
+    toast('✅ تم حفظ المتابعة', 'ok');
+  } else {
+    toast('❌ فشل الحفظ — المساحة ممتلئة', 'err');
+  }
+}
+
+function loadSavedProfile() {
+  // Load most recent record from index
+  var idx = getRecordsIndex();
+  if(idx.length > 0) loadRecord(idx[0].id);
+}
+
+function loadRecord(rid) {
+  try {
+    var raw = localStorage.getItem(STORE_KEY+'_rec_'+rid);
+    if(!raw) { toast('⚠ لم يُعثر على هذا الملف','err'); return; }
+    var p = JSON.parse(raw);
+    _currentRecordId = rid;
+
+    // Reset form
+    clearSig();
+    SP.photos=[]; SP.audios=[]; SP.videos=[];
+    renderPhotoGrid(); renderAudioList(); renderVideoList();
+    document.querySelectorAll('.aspect-chip').forEach(function(c){c.classList.remove('sel','neg');});
+    document.querySelectorAll('input[name=stars]').forEach(function(r){r.checked=false;});
+
+    if(p.supervisorName) document.getElementById('supervisorName').value = p.supervisorName;
+    if(p.supervisorTitle) document.getElementById('supervisorTitle').value = p.supervisorTitle;
+    if(p.supervisorOrg) document.getElementById('supervisorOrg').value = p.supervisorOrg;
+    if(p.visitDate) document.getElementById('visitDate').value = p.visitDate;
+    if(p.visitFrom) document.getElementById('visitFrom').value = p.visitFrom;
+    if(p.visitTo) document.getElementById('visitTo').value = p.visitTo;
+    if(p.visitNotes) document.getElementById('visitNotes').value = p.visitNotes;
+    if(p.gradesNotes) document.getElementById('gradesNotes').value = p.gradesNotes;
+    if(p.sigText) document.getElementById('sigText').value = p.sigText;
+    if(p.stars) { var sr = document.getElementById('s'+p.stars); if(sr) sr.checked=true; }
+    if(p.selectedCls){
+      var sel = document.getElementById('clsSelector');
+      if(sel){ sel.value=p.selectedCls; onClassChange(p.selectedCls); }
+    }
+    // Photos
+    try {
+      var pr = localStorage.getItem(STORE_KEY+'_rec_'+rid+'_photos');
+      if(pr){ SP.photos=JSON.parse(pr); renderPhotoGrid(); }
+    } catch(e){}
+    // Audios
+    try {
+      var ar = localStorage.getItem(STORE_KEY+'_rec_'+rid+'_audios');
+      if(ar){ SP.audios=JSON.parse(ar); renderAudioList(); }
+    } catch(e){}
+    // Signature
+    if(p.sigDataUrl){
+      var canvas=document.getElementById('sigCanvas');
+      var img=new Image();
+      img.onload=function(){
+        canvas.getContext('2d').drawImage(img,0,0);
+        document.getElementById('sigGhost').style.opacity='0';
+        SP.sigHas=true;
+      };
+      img.src=p.sigDataUrl;
+    }
+    // Aspects
+    if(p.posAspects){
+      document.querySelectorAll('#posAspects .aspect-chip').forEach(function(c){
+        if(p.posAspects.indexOf(c.textContent)>=0) c.classList.add('sel');
+      });
+    }
+    if(p.negAspects){
+      document.querySelectorAll('#negAspects .aspect-chip').forEach(function(c){
+        if(p.negAspects.indexOf(c.textContent)>=0){c.classList.add('sel');c.classList.add('neg');}
+      });
+    }
+    closeRecordsModal();
+    window.scrollTo({top:0,behavior:'smooth'});
+    toast('✅ تم تحميل المتابعة', 'ok');
+  } catch(e){ toast('⚠ خطأ في تحميل الملف','err'); }
+}
+
+// ════════════════════════════════════
+//  SHARE MODAL
+// ════════════════════════════════════
+function openShareModal() {
+  document.getElementById('shareModal').classList.add('open');
+  // Build share URL (just current page URL for now)
+  var url = window.location.href.split('?')[0];
+  var name = document.getElementById('supervisorName').value;
+  var date = document.getElementById('visitDate').value;
+  if(name) url += '?supervisor='+encodeURIComponent(name);
+  if(date) url += '&date='+encodeURIComponent(date);
+  document.getElementById('shareLinkBox').textContent = url;
+}
+function closeShareModal() { document.getElementById('shareModal').classList.remove('open'); }
+document.getElementById('shareModal').addEventListener('click', function(e){
+  if(e.target===this) closeShareModal();
+});
+
+function copyShareLink() {
+  var text = document.getElementById('shareLinkBox').textContent;
+  navigator.clipboard.writeText(text).then(function(){
+    toast('✅ تم نسخ الرابط','ok');
+  }).catch(function(){
+    toast('⚠ لم يتم النسخ','err');
+  });
+}
+
+function shareWhatsApp() {
+  var text = 'ملف المتابعة — ' + (document.getElementById('supervisorName').value||'') +
+    '\n' + document.getElementById('shareLinkBox').textContent;
+  window.open('https://wa.me/?text='+encodeURIComponent(text));
+}
+
+// ════════════════════════════════════
+//  URL PARAMS
+// ════════════════════════════════════
+function getURLParam(key) {
+  var params = new URLSearchParams(window.location.search);
+  return params.get(key);
+}
+function loadFromURL() {
+  var sup = getURLParam('supervisor');
+  if(sup) document.getElementById('supervisorName').value = sup;
+  var date = getURLParam('date');
+  if(date) document.getElementById('visitDate').value = date;
+}
+
+// ════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+var _toastTimer;
+function toast(msg, type) {
+  var el = document.getElementById('spToast');
+  el.textContent = msg;
+  el.className = 'show' + (type?' '+type:'');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function(){ el.className=''; }, 2800);
+}
+
+// ════════════════════════════════════
+//  RECORDS MODAL
+// ════════════════════════════════════
+function openRecordsModal(){
+  renderRecordsList();
+  document.getElementById('recordsModal').classList.add('open');
+}
+function closeRecordsModal(){
+  document.getElementById('recordsModal').classList.remove('open');
+}
+document.getElementById('recordsModal').addEventListener('click',function(e){
+  if(e.target===this) closeRecordsModal();
+});
+
+function renderRecordsList(){
+  var idx = getRecordsIndex();
+  var countEl = document.getElementById('recordsCount');
+  var listEl = document.getElementById('recordsList');
+  countEl.textContent = idx.length===0 ? 'لا توجد متابعات محفوظة بعد' : idx.length + ' متابعة محفوظة';
+
+  if(idx.length===0){
+    listEl.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3);"><div style="font-size:40px;margin-bottom:10px;">📭</div><div>لم تُحفظ أي متابعة بعد.<br>اضغط حفظ لحفظ المتابعة الحالية.</div></div>';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  idx.forEach(function(r){
+    var stars = r.stars ? '★'.repeat(Number(r.stars)) : '';
+    var dateStr = r.visitDate ? new Date(r.visitDate+'T00:00:00').toLocaleDateString('ar-EG',{year:'numeric',month:'long',day:'numeric'}) : '—';
+    var savedStr = new Date(r.savedAt).toLocaleDateString('ar-EG',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    var isActive = r.id === _currentRecordId;
+
+    var card = document.createElement('div');
+    card.style.cssText = 'background:'+(isActive?'rgba(59,130,246,.12)':'rgba(255,255,255,.04)')+';border:1px solid '+(isActive?'rgba(59,130,246,.4)':'var(--border)')+';border-radius:12px;padding:14px;margin-bottom:10px;';
+
+    var supDiv = document.createElement('div');
+    supDiv.style.cssText = 'font-size:13px;font-weight:900;color:'+(isActive?'var(--blue)':'var(--text)');
+    supDiv.textContent = (isActive?'● ':'')+r.supervisor;
+
+    var metaDiv = document.createElement('div');
+    metaDiv.style.cssText = 'font-size:10.5px;color:var(--text3);margin-top:3px;';
+    metaDiv.textContent = r.cls + (r.cls&&r.visitDate?' — ':'')+dateStr;
+
+    var tagsDiv = document.createElement('div');
+    tagsDiv.style.cssText = 'display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;';
+    if(stars) tagsDiv.innerHTML += '<span style="color:var(--gold);font-size:11px;">'+stars+'</span>';
+    if(r.photosCount) tagsDiv.innerHTML += '<span style="font-size:10px;color:var(--text3);">📷 '+r.photosCount+'</span>';
+    if(r.audiosCount) tagsDiv.innerHTML += '<span style="font-size:10px;color:var(--text3);">🎙 '+r.audiosCount+'</span>';
+    tagsDiv.innerHTML += '<span style="font-size:9.5px;color:var(--text3);">حُفظ '+esc(savedStr)+'</span>';
+
+    var infoDiv = document.createElement('div');
+    infoDiv.style.cssText = 'flex:1;min-width:0;';
+    infoDiv.appendChild(supDiv);
+    infoDiv.appendChild(metaDiv);
+    infoDiv.appendChild(tagsDiv);
+
+    var openBtn = document.createElement('button');
+    openBtn.textContent = 'فتح';
+    openBtn.style.cssText = 'background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:var(--blue);border-radius:8px;padding:6px 12px;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;';
+    openBtn.onclick = (function(rid){ return function(){ loadRecord(rid); }; })(r.id);
+
+    var delBtn = document.createElement('button');
+    delBtn.textContent = 'حذف';
+    delBtn.style.cssText = 'background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);color:#f87171;border-radius:8px;padding:6px 12px;font-family:Cairo,sans-serif;font-size:11px;cursor:pointer;';
+    delBtn.onclick = (function(rid, sname){ return function(){ confirmDeleteRecord(rid, sname); }; })(r.id, r.supervisor);
+
+    var btnsDiv = document.createElement('div');
+    btnsDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;flex-shrink:0;';
+    btnsDiv.appendChild(openBtn);
+    btnsDiv.appendChild(delBtn);
+
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:flex-start;justify-content:space-between;gap:8px;';
+    row.appendChild(infoDiv);
+    row.appendChild(btnsDiv);
+    card.appendChild(row);
+    listEl.appendChild(card);
+  });
+}
+
+function newVisitRecord(){
+  _currentRecordId = null;
+  // Clear form
+  ['supervisorName','supervisorTitle','supervisorOrg','visitFrom','visitTo','visitNotes','gradesNotes','sigText'].forEach(function(id){
+    var el=document.getElementById(id); if(el) el.value='';
+  });
+  document.getElementById('visitDate').value = new Date().toISOString().slice(0,10);
+  document.getElementById('clsSelector').value = '';
+  document.getElementById('gradesBlock').innerHTML='<div style="text-align:center;padding:20px;color:var(--text3);">اختر الفصل من الأعلى</div>';
+  document.querySelectorAll('.aspect-chip').forEach(function(c){c.classList.remove('sel','neg');});
+  document.querySelectorAll('input[name=stars]').forEach(function(r){r.checked=false;});
+  clearSig();
+  SP.photos=[]; SP.audios=[]; SP.videos=[];
+  renderPhotoGrid(); renderAudioList(); renderVideoList();
+  closeRecordsModal();
+  window.scrollTo({top:0,behavior:'smooth'});
+  toast('متابعة جديدة — أدخلي البيانات واحفظي');
+}
+
+function confirmDeleteRecord(rid, name){
+  document.getElementById('confirmTitle').textContent = 'حذف المتابعة';
+  document.getElementById('confirmMsg').textContent = 'سيتم حذف متابعة "' + name + '" نهائياً. هل أنت متأكدة؟';
+  document.getElementById('confirmYesBtn').onclick = function(){ deleteRecord(rid); };
+  closeRecordsModal();
+  document.getElementById('confirmModal').classList.add('open');
+}
+function confirmClearAll(){
+  var idx=getRecordsIndex();
+  if(!idx.length){ toast('لا توجد متابعات للحذف'); return; }
+  document.getElementById('confirmTitle').textContent = 'مسح جميع المتابعات';
+  document.getElementById('confirmMsg').textContent = 'سيتم حذف جميع المتابعات المحفوظة ('+idx.length+') نهائياً. لا يمكن التراجع.';
+  document.getElementById('confirmYesBtn').onclick = function(){ clearAllRecords(); };
+  closeRecordsModal();
+  document.getElementById('confirmModal').classList.add('open');
+}
+function closeConfirmModal(){ document.getElementById('confirmModal').classList.remove('open'); }
+document.getElementById('confirmModal').addEventListener('click',function(e){
+  if(e.target===this) closeConfirmModal();
+});
+
+function deleteRecord(rid){
+  var idx=getRecordsIndex().filter(function(r){return r.id!==rid;});
+  saveRecordsIndex(idx);
+  localStorage.removeItem(STORE_KEY+'_rec_'+rid);
+  localStorage.removeItem(STORE_KEY+'_rec_'+rid+'_photos');
+  localStorage.removeItem(STORE_KEY+'_rec_'+rid+'_audios');
+  if(_currentRecordId===rid){ _currentRecordId=null; }
+  closeConfirmModal();
+  toast('✅ تم حذف المتابعة','ok');
+}
+
+function clearAllRecords(){
+  var idx=getRecordsIndex();
+  idx.forEach(function(r){
+    localStorage.removeItem(STORE_KEY+'_rec_'+r.id);
+    localStorage.removeItem(STORE_KEY+'_rec_'+r.id+'_photos');
+    localStorage.removeItem(STORE_KEY+'_rec_'+r.id+'_audios');
+  });
+  saveRecordsIndex([]);
+  _currentRecordId=null;
+  closeConfirmModal();
+  toast('✅ تم مسح جميع المتابعات','ok');
+}
+</script>
+</body>
+</html>
