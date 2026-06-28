@@ -178,6 +178,12 @@ var FB_PATH = _uidParam
   : "dalty_grades/main"; /* fallback للروابط القديمة */
 var DB = null, currentClass = "", searchTerm = "";
 
+/* ── فلاتر الأسابيع والأعمدة من الرابط ── */
+var _weeksParam = _urlParams.get('weeks'); // مثال: "1,2,3,4"
+var _colsParam  = _urlParams.get('cols');  // مثال: "a,h,bw,ex,total"
+var _filterWeeks = _weeksParam ? _weeksParam.split(',').map(Number).filter(Boolean) : null;
+var _filterCols  = _colsParam  ? _colsParam.split(',') : null;
+
 function restoreKeys(obj) {
   if (typeof obj !== "object" || obj === null) return obj;
   if (Array.isArray(obj)) return obj.map(restoreKeys);
@@ -255,6 +261,14 @@ function buildUI() {
 function getActiveWeeks() {
   return parseInt((DB.meta && DB.meta.activeWeeks) || 14);
 }
+function getWeeksList() {
+  var total = getActiveWeeks();
+  var all = []; for(var i=1;i<=total;i++) all.push(i);
+  return _filterWeeks ? _filterWeeks.filter(function(w){ return w>=1 && w<=total; }) : all;
+}
+function showCol(col) {
+  return !_filterCols || _filterCols.indexOf(col) !== -1;
+}
 
 function gradeColor(v, max) {
   if (v === null || v === undefined || v === "" || v === "غ" || v === "ع") return "grade-abs";
@@ -293,21 +307,21 @@ function renderTable() {
     return;
   }
 
-  var W = getActiveWeeks();
+  var WL = getWeeksList(); /* قائمة الأسابيع المفلترة */
 
   /* حساب بيانات كل طالب */
   var rows = students.map(function(st) {
-    var weeks = [];
-    for (var w = 1; w <= W; w++) {
-      weeks.push({
+    var weeksData = {};
+    WL.forEach(function(w) {
+      weeksData[w] = {
         a:  safeNum(st["a"  + w]),
         h:  safeNum(st["h"  + w]),
         bw: safeNum(st["bw" + w])
-      });
-    }
-    var allA  = weeks.map(function(x){return x.a;});
-    var allH  = weeks.map(function(x){return x.h;});
-    var allBW = weeks.map(function(x){return x.bw;});
+      };
+    });
+    var allA  = WL.map(function(w){ return weeksData[w].a; });
+    var allH  = WL.map(function(w){ return weeksData[w].h; });
+    var allBW = WL.map(function(w){ return weeksData[w].bw; });
     var ex1 = safeNum(st.ex1), ex2 = safeNum(st.ex2);
     var avgA  = avg(allA);
     var avgH  = avg(allH);
@@ -318,7 +332,7 @@ function renderTable() {
       var parts = [avgA, avgH, avgBW, avgEx].filter(function(x){return x!==null;});
       if (parts.length) total = Math.round(parts.reduce(function(a,b){return a+b;},0));
     }
-    return { st: st, weeks: weeks, avgA: avgA, avgH: avgH, avgBW: avgBW, ex1: ex1, ex2: ex2, avgEx: avgEx, total: total };
+    return { st: st, weeksData: weeksData, avgA: avgA, avgH: avgH, avgBW: avgBW, ex1: ex1, ex2: ex2, avgEx: avgEx, total: total };
   });
 
   /* ترتيب */
@@ -349,21 +363,29 @@ function renderTable() {
   h += '<tr class="group-row">';
   h += '<th rowspan="2" style="min-width:160px;text-align:right;">اسم الطالب</th>';
   h += '<th rowspan="2" style="min-width:80px;text-align:center;">رابط</th>';
-  for (var w = 1; w <= W; w++) {
-    h += '<th colspan="3" class="week-head">أسبوع ' + w + '</th>';
-  }
-  h += '<th colspan="3" class="avg-head">المتوسطات</th>';
-  h += '<th colspan="2" class="avg-head">الاختبارات</th>';
-  h += '<th rowspan="2" class="sum-head">المجموع</th>';
+  WL.forEach(function(w) {
+    var span = (showCol('a')?1:0)+(showCol('h')?1:0)+(showCol('bw')?1:0);
+    if(span>0) h += '<th colspan="'+span+'" class="week-head">أسبوع ' + w + '</th>';
+  });
+  var avgSpan = (showCol('a')?1:0)+(showCol('h')?1:0)+(showCol('bw')?1:0);
+  if(avgSpan>0) h += '<th colspan="'+avgSpan+'" class="avg-head">المتوسطات</th>';
+  var exSpan = (showCol('ex1')?1:0)+(showCol('ex2')?1:0);
+  if(exSpan>0) h += '<th colspan="'+exSpan+'" class="avg-head">الاختبارات</th>';
+  if(showCol('total')) h += '<th rowspan="2" class="sum-head">المجموع</th>';
   h += '</tr>';
 
   /* صف الأعمدة */
   h += '<tr class="col-row">';
-  for (var w = 1; w <= W; w++) {
-    h += '<th>تقييم</th><th>واجب</th><th>سلوك</th>';
-  }
-  h += '<th>تقييم</th><th>واجب</th><th>سلوك</th>';
-  h += '<th>اختبار 1</th><th>اختبار 2</th>';
+  WL.forEach(function() {
+    if(showCol('a'))  h += '<th>تقييم</th>';
+    if(showCol('h'))  h += '<th>واجب</th>';
+    if(showCol('bw')) h += '<th>سلوك</th>';
+  });
+  if(showCol('a'))   h += '<th>تقييم</th>';
+  if(showCol('h'))   h += '<th>واجب</th>';
+  if(showCol('bw'))  h += '<th>سلوك</th>';
+  if(showCol('ex1')) h += '<th>اختبار 1</th>';
+  if(showCol('ex2')) h += '<th>اختبار 2</th>';
   h += '</tr></thead><tbody>';
 
   filtered.forEach(function(row) {
@@ -384,28 +406,30 @@ function renderTable() {
     h += '<td style="text-align:center;"><button class="link-btn" onclick="copyStudentLink(this,\'' + (st.name||'').replace(/'/g,"\\'") + '\')" title="نسخ رابط الطالب">🔗 نسخ</button></td>';
 
     /* أعمدة كل أسبوع */
-    for (var w = 0; w < W; w++) {
-      var wk = row.weeks[w];
-      h += cellVal(wk.a,  20);
-      h += cellVal(wk.h,  10);
-      h += cellVal(wk.bw, 10);
-    }
+    WL.forEach(function(w) {
+      var wk = row.weeksData[w];
+      if(showCol('a'))  h += cellVal(wk.a,  20);
+      if(showCol('h'))  h += cellVal(wk.h,  10);
+      if(showCol('bw')) h += cellVal(wk.bw, 10);
+    });
 
     /* متوسطات */
-    h += cellVal(row.avgA,  20);
-    h += cellVal(row.avgH,  10);
-    h += cellVal(row.avgBW, 10);
+    if(showCol('a'))  h += cellVal(row.avgA,  20);
+    if(showCol('h'))  h += cellVal(row.avgH,  10);
+    if(showCol('bw')) h += cellVal(row.avgBW, 10);
 
     /* اختبارات */
-    h += cellVal(row.ex1, 15);
-    h += cellVal(row.ex2, 15);
+    if(showCol('ex1')) h += cellVal(row.ex1, 15);
+    if(showCol('ex2')) h += cellVal(row.ex2, 15);
 
     /* مجموع */
-    if (st._totalAbsent) {
-      h += '<td><span class="grade-abs">غائب</span></td>';
-    } else {
-      var tc = gradeColor(row.total, Math.max.apply(null, totals.concat([1])));
-      h += '<td class="grade-total ' + tc + '">' + (row.total !== null ? row.total : '—') + '</td>';
+    if(showCol('total')) {
+      if (st._totalAbsent) {
+        h += '<td><span class="grade-abs">غائب</span></td>';
+      } else {
+        var tc = gradeColor(row.total, Math.max.apply(null, totals.concat([1])));
+        h += '<td class="grade-total ' + tc + '">' + (row.total !== null ? row.total : '—') + '</td>';
+      }
     }
 
     h += '</tr>';

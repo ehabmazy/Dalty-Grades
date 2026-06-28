@@ -43,6 +43,96 @@ function applyPeriodsPerDay(n){
   renderSettings();
 }
 
+// ── قسم "تأثير الغياب": يُعاد رسمه بمعزل عن باقي صفحة الإعدادات ──
+function _renderAbsenceModeSection(){
+  var _absMode=DB.meta.absenceMode||'none';
+  var _absAllowed=Math.max(0,Number(DB.meta.absenceAllowed)||0);
+  var _absDeductPer=Math.max(0,Number(DB.meta.absenceDeductPer)||0);
+  var h='';
+  var modes=[
+    {val:'none', icon:'🚫', label:'بدون تأثير', desc:'الغياب لا يؤثر على المجموع'},
+    {val:'zero', icon:'0️⃣', label:'غ = صفر',    desc:'أي غياب مسجّل → المجموع = 0'},
+    {val:'deduct',icon:'➖',label:'خصم بالفترات',desc:'خصم درجات بعد الحد المسموح'}
+  ];
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  modes.forEach(function(m){
+    var active=_absMode===m.val;
+    h+='<button onclick="updateAbsenceMode(\''+m.val+'\')" ';
+    h+='style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 12px;border-radius:10px;border:2px solid '+(active?'#3b82f6':'#1e3a5f')+';background:'+(active?'#1e3a5f':'transparent')+';color:'+(active?'#93c5fd':'#64748b')+';cursor:pointer;min-width:88px;transition:all .2s;">';
+    h+='<span style="font-size:18px;">'+m.icon+'</span>';
+    h+='<span style="font-size:11px;font-weight:'+(active?'700':'400')+';">'+m.label+'</span>';
+    h+='</button>';
+  });
+  h+='</div>';
+  if(_absMode==='none'){
+    h+='<span class="settings-desc">الغياب المسجّل في صفحة الحضور لا يدخل في حساب المجموع.</span>';
+  } else if(_absMode==='zero'){
+    h+='<span class="settings-desc" style="color:#fbbf24;">⚠️ أي طالب لديه فترة غياب مسجّلة واحدة على الأقل سيظهر مجموعه <strong>0</strong>.</span>';
+  } else if(_absMode==='deduct'){
+    var _exExtra=3;
+    var _exDeduct=_absDeductPer>0?_exExtra*_absDeductPer:0;
+    h+='<div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-top:4px;">';
+    h+='<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">';
+    h+='<span style="font-size:9px;color:#94a3b8;white-space:nowrap;">فترات مسموح بها</span>';
+    h+='<input type="number" class="s-inp" style="width:64px;text-align:center;" min="0" max="999" value="'+_absAllowed+'" oninput="DB.meta.absenceAllowed=Math.max(0,Number(this.value)||0);saveDB();updateAbsenceMode();"/>';
+    h+='</div>';
+    h+='<div style="color:#64748b;font-size:16px;align-self:center;margin-top:14px;">→</div>';
+    h+='<div style="display:flex;flex-direction:column;gap:3px;align-items:center;">';
+    h+='<span style="font-size:9px;color:#94a3b8;white-space:nowrap;">درجة خصم / فترة زائدة</span>';
+    h+='<input type="number" class="s-inp" style="width:64px;text-align:center;" min="0" max="70" step="0.5" value="'+_absDeductPer+'" oninput="DB.meta.absenceDeductPer=Math.max(0,Number(this.value)||0);saveDB();updateAbsenceMode();"/>';
+    h+='</div>';
+    h+='</div>';
+    if(_absDeductPer>0){
+      h+='<span class="settings-desc">مثال: طالب غاب '+(_absAllowed+_exExtra)+' فترة → زائد '+_exExtra+' × '+_absDeductPer+' = <strong style="color:#f87171;">−'+_exDeduct+' درجة</strong></span>';
+    } else {
+      h+='<span class="settings-desc" style="color:#f87171;">⚠️ اضبط "درجة خصم / فترة زائدة" بقيمة أكبر من صفر لتفعيل الخصم.</span>';
+    }
+  }
+  return h;
+}
+// تُستدعى من أزرار/حقول قسم "تأثير الغياب" — تُحدّث القسم نفسه فقط
+function updateAbsenceMode(val){
+  if(val!==undefined)DB.meta.absenceMode=val;
+  saveDB();
+  var el=document.getElementById('absenceModeSection');
+  if(el){el.innerHTML=_renderAbsenceModeSection();}
+  else{renderSettings();} // احتياط في حال عدم وجود الحاوية
+}
+
+// ── قسم "غياب الاختبار": يُعاد رسمه بمعزل عن باقي صفحة الإعدادات ──
+function _renderExamAbsenceModeSection(){
+  var _exAbsMode=DB.meta.examAbsenceMode||'zero';
+  var exAbsModes=[
+    {val:'zero',   icon:'0️⃣', label:'غ = صفر',       desc:'الغياب في الاختبار يُحتسب 0 من الدرجة الكاملة'},
+    {val:'exclude',icon:'⏭️', label:'غ = يُحذف',     desc:'الاختبار يُحذف من الحساب كأنه لم يُجرَ'}
+  ];
+  var h='';
+  h+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  exAbsModes.forEach(function(m){
+    var active=_exAbsMode===m.val;
+    h+='<button onclick="updateExamAbsenceMode(\''+m.val+'\')" ';
+    h+='style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 10px;border-radius:10px;border:2px solid '+(active?'#f59e0b':'#1e3a5f')+';background:'+(active?'rgba(245,158,11,.15)':'transparent')+';color:'+(active?'#fbbf24':'#64748b')+';cursor:pointer;min-width:88px;transition:all .2s;">';
+    h+='<span style="font-size:18px;">'+m.icon+'</span>';
+    h+='<span style="font-size:11px;font-weight:'+(active?'700':'400')+';">'+m.label+'</span>';
+    h+='</button>';
+  });
+  h+='</div>';
+  var _exAbsDesc={
+    zero:   'الطالب الغائب عن الاختبار يأخذ <strong>صفراً</strong> من درجته الكاملة.',
+    exclude:'الاختبار الغائب <strong>يُحذف</strong> من الحساب — كأن الطالب أجرى الاختبار الآخر فقط.'
+  };
+  h+='<span class="settings-desc" style="margin-top:4px;">'+_exAbsDesc[_exAbsMode]+'</span>';
+  return h;
+}
+// تُستدعى من أزرار قسم "غياب الاختبار" — تُحدّث القسم نفسه فقط
+function updateExamAbsenceMode(val){
+  DB.meta.examAbsenceMode=val;
+  saveDB();
+  var el=document.getElementById('examAbsenceModeSection');
+  if(el){el.innerHTML=_renderExamAbsenceModeSection();}
+  else{renderSettings();}
+}
+
 function renderSettings(){
   var root=document.getElementById("settingsRoot");
   if(!root)return;
@@ -187,17 +277,17 @@ function renderSettings(){
   html+='</div>'; // end grid
 
   // ── وقت تحويل عرض اليوم التالي ──
-  var _ndh=DB.meta.nextDayHour!=null?DB.meta.nextDayHour:12;
+  var _ndo=DB.meta.nextDayOffsetHours!=null?DB.meta.nextDayOffsetHours:0;
   html+='<div class="settings-row" style="margin-top:8px;">';
-  html+='<span class="settings-lbl">🌅 عرض فترات الغد بعد</span>';
+  html+='<span class="settings-lbl">🌙 عرض فترات الغد قبل منتصف الليل بـ</span>';
   html+='<div class="settings-val" style="display:flex;align-items:center;gap:6px;">';
-  html+='<select class="s-sel" onchange="DB.meta.nextDayHour=Number(this.value);saveDB();showSnack(\'✅ تم الحفظ\');">';
-  [6,7,8,9,10,11,12,13,14,15,16,17,18].forEach(function(h){
-    html+='<option value="'+h+'"'+(_ndh===h?' selected':'')+'>'+h+':00</option>';
+  html+='<select class="s-sel" onchange="DB.meta.nextDayOffsetHours=Number(this.value);saveDB();showSnack(\'✅ تم الحفظ\');">';
+  [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18].forEach(function(h){
+    var lbl=h===0?'بدون (منتصف الليل 00:00)':h+' ساعة';
+    html+='<option value="'+h+'"'+(_ndo===h?' selected':'')+'>'+lbl+'</option>';
   });
   html+='</select>';
-  html+='<span class="settings-desc">يوم اليوم الدراسي</span>';
-  html+='</div></div>';
+  html+='<span class="settings-desc">افتراضيًا تظهر فترات الغد بعد منتصف الليل مباشرة (00:00)</span></div></div>';
 
   html+='</div></div>';
 
@@ -280,9 +370,20 @@ function renderSettings(){
   html+='<span class="settings-lbl">حد النجاح:</span>';
   html+='<div class="settings-val"><span style="color:#10b981;font-weight:700;">60 / '+tmax+'</span>';
   html+='<span class="settings-desc">ثابت عند 60%</span></div></div>';
+
+  // ── تأثير الغياب على المجموع ──
+  html+='<div class="settings-row" style="border-top:1px solid #1e3a5f;padding-top:10px;margin-top:4px;align-items:flex-start;">';
+  html+='<span class="settings-lbl" style="padding-top:6px;">تأثير الغياب:</span>';
+  html+='<div class="settings-val" style="gap:8px;" id="absenceModeSection">'+_renderAbsenceModeSection()+'</div>';
   html+='</div></div>';
 
-  // ── الأعمدة ──
+  // ── غياب الاختبارات ──
+  html+='<div class="settings-row" style="border-top:1px solid #1e3a5f;padding-top:10px;margin-top:4px;align-items:flex-start;">';
+  html+='<span class="settings-lbl" style="padding-top:6px;">غياب الاختبار:</span>';
+  html+='<div class="settings-val" style="gap:8px;" id="examAbsenceModeSection">'+_renderExamAbsenceModeSection()+'</div>';
+  html+='</div></div>';
+
+  html+='</div></div>';
   html+='<div class="settings-section">';
   html+='<div class="settings-section-hdr">📋 إعدادات الأعمدة';
   html+='<button class="btn btn-teal btn-sm" onclick="openColConfigModal();switchPage(\'grades\');">⚙️ تخصيص الأعمدة</button></div>';
@@ -470,7 +571,22 @@ function renderSettings(){
   html+='</div></div>';
 
   html+='</div>';
+  // #settingsRoot هو العنصر الذي يحمل overflow-y:auto فعلياً
+  var _scrollY=root.scrollTop;
+  // أزل تركيز أي عنصر داخل root قبل حذفه، لمنع المتصفح من محاولة
+  // استعادة التركيز/التمرير تلقائياً بعد إزالته من الشجرة
+  if(document.activeElement&&root.contains(document.activeElement)){
+    document.activeElement.blur();
+  }
   root.innerHTML=html;
+  root.scrollTop=_scrollY;
+  // بعض المتصفحات (خصوصاً على الموبايل) تُعيد ضبط السكرول بعد إطار أو
+  // أكثر من انتهاء معالج onclick. نُعيد التثبيت عدة مرات لضمان عدم تجاوزه.
+  requestAnimationFrame(function(){
+    root.scrollTop=_scrollY;
+    requestAnimationFrame(function(){root.scrollTop=_scrollY;});
+  });
+  setTimeout(function(){root.scrollTop=_scrollY;},50);
 }
 
 function settingsSaveRange(){
@@ -630,7 +746,7 @@ function renderDictClsBar(){
   h+='<button class="dict-cls-tab'+(allActive?' active':'')+'" onclick="DS.scope=\'all\';renderDict();renderDictClsBar();">🏫 الكل</button>';
   DB.classes.forEach(function(cls){
     var isActive=(DS.scope!=='all'&&DS.activeClass===cls);
-    h+='<button class="dict-cls-tab'+(isActive?' active':'')+'" onclick="DS.scope=\'class\';DS.activeClass=\''+cls.replace(/'/g,"\\'")+'\';;DS.nameOnlyMarked={};renderDict();renderDictClsBar();">'+cls+'</button>';
+    h+='<button class="dict-cls-tab'+(isActive?' active':'')+'" onclick="DS.scope=\'class\';DS.activeClass=\''+cls.replace(/'/g,"\\'")+'\';if(window.GS)GS.activeClass=DS.activeClass;DS.nameOnlyMarked={};renderDict();renderDictClsBar();">'+cls+'</button>';
   });
   bar.innerHTML=h;
 }

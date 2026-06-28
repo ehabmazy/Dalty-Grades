@@ -975,6 +975,20 @@ function _attendSessionReport() {
   document.body.appendChild(mo);
 }
 
+
+/* ── فتح تقرير HTML على الهاتف بدون window.open (يُحجب على موبايل) ── */
+function _openReportBlob(htmlStr) {
+  var blob = new Blob([htmlStr], {type: 'text/html; charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.target = '_blank';
+  a.rel    = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+}
 function _attendSessionReportPrint() {
   var cls = WKS.activeClass;
   var week = WKS.activeWeek || 1;
@@ -993,8 +1007,8 @@ function _attendSessionReportPrint() {
 
   var now = new Date();
   var dateStr = now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
-  var win = window.open('','_blank');
-  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير جلسة رصد الحضور</title>'
+  var _rHtml='';
+  _rHtml=('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير جلسة رصد الحضور</title>'
     +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#064e3b;color:white;}.stat{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 14px;border-radius:8px;margin:4px;font-size:12px;font-weight:700;}</style>'
     +'</head><body>'
     +'<h1>📊 تقرير جلسة رصد الحضور — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
@@ -1002,8 +1016,7 @@ function _attendSessionReportPrint() {
     +'<div><span class="stat">✅ حاضر: '+presentList.length+'</span><span class="stat">✗ غائب: '+absentList.length+'</span><span class="stat">👥 الكل: '+total+'</span><span class="stat">📊 نسبة الحضور: '+pct+'%</span></div>'
     +'<table><thead><tr><th>#</th><th>الطالب</th><th>الحالة</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'</body></html>');
-  win.document.close();
-  win.print();
+  _openReportBlob(_rHtml);
 }
 
 // ══ تقرير جلسة رصد الغياب ══
@@ -1113,8 +1126,8 @@ function _absentSessionReportPrint() {
 
   var now = new Date();
   var dateStr = now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
-  var win = window.open('','_blank');
-  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير جلسة رصد الغياب</title>'
+  var _rHtml='';
+  _rHtml=('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير جلسة رصد الغياب</title>'
     +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#7f1d1d;color:white;}.stat{display:inline-block;background:#fef2f2;border:1px solid #fecaca;padding:5px 14px;border-radius:8px;margin:4px;font-size:12px;font-weight:700;}</style>'
     +'</head><body>'
     +'<h1>📊 تقرير جلسة رصد الغياب — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
@@ -1122,8 +1135,7 @@ function _absentSessionReportPrint() {
     +'<div><span class="stat">✗ غائب: '+absentList.length+'</span><span class="stat">✅ حاضر: '+presentList.length+'</span><span class="stat">👥 الكل: '+total+'</span><span class="stat">📊 نسبة الغياب: '+pct+'%</span></div>'
     +'<table><thead><tr><th>#</th><th>الطالب</th><th>الحالة</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'</body></html>');
-  win.document.close();
-  win.print();
+  _openReportBlob(_rHtml);
 }
 
 /* ── ربط المايك بـ _attendSubmit عند وضع الحضور ── */
@@ -3024,8 +3036,8 @@ function _npSessionReportPrint() {
   }).join('');
   var now=new Date();
   var dateStr=now.getDate()+'/'+(now.getMonth()+1)+'/'+now.getFullYear()+' '+now.getHours()+':'+String(now.getMinutes()).padStart(2,'0');
-  var win=window.open('','_blank');
-  win.document.write('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير الجلسة</title>'
+  var _rHtml='';
+  _rHtml=('<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>تقرير الجلسة</title>'
     +'<style>body{font-family:Tahoma,Arial,sans-serif;direction:rtl;padding:20px;}h1{font-size:15px;margin-bottom:4px;}table{border-collapse:collapse;width:100%;margin-top:12px;}th,td{border:1px solid #ccc;padding:5px 8px;font-size:12px;text-align:center;}th{background:#064e3b;color:white;}.stat{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;padding:5px 14px;border-radius:8px;margin:4px;font-size:12px;font-weight:700;}</style>'
     +'</head><body>'
     +'<h1>📊 تقرير الجلسة — أسبوع '+week+' — فصل: '+esc(cls)+'</h1>'
@@ -3033,6 +3045,5 @@ function _npSessionReportPrint() {
     +'<div><span class="stat">✅ درجات: '+okList.length+'</span><span class="stat">✗ غائب: '+absList.length+'</span><span class="stat">❌ فشل: '+failList.length+'</span>'+(gradeAvg!==null?'<span class="stat">📈 متوسط: '+gradeAvg+'</span>':'')+'</div>'
     +'<table><thead><tr><th>#</th><th>الطالب</th><th>الدرجة</th><th>الحقل</th><th>نص الإدخال</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'</body></html>');
-  win.document.close();
-  win.print();
+  _openReportBlob(_rHtml);
 }

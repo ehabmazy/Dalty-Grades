@@ -1671,7 +1671,7 @@ var _homeTimer=null;
 function bnSetActive(page){
   // أزل النشاط من كل أزرار الدوك
   var allDockIds = ['home','grades','sched','weekly','cards','notifs','absence','stats',
-    'curric','report','tafrigh','sick','dict','witness','backup','settings'];
+    'curric','tafrigh','sick','dict','witness','backup','settings'];
   allDockIds.forEach(function(p){
     var b=document.getElementById('bni_'+p);
     if(b){
@@ -1996,7 +1996,8 @@ function _homeTick(){
       var shown=[];
       // الترتيب المنطقي: جارية أولاً، ثم التالية، ثم الباقي، ثم المنتهية
       if(cur)shown.push({type:'cur',data:cur,item:cur.item});
-      var _ndh=DB.meta&&DB.meta.nextDayHour!=null?DB.meta.nextDayHour:12;
+      var _ndo=DB.meta&&DB.meta.nextDayOffsetHours!=null?DB.meta.nextDayOffsetHours:0;
+      var _ndh=24-_ndo; // الساعة اللي تبدأ بعدها فترات الغد تظهر — افتراضيًا 24 (أي بعد منتصف الليل فعليًا)
       var _nowH=now.getHours();
       var _showNext=_nowH>=_ndh;
       var _todayUp=upcoming.filter(function(u){
@@ -2005,8 +2006,8 @@ function _homeTick(){
         if(u.daysAhead===1&&_showNext)return true;
         return false;
       });
-      _todayUp.slice(0,4).forEach(function(u,ui){shown.push({type:ui===0?'next':'up',data:u,item:u.item});});
-      past.slice(0,3).forEach(function(p){shown.push({type:'past',data:p,item:p.item});});
+      _todayUp.forEach(function(u,ui){shown.push({type:ui===0?'next':'up',data:u,item:u.item});});
+      past.forEach(function(p){shown.push({type:'past',data:p,item:p.item});});
       shown.forEach(function(s,idx){
         var isCur=s.type==='cur';
         var isNext=s.type==='next';
@@ -2609,7 +2610,6 @@ var _HNG_ALL = [
   { id:'notifs',   icon:'🔔', lbl:'الإشعارات',        fn:function(){ switchPage('notifs');  bnSetActive('notifs');  }, badge:true },
   { id:'sick',     icon:'🤒', lbl:'المرضى',            fn:function(){ switchPage('sick');    bnSetActive('sick');    } },
   { id:'curric',   icon:'📖', lbl:'توزيع المنهج',     fn:function(){ switchPage('curric');  bnSetActive('curric');  } },
-  { id:'report',   icon:'📄', lbl:'كشف الدرجات',      fn:function(){ switchPage('report');  bnSetActive('report');  } },
   { id:'tafrigh',  icon:'🗃', lbl:'كشف التفريغ',      fn:function(){ switchPage('tafrigh'); bnSetActive('tafrigh'); } },
   { id:'dict',     icon:'🎤', lbl:'الإملاء',           fn:function(){ switchPage('dict');    bnSetActive('dict');    } },
   { id:'witness',  icon:'✍️', lbl:'توقيع المتابع',    fn:function(){ switchPage('witness'); bnSetActive('witness'); } },
@@ -2866,41 +2866,11 @@ function allCols(){
   return r;
 }
 
-function calcStudent(s){
-  if(!DB)return{total:0,avgAssess:0,avgHw:0,avgBeh:'—',exTotal:0};
-  if(s._totalAbsent)return{total:0,avgAssess:0,avgHw:0,avgBeh:'—',exTotal:0};
-  var aSum=0,aC=0,hSum=0,hC=0,bSum=0,bC=0,exSum=0;
-  var aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  var awList=ALL_WEEKS.slice(0,aw);
-  // حساب متوسط السلوك من حقول bw الأسبوعية
-  awList.forEach(function(w){
-    var bwv=s['bw'+w];
-    if(bwv===''||bwv===undefined||bwv===null)return;
-    if(bwv==='م')return;
-    var bwn=bwv==='غ'?0:Math.min(Number(bwv)||0,10);
-    bSum+=bwn;bC++;
-  });
-  allCols().forEach(function(c){
-    if(c.id.match(/^a\d+$/)){var wn=parseInt(c.id.slice(1));if(awList.indexOf(wn)<0)return;}
-    if(c.id.match(/^h\d+$/)){var wn=parseInt(c.id.slice(1));if(awList.indexOf(wn)<0)return;}
-    if(c.id.match(/^bw\d+$/))return;
-    if(c.id==='beh1'||c.id==='beh2')return;
-    if(!c.visible&&c.id!=='ex1'&&c.id!=='ex2')return;
-    var raw=s[c.field];
-    if(raw===''||raw===undefined||raw===null)return;
-    if(raw==='م')return;
-    var v=raw==='غ'?0:Math.min(Number(raw)||0,c.max);
-    if(c.id.charAt(0)==='a'&&c.id!=='abs'){aSum+=v;aC++;}
-    else if(c.id.charAt(0)==='h'){hSum+=v;hC++;}
-    else if(c.id==='ex1'||c.id==='ex2')exSum+=Math.min(v,c.max);
-  });
-  var avgA=aC?Math.round(aSum/aC):0;
-  var avgH=hC?Math.round(hSum/hC):0;
-  var beh=bC>0?Math.round(bSum/bC):0;
-  var avgBehDisp=bC>0?beh:'—';
-  var ex=Math.min(exSum,30);
-  return{total:avgA+avgH+beh+ex,avgAssess:avgA,avgHw:avgH,avgBeh:avgBehDisp,exTotal:ex};
-}
+// ملاحظة: تم حذف نسخة قديمة مكررة من calcStudent من هنا — كانت تتجاوز
+// (override) النسخة الصحيحة في app-01-core.js وتُسبب تجاهل إعدادات
+// تأثير الغياب (absenceMode / absenceAllowed / absenceDeductPer) في كل
+// الصفحات، بما فيها صفحة الدرجات. الدالة الصحيحة الوحيدة الآن موجودة
+// في app-01-core.js وتُستخدم من هنا تلقائياً (نفس الاسم، نطاق عام).
 
 function gradeColor(pct){
   if(pct>=85)return'#10b981';
@@ -2966,7 +2936,7 @@ function renderGeneralReport(cls){
   var color=CLS_COLORS[clsIdx%CLS_COLORS.length];
 
   // Compute stats
-  var scores=students.map(function(s){return calcStudent(s).total;});
+  var scores=students.map(function(s){return calcStudent(s,cls).total;});
   var avg=totalStudents?Math.round(scores.reduce(function(a,b){return a+b;},0)/totalStudents):0;
   var maxScore=totalStudents?Math.max.apply(null,scores):0;
   var minScore=totalStudents?Math.min.apply(null,scores):0;
@@ -2988,7 +2958,7 @@ function renderGeneralReport(cls){
 
   // Ranked students
   var ranked=students.map(function(s){
-    var c=calcStudent(s);
+    var c=calcStudent(s,cls);
     return{s:s,total:c.total,avgAssess:c.avgAssess,avgHw:c.avgHw,avgBeh:c.avgBeh,exTotal:c.exTotal,abs:countAbsences(cls,s.id),sick:countSick(cls,s.id)};
   }).sort(function(a,b){return b.total-a.total;});
 
@@ -3183,7 +3153,7 @@ function renderStudentList(cls){
   var color=CLS_COLORS[clsIdx%CLS_COLORS.length];
 
   var ranked=students.map(function(s){
-    var c=calcStudent(s);
+    var c=calcStudent(s,cls);
     return{s:s,total:c.total,abs:countAbsences(cls,s.id)};
   }).sort(function(a,b){return b.total-a.total;});
 
@@ -3264,14 +3234,14 @@ function renderStudentReport(cls,sid){
   if(!s){document.getElementById('mainContent').innerHTML='<div class="empty-state"><div class="es-icon">❓</div><div class="es-msg">لم يُعثر على الطالب</div></div>';return;}
 
   var tmax=70;
-  var calc=calcStudent(s);
+  var calc=calcStudent(s,cls);
   var pct=Math.round(calc.total/tmax*100);
   var color=gradeColor(pct);
   var absCount=countAbsences(cls,s.id);
   var sickCount=countSick(cls,s.id);
 
   // Rank
-  var ranked=(DB.data[cls]||[]).filter(function(x){return x.name;}).map(function(x){return{id:x.id,total:calcStudent(x).total};}).sort(function(a,b){return b.total-a.total;});
+  var ranked=(DB.data[cls]||[]).filter(function(x){return x.name;}).map(function(x){return{id:x.id,total:calcStudent(x,cls).total};}).sort(function(a,b){return b.total-a.total;});
   var rank=1;
   ranked.forEach(function(r,i){if(r.id===sid)rank=i+1;});
   var totalInCls=ranked.length;
@@ -3412,7 +3382,7 @@ function renderStudentReport(cls,sid){
   // Compare with class average
   html+='<div class="section-title" style="margin-top:4px;">📊 المقارنة مع متوسط الفصل</div>';
   var clsStudents=(DB.data[cls]||[]).filter(function(x){return x.name;});
-  var clsAvg=clsStudents.length?Math.round(clsStudents.map(function(x){return calcStudent(x).total;}).reduce(function(a,b){return a+b;},0)/clsStudents.length):0;
+  var clsAvg=clsStudents.length?Math.round(clsStudents.map(function(x){return calcStudent(x,cls).total;}).reduce(function(a,b){return a+b;},0)/clsStudents.length):0;
   var diff=calc.total-clsAvg;
   html+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;">';
   html+='<div style="flex:1;text-align:center;">';
