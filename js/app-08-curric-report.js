@@ -385,7 +385,7 @@ var WEEK_DATES = {
   13: '03/05/2026', 14: '10/05/2026'
 };
 
-var ALL_WEEKS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14];
+var ALL_WEEKS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30];
 
 var DB = null;
 
@@ -449,7 +449,7 @@ function calcTotal(s, weeks) {
 // ── Get active weeks list ────────────────────────────────────
 function getWeeks() {
   var half = document.getElementById('halfSel') ? document.getElementById('halfSel').value : 'both';
-  var aw = DB ? Math.min(Math.max(1, Number((DB.meta||{}).activeWeeks)||14), 14) : 14;
+  var aw = DB ? Math.min(Math.max(1, Number((DB.meta||{}).activeWeeks)||14), ALL_WEEKS.length) : 14;
   var all = ALL_WEEKS.slice(0, aw);
   if (half === 'first') return all.filter(function(w){ return w <= 8; });
   if (half === 'second') return all.filter(function(w){ return w >= 9; });
@@ -1320,7 +1320,7 @@ function curricBuildConfigPanel(c){
   html+='<span class="curric-config-lbl" style="margin-right:10px;">تاريخ بداية الفصل:</span>';
   html+='<input type="date" class="curric-config-inp" value="'+esc(DB.meta.startDate||'')+'" onchange="curricChangeStartDate(this.value)" color-scheme="dark">';
   html+='<span class="curric-config-lbl" style="margin-right:10px;">عدد أسابيع الفصل:</span>';
-  html+='<input type="number" min="1" max="20" class="curric-config-inp" style="width:60px;" value="'+Number(DB.meta.activeWeeks||14)+'" onchange="curricChangeWeeks(this.value)">';
+  html+='<input type="number" min="1" max="30" class="curric-config-inp" style="width:60px;" value="'+Number(DB.meta.activeWeeks||14)+'" onchange="curricChangeWeeks(this.value)">';
   html+='</div>';
 
   // Units manager
@@ -1507,7 +1507,7 @@ function curricChangeStartDate(v){
 }
 
 function curricChangeWeeks(v){
-  var n=Math.max(1,Math.min(20,Number(v)||14));
+  var n=Math.max(1,Math.min(30,Number(v)||14));
   DB.meta.activeWeeks=n;
   curricSave();
   renderCurric();

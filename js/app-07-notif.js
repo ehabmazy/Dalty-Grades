@@ -2712,7 +2712,7 @@ function _homeSpawnLeaves(){
 // ── Colors for classes ────────────────────────────────
 var CLS_COLORS=['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#14b8a6','#f97316','#ec4899'];
 var DB=null;
-var ALL_WEEKS=[1,2,3,4,5,6,7,8,9,10,11,12,13,14];
+var ALL_WEEKS=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30];
 var currentView='general';
 var currentCls=null;
 var currentStudent=null;

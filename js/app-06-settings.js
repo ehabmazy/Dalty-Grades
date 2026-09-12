@@ -247,7 +247,7 @@ function renderSettings(){
   html+='<div class="settings-row">';
   html+='<span class="settings-lbl">عدد الأسابيع الفعّالة:</span>';
   html+='<div class="settings-val"><select class="s-sel" onchange="DB.meta.activeWeeks=Number(this.value);saveDB();">';
-  [4,6,8,10,12,14].forEach(function(n){html+='<option value="'+n+'"'+(DB.meta.activeWeeks==n?" selected":"")+'>'+n+' أسابيع</option>';});
+  [4,6,8,10,12,14,16,18,20,22,24,26,28,30].forEach(function(n){html+='<option value="'+n+'"'+(DB.meta.activeWeeks==n?" selected":"")+'>'+n+' أسابيع</option>';});
   html+='</select>';
   html+='<span class="settings-desc">يؤثر على الحسابات وعرض الأسابيع في جميع الصفحات</span></div></div>';
 
