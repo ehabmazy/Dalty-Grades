@@ -169,6 +169,10 @@ function _subCurrentTermLabel() {
 }
 
 function checkSubscriptionAndOpenApp(user) {
+  /* التحقق من الاشتراك متوقف مؤقتاً — التطبيق متاح للجميع */
+  openAppNow();
+  return;
+
   /* الأشهر المجانية: افتح التطبيق مباشرة بدون أي تحقق */
   if (_subIsFreeMonth()) {
     updateSubBadge("free");
