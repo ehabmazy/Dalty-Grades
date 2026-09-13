@@ -231,6 +231,9 @@ function saveDB(){
 function initDB(){
   var saved=loadDB();
   DB=saved||freshDB();
+  // حماية أساسية: تأكد إن الهياكل الجوهرية موجودة دايمًا حتى لو وصلت بيانات ناقصة/تالفة من مصدر خارجي (نسخة احتياطية قديمة، تزامن سحابي، إلخ)
+  if(!DB.classes)DB.classes=[];
+  if(!DB.data)DB.data={};
   // migrations
   if(!DB.colPages)DB.colPages=defaultColPages();
   if(!DB.schedule){DB.schedule={};DB.classes.forEach(function(c){DB.schedule[c]=defaultSchedule();});}
