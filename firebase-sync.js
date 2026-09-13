@@ -124,12 +124,26 @@ function listenForRemoteChanges() {
     try { localDB = JSON.parse(localStorage.getItem("grades_v6")); } catch(e) {}
     if (localDB && localDB._ts && remote._ts && localDB._ts > remote._ts) return;
 
-    console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
-
     /* حفظ البيانات الواردة محلياً */
     var clean = restoreKeys(Object.assign({}, remote));
     delete clean._ts;
     delete clean._device;
+
+    /* ⚠️ تحقق من سلامة البيانات القادمة قبل استبدال أي شيء محلي بها.
+       لو البيانات القادمة من السحابة ناقصة (زي غياب data/classes) فده
+       يعني نسخة تالفة — تجاهلها ولا تكسر التطبيق أو تفقد بيانات المستخدم. */
+    if (!clean || typeof clean !== "object" || !clean.data || !clean.classes) {
+      console.warn("[Dalty Sync] ⚠️ تجاهل تحديث سحابي غير مكتمل (بيانات ناقصة)");
+      showSyncStatus("warn", "⚠️ تم تجاهل نسخة سحابية غير مكتملة");
+      /* لو عندنا نسخة محلية سليمة، ارفعها فوق لتصحيح النسخة التالفة في السحابة */
+      if (window.DB && window.DB.data && window.DB.classes && typeof pushToFirebase === "function") {
+        setTimeout(pushToFirebase, 1500);
+      }
+      setTimeout(function () { showSyncStatus("ok", "☁️ متزامن"); }, 3000);
+      return;
+    }
+
+    console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
 
     try {
       localStorage.setItem("grades_v6", JSON.stringify(clean));
@@ -469,6 +483,12 @@ function pullFromFirebase() {
       var clean = restoreKeys(Object.assign({}, remote));
       delete clean._ts;
       delete clean._device;
+
+      if (!clean || typeof clean !== "object" || !clean.data || !clean.classes) {
+        alert("⚠️ النسخة الموجودة في السحابة تالفة أو غير مكتملة — تم إلغاء الجلب حفاظاً على بياناتك المحلية.");
+        showSyncStatus("warn", "⚠️ نسخة سحابية تالفة — تم الإلغاء");
+        return;
+      }
 
       if (!confirm("⚠️ سيتم استبدال بياناتك الحالية ببيانات السحابة. متأكد؟")) return;
 
