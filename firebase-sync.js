@@ -111,6 +111,24 @@ function setFirebaseUserPath(uid) {
 window.setFirebaseUserPath = setFirebaseUserPath;
 
 
+/* ⚠️ يضمن وجود كل الهياكل الجوهرية حتى لو كانت النسخة القادمة من
+   السحابة ناقصة جزئياً (زي غياب absences أو schedule بس) بدل ما
+   نرفض التحديث بالكامل أو نخلي صفحات زي الغياب/المرضي تنهار. */
+function repairDB(clean) {
+  if (!clean.classes) clean.classes = [];
+  if (!clean.data) clean.data = {};
+  if (!clean.schedule) clean.schedule = {};
+  if (!clean.absences) clean.absences = {};
+  clean.classes.forEach(function (c) {
+    if (!clean.data[c]) clean.data[c] = [];
+    if (!clean.schedule[c]) clean.schedule[c] = {};
+    if (!clean.absences[c]) clean.absences[c] = {};
+  });
+  if (!clean.meta) clean.meta = {};
+  if (!clean.curric) clean.curric = { units: [], weeks: [], holidays: [], exams: [] };
+  return clean;
+}
+
 function listenForRemoteChanges() {
   _fbRef.on("value", function (snapshot) {
     var remote = snapshot.val();
@@ -130,8 +148,8 @@ function listenForRemoteChanges() {
     delete clean._device;
 
     /* ⚠️ تحقق من سلامة البيانات القادمة قبل استبدال أي شيء محلي بها.
-       لو البيانات القادمة من السحابة ناقصة (زي غياب data/classes) فده
-       يعني نسخة تالفة — تجاهلها ولا تكسر التطبيق أو تفقد بيانات المستخدم. */
+       لو البيانات القادمة من السحابة ناقصة تمامًا (زي غياب data/classes) فده
+       يعني نسخة تالفة بالكامل — تجاهلها ولا تكسر التطبيق أو تفقد بيانات المستخدم. */
     if (!clean || typeof clean !== "object" || !clean.data || !clean.classes) {
       console.warn("[Dalty Sync] ⚠️ تجاهل تحديث سحابي غير مكتمل (بيانات ناقصة)");
       showSyncStatus("warn", "⚠️ تم تجاهل نسخة سحابية غير مكتملة");
@@ -142,6 +160,9 @@ function listenForRemoteChanges() {
       setTimeout(function () { showSyncStatus("ok", "☁️ متزامن"); }, 3000);
       return;
     }
+
+    /* إصلاح أي نقص جزئي (زي absences أو schedule) بدل رفض التحديث بالكامل */
+    clean = repairDB(clean);
 
     console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
 
@@ -155,6 +176,7 @@ function listenForRemoteChanges() {
       if (typeof window.renderGrades  === "function") window.renderGrades();
       if (typeof window.renderAbsence === "function") window.renderAbsence();
       if (typeof window.renderWeekly  === "function") window.renderWeekly();
+      if (typeof window.renderSick    === "function") window.renderSick();
     }
 
     showSyncStatus("ok", "✅ تم التحديث من جهاز آخر");
@@ -490,6 +512,8 @@ function pullFromFirebase() {
         return;
       }
 
+      clean = repairDB(clean);
+
       if (!confirm("⚠️ سيتم استبدال بياناتك الحالية ببيانات السحابة. متأكد؟")) return;
 
       localStorage.setItem("grades_v6", JSON.stringify(clean));
@@ -498,6 +522,7 @@ function pullFromFirebase() {
       if (typeof window.renderGrades  === "function") window.renderGrades();
       if (typeof window.renderAbsence === "function") window.renderAbsence();
       if (typeof window.renderWeekly  === "function") window.renderWeekly();
+      if (typeof window.renderSick    === "function") window.renderSick();
 
       showSyncStatus("ok", "✅ تم الجلب");
       setTimeout(function () { showSyncStatus("ok", "☁️ متزامن"); }, 3000);
