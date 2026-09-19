@@ -1496,6 +1496,382 @@ function tfrPrint(){
 window.tfrPrint = tfrPrint;
 
 
+// ══════════════════════════════════════════════════════
+// TAFRIGH MULTI-CLASS PRINT — طباعة أكثر من فصل دفعة واحدة
+// ══════════════════════════════════════════════════════
+function tfrPrintMulti(){
+  if(!DB.classes.length){ alert('لا توجد فصول دراسية'); return; }
+
+  var aw       = Math.min(Math.max(1, Number(DB.meta.activeWeeks)||14), ALL_WEEKS.length);
+  var availWeeks = ALL_WEEKS.slice(0, aw);
+  var selWeeks = (TFR.weeks.length ? TFR.weeks : availWeeks).slice().sort(function(a,b){return a-b;});
+
+  var TF         = TFR.font || {};
+  var initFamily = (TF.family||'Cairo,sans-serif').replace(/"/g,"'");
+  var initTS     = TF.tableSize  || 10;
+  var initHS     = TF.headerSize || 9;
+  var initNS     = TF.nameSize   || 10;
+  var initTot    = TF.totalSize  || 12;
+  var initW      = TF.weight     || 700;
+  var initNW     = TF.nameWidth  || 45;
+
+  var weekDates  = (DB.meta && DB.meta.weekDates) || {};
+  function fmtWD(w){ var d=weekDates[w]; if(!d)return ''; try{return new Date(d).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'});}catch(e){return d;} }
+
+  var C = TFR.cols;
+
+  // ── بناء بيانات كل فصل ──
+  function buildClassData(cls){
+    var students = (DB.data[cls]||[]).filter(function(s){return s.name;});
+    var allCalc  = students.map(function(s){ return {s:s, r:tfrCalc(s, selWeeks)}; });
+    var rows = allCalc.map(function(item, idx){
+      var s=item.s, r=item.r, cells=[];
+      selWeeks.forEach(function(w){
+        var wd=r.weeks[w];
+        var bwv=(s['bw'+w]!==undefined&&s['bw'+w]!==null&&s['bw'+w]!=='')?s['bw'+w]:null;
+        if(C.showAssess) cells.push({v:wd.av_raw, type:'assess'});
+        if(C.showHw)     cells.push({v:wd.hv_raw, type:'hw'});
+        if(C.showBeh)    cells.push({v:bwv,        type:'beh'});
+      });
+      if(C.showAvgAssess) cells.push({v:r.avgA,  type:'avg'});
+      if(C.showAvgHw)     cells.push({v:r.avgH,  type:'avg'});
+      if(C.showAvgBeh)    cells.push({v:r.beh,   type:'beh'});
+      if(C.showExam)      cells.push({v:r.exam,  type:'ex'});
+      cells.push({v:r.total, type:r.total<35?'fail':'tot'});
+      return {n:idx+1, name:s.name, cells:cells, fail:r.total<35};
+    });
+    var hdr1=[], hdr2=[];
+    selWeeks.forEach(function(w){
+      var d=fmtWD(w);
+      var span=(C.showAssess?1:0)+(C.showHw?1:0)+(C.showBeh?1:0);
+      if(span>0) hdr1.push({label:'أ'+w+(d?'|'+d:''), span:span, bg:'#0f3460', color:'#93c5fd'});
+      if(C.showAssess) hdr2.push({label:'ت<br>/20', bg:'#0f3460', color:'#93c5fd'});
+      if(C.showHw)     hdr2.push({label:'و<br>/10', bg:'#1e4080', color:'#67e8f9'});
+      if(C.showBeh)    hdr2.push({label:'س<br>/10', bg:'#2d1b69', color:'#a78bfa'});
+    });
+    var ss=(C.showAvgAssess?1:0)+(C.showAvgHw?1:0)+(C.showAvgBeh?1:0)+(C.showExam?1:0)+1;
+    if(ss>0) hdr1.push({label:'إجمالي درجات الطالب', span:ss, bg:'#14532d', color:'#86efac'});
+    if(C.showAvgAssess) hdr2.push({label:'م.ت<br>/20',    bg:'#14532d', color:'#86efac'});
+    if(C.showAvgHw)     hdr2.push({label:'م.و<br>/10',    bg:'#14532d', color:'#67e8f9'});
+    if(C.showAvgBeh)    hdr2.push({label:'م.سلوك<br>/10', bg:'#14532d', color:'#a78bfa'});
+    if(C.showExam)      hdr2.push({label:'اخت<br>/30',    bg:'#14532d', color:'#fdba74'});
+    hdr2.push({label:'المج<br>/70', bg:'#78350f', color:'#fef3c7'});
+    return {
+      cls:cls, rows:rows, hdr1:hdr1, hdr2:hdr2, selWeeks:selWeeks,
+      school: DB.meta.schoolName||'Dalty Grades',
+      teacher:TFR.teacherName||'', subject:TFR.subject||'',
+      term:TFR.term||'', syear:TFR.schoolYear||''
+    };
+  }
+
+  var allClassesData = DB.classes.map(function(c){ return buildClassData(c); });
+  var now = new Date();
+  var dateStr = now.toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var fontName = initFamily.match(/'?([A-Za-z]+)/);
+  fontName = fontName ? fontName[1] : 'Cairo';
+
+  var winHTML = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8">'
+    +'<title>طباعة متعددة الفصول — كشف التفريغ</title>'
+    +'<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;700;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:Cairo,sans-serif;background:#f1f5f9;direction:rtl;}'
+
+    // ── شريط التحكم ──
+    +'.ctrl{background:#0f1e3d;color:white;padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:100;border-bottom:2px solid #1e3a5f;}'
+    +'.ctrl-group{display:flex;flex-direction:column;gap:2px;}'
+    +'.ctrl-label{font-size:7.5px;color:#94a3b8;font-weight:700;}'
+    +'.ctrl select,.ctrl input[type=range]{background:#1e293b;border:1px solid #334155;color:#f1f5f9;padding:3px 6px;border-radius:5px;font-size:10px;font-family:inherit;outline:none;}'
+    +'.ctrl input[type=range]{width:80px;}'
+    +'.ctrl-val{font-size:9px;color:#93c5fd;text-align:center;font-weight:700;}'
+    +'.sep{width:1px;height:32px;background:#1e3a5f;margin:0 4px;flex-shrink:0;}'
+    +'.btn-print{background:#16a34a;border:none;color:white;padding:7px 18px;border-radius:7px;font-size:11px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;white-space:nowrap;}'
+    +'.btn-close{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:white;padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;}'
+
+    // ── شريط اختيار الفصول ──
+    +'.cls-picker{background:#0a1628;border-bottom:1px solid #1e3a5f;padding:6px 14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;}'
+    +'.cls-chip{padding:3px 13px;border-radius:14px;font-size:10px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;border:1.5px solid #334155;background:rgba(255,255,255,.05);color:#64748b;transition:all .15s;user-select:none;}'
+    +'.cls-chip.on{border-color:#3b82f6;background:rgba(29,78,216,.35);color:#93c5fd;}'
+    +'.cls-all-btn{padding:3px 13px;border-radius:14px;font-size:9.5px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;border:none;background:#0f766e;color:white;}'
+    +'.cls-none-btn{padding:3px 13px;border-radius:14px;font-size:9.5px;font-weight:700;font-family:Cairo,sans-serif;cursor:pointer;border:none;background:#7f1d1d;color:white;}'
+    +'.cls-count{font-size:9px;color:#60a5fa;margin-right:4px;font-weight:700;}'
+
+    // ── الصفحة ──
+    +'.page{width:210mm;margin:0;background:white;padding:4mm 3mm;}'
+    +'.page-wrapper{width:210mm;margin:6px auto;}'
+    +'.page-break{page-break-after:always;}'
+
+    // ── رأس الكشف ──
+    +'.hdr{border:1.5px solid #1e40af;border-radius:4px;padding:4px 10px;margin-bottom:4px;background:#eff6ff;}'
+    +'.hdr-top{display:flex;justify-content:space-between;align-items:center;}'
+    +'.hdr-school{font-size:14px;font-weight:900;color:#0f2a5e;}'
+    +'.hdr-cls{font-size:13px;font-weight:900;color:#0f2a5e;}'
+    +'.hdr-sub{font-size:13px;font-weight:900;color:#1e40af;text-align:center;margin-top:3px;}'
+    +'.hdr-meta{display:flex;justify-content:space-between;gap:4px;font-size:8px;color:#374151;flex-wrap:wrap;margin-top:3px;}'
+    +'.hdr-meta span{background:#dbeafe;border-radius:3px;padding:1px 5px;white-space:nowrap;}'
+
+    // ── جدول ──
+    +'table{border-collapse:collapse;width:100%;direction:rtl;table-layout:fixed;}'
+    +'th{border:0.5px solid #94a3b8;padding:1px;text-align:center;vertical-align:middle;line-height:1.2;overflow:hidden;}'
+    +'td{border:0.5px solid #94a3b8;padding:1px;text-align:center;vertical-align:middle;line-height:1.2;overflow:hidden;}'
+    +'.td-name{text-align:right;color:#1e293b;background:#eff6ff!important;padding:1px 4px;font-weight:700;}'
+    +'.td-num{color:#64748b;}'
+    +'.td-beh{background:#f5f3ff!important;color:#6d28d9;}'
+    +'.td-avg{background:#d1fae5!important;color:#065f46;}'
+    +'.td-avgh{background:#d1fae5!important;color:#065f46;}'
+    +'.td-avgbeh{background:#ede9fe!important;color:#4c1d95;}'
+    +'.td-ex{background:#ffedd5!important;color:#7c2d12;}'
+    +'.td-tot{background:#fef3c7!important;color:#92400e;}'
+    +'.td-fail{background:#fee2e2!important;color:#b91c1c;}'
+    +'.gab{color:#ef4444;font-weight:900;}'
+    +'.mit{color:#d97706;font-weight:900;}'
+    +'tr:nth-child(even) td:not(.td-name){filter:brightness(.97);}'
+
+    // ── توقيعات ──
+    +'.sigs{display:flex;gap:6px;margin-top:5px;}'
+    +'.sig{flex:1;border:1px solid #cbd5e1;border-radius:4px;padding:4px 6px;text-align:center;}'
+    +'.sig-t{font-size:7.5px;font-weight:700;color:#374151;margin-bottom:3px;}'
+    +'.sig-n{font-size:8.5px;font-weight:900;color:#1e40af;margin-bottom:12px;}'
+    +'.sig-l{border-top:1px solid #94a3b8;padding-top:2px;font-size:6.5px;color:#64748b;}'
+    +'.note{font-size:6.5px;color:#475569;background:#e0e7ff;border:0.5px solid #bfdbfe;border-radius:3px;padding:2px 5px;margin-top:3px;}'
+
+    // ── empty state لفصل لا طلاب فيه ──
+    +'.empty-cls{padding:10px 14px;font-size:9px;color:#94a3b8;text-align:center;background:#f8fafc;border-radius:4px;margin:4px 0;}'
+
+    +'@media print{'
+    +'  .ctrl,.cls-picker{display:none!important;}'
+    +'  .page-wrapper{margin:0;}'
+    +'  .page{margin:0;width:210mm;padding:2mm 2mm;}'
+    +'  @page{size:A4 portrait;margin:4mm 3mm;}'
+    +'  html,body{width:210mm;background:white;}'
+    +'  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}'
+    +'  .page-break{page-break-after:always;}'
+    +'  .page-break:last-child{page-break-after:avoid;}'
+    +'}'
+    +'</style></head><body>'
+
+    // ── شريط التحكم ──
+    +'<div class="ctrl" id="ctrl">'
+    +'<button class="btn-print" onclick="window.print()">🖨️ طباعة / PDF</button>'
+    +'<button class="btn-close" onclick="window.close()">✕</button>'
+    +'<div class="sep"></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">نوع الخط</span>'
+    +'<select id="pFamily" onchange="applySettings()">'
+    +'<option value="Cairo,sans-serif">Cairo</option>'
+    +'<option value="Tajawal,sans-serif">Tajawal</option>'
+    +'<option value="Amiri,serif">Amiri</option>'
+    +'<option value="Tahoma,Arial,sans-serif">Tahoma</option>'
+    +'<option value="Arial,sans-serif">Arial</option>'
+    +'</select></div>'
+    +'<div class="sep"></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">الخلايا</span>'
+    +'<input type="range" id="pTable" min="6" max="16" step="1" oninput="document.getElementById(\'pTableV\').textContent=this.value;applySettings()">'
+    +'<span class="ctrl-val" id="pTableV">10</span></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">الرؤوس</span>'
+    +'<input type="range" id="pHdr" min="5" max="14" step="1" oninput="document.getElementById(\'pHdrV\').textContent=this.value;applySettings()">'
+    +'<span class="ctrl-val" id="pHdrV">9</span></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">الاسم</span>'
+    +'<input type="range" id="pName" min="6" max="16" step="1" oninput="document.getElementById(\'pNameV\').textContent=this.value;applySettings()">'
+    +'<span class="ctrl-val" id="pNameV">10</span></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">المجموع</span>'
+    +'<input type="range" id="pTot" min="7" max="18" step="1" oninput="document.getElementById(\'pTotV\').textContent=this.value;applySettings()">'
+    +'<span class="ctrl-val" id="pTotV">12</span></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">السُّمك</span>'
+    +'<select id="pWeight" onchange="applySettings()">'
+    +'<option value="400">عادي</option><option value="600">شبه عريض</option>'
+    +'<option value="700">عريض</option><option value="800">أسود</option>'
+    +'</select></div>'
+    +'<div class="sep"></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">عرض الاسم (mm)</span>'
+    +'<input type="range" id="pNameW" min="25" max="80" step="1" oninput="document.getElementById(\'pNameWV\').textContent=this.value;applySettings()">'
+    +'<span class="ctrl-val" id="pNameWV">45</span></div>'
+    +'<div class="sep"></div>'
+    +'<div class="ctrl-group"><span class="ctrl-label">احتواء الاسم</span>'
+    +'<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:10px;color:#f1f5f9;">'
+    +'<input type="checkbox" id="pAutoFit" onchange="applySettings()" style="width:14px;height:14px;cursor:pointer;">'
+    +'<span>سطر واحد</span></label></div>'
+    +'</div>' // .ctrl
+
+    // ── شريط اختيار الفصول ──
+    +'<div class="cls-picker" id="clsPicker">'
+    +'<span style="font-size:9px;color:#94a3b8;font-weight:700;white-space:nowrap;">🏫 الفصول:</span>'
+    +'<button class="cls-all-btn" onclick="selectAllCls()">✓ الكل</button>'
+    +'<button class="cls-none-btn" onclick="selectNoneCls()">✕ مسح</button>'
+    +'<div style="width:1px;height:16px;background:#1e3a5f;margin:0 2px;"></div>'
+    +DB.classes.map(function(c,i){
+       return '<button class="cls-chip on" id="chip_'+i+'" onclick="toggleCls('+i+')">'+tfrEsc(c)+'</button>';
+     }).join('')
+    +'<div style="width:1px;height:16px;background:#1e3a5f;margin:0 2px;"></div>'
+    +'<span class="cls-count" id="clsCount">'+DB.classes.length+'/'+DB.classes.length+' فصول</span>'
+    +'</div>'
+
+    // ── حاوية الصفحات ──
+    +'<div id="pagesWrap"></div>'
+
+    +'<script>'
+    +'var ALL_DATA='+JSON.stringify(allClassesData)+';'
+    +'var CF='+JSON.stringify(JSON.parse(JSON.stringify(TFR_CF)))+';'
+    +'var DATE_STR='+JSON.stringify(dateStr)+';'
+    +'var selCls=ALL_DATA.map(function(){return true;});' // كل الفصول محددة ابتداءً
+
+    // ── esc و fmtV و cfStyle ──
+    +'function esc(v){return String(v||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}'
+    +'function fmtV(v){'
+    +'  if(v===null||v===undefined||v==="")return "—";'
+    +'  if(v==="غ")return "<span class=\'gab\'>غ</span>";'
+    +'  if(v==="م")return "<span class=\'mit\'>م</span>";'
+    +'  return esc(v);'
+    +'}'
+    +'function cfStyle(val,maxVal,type){'
+    +'  if(!CF||!CF.levels)return "";'
+    +'  var scope=(type==="tot"&&CF.scopes.tot)||(type==="ex"&&CF.scopes.ex)||((type==="avg")&&CF.scopes.avg)||(type==="beh"&&CF.scopes.beh);'
+    +'  if(!scope||val===null||val===undefined||val===""||val==="غ"||val==="م")return "";'
+    +'  var pct=(Number(val)/maxVal)*70;'
+    +'  var sorted=CF.levels.slice().sort(function(a,b){return b.from-a.from;});'
+    +'  var lv=sorted.find(function(l){return pct>=l.from;});'
+    +'  return lv?"background:"+lv.bg+"!important;color:"+lv.color+"!important;":"";'
+    +'}'
+
+    // ── toggle / select / update ──
+    +'function toggleCls(i){'
+    +'  selCls[i]=!selCls[i];'
+    +'  var chip=document.getElementById("chip_"+i);'
+    +'  if(chip){chip.classList.toggle("on",selCls[i]);}'
+    +'  updateCount();buildPages();'
+    +'}'
+    +'function selectAllCls(){'
+    +'  selCls=selCls.map(function(){return true;});'
+    +'  document.querySelectorAll(".cls-chip").forEach(function(c){c.classList.add("on");});'
+    +'  updateCount();buildPages();'
+    +'}'
+    +'function selectNoneCls(){'
+    +'  selCls=selCls.map(function(){return false;});'
+    +'  document.querySelectorAll(".cls-chip").forEach(function(c){c.classList.remove("on");});'
+    +'  updateCount();buildPages();'
+    +'}'
+    +'function updateCount(){'
+    +'  var on=selCls.filter(Boolean).length;'
+    +'  var el=document.getElementById("clsCount");'
+    +'  if(el)el.textContent=on+"/"+selCls.length+" فصول";'
+    +'}'
+
+    // ── بناء صفحة فصل واحد ──
+    +'function buildOnePage(D,fam,ts,hs,ns,tot,fw,nw,af,isLast){'
+    +'  var numDataCols=D.rows[0]?D.rows[0].cells.length:0;'
+    +'  var remainMm=204-6-nw;'
+    +'  var colW=numDataCols>0?(remainMm/numDataCols).toFixed(1):8;'
+    +'  var pass=D.rows.filter(function(r){return !r.fail;}).length;'
+    +'  var h="<div class=\'page"+(isLast?"":" page-break")+"\'>";'
+    // رأس
+    +'  h+="<div class=\'hdr\'>";'
+    +'  h+="<div class=\'hdr-top\'><div class=\'hdr-school\'>"+esc(D.school)+"</div><div class=\'hdr-cls\'>"+esc(D.cls||"")+"</div></div>";'
+    +'  h+="<div class=\'hdr-sub\'>كشف درجات مادة"+(D.subject?" — "+esc(D.subject):"")+(D.term?" — "+esc(D.term):"")+(D.syear?" — "+esc(D.syear):"")+"</div>";'
+    +'  h+="<div class=\'hdr-meta\'>";'
+    +'  h+="<span>المعلم: "+(D.teacher||"—")+"</span>";'
+    +'  h+="<span>"+DATE_STR+"</span>";'
+    +'  h+="<span>الطلاب: "+D.rows.length+" | ناجح: "+pass+" | راسب: "+(D.rows.length-pass)+"</span>";'
+    +'  h+="</div></div>";'
+    // جدول
+    +'  if(!D.rows.length){'
+    +'    h+="<div class=\'empty-cls\'>لا يوجد طلاب في هذا الفصل</div>";'
+    +'  } else {'
+    +'  h+="<table style=\'font-family:"+fam+";font-size:"+ts+"px;\'>";'
+    +'  h+="<colgroup><col style=\'width:6mm;\'><col style=\'width:"+nw+"mm;\'>";'
+    +'  for(var ci=0;ci<numDataCols-1;ci++) h+="<col style=\'width:"+colW+"mm;\'>";'
+    +'  h+="<col style=\'width:"+(parseFloat(colW)+2)+"mm;\'></colgroup>";'
+    +'  h+="<thead><tr>";'
+    +'  h+="<th rowspan=\'2\' style=\'background:#1e3a8a;color:white;font-size:"+hs+"px;\'>#</th>";'
+    +'  h+="<th rowspan=\'2\' style=\'background:#1e3a8a;color:white;text-align:right;padding-right:4px;font-size:"+hs+"px;\'>اسم الطالب</th>";'
+    +'  D.hdr1.forEach(function(h1){'
+    +'    var parts=h1.label.split("|"); var lbl=parts[0]; var dt=parts[1]||"";'
+    +'    h+="<th colspan=\'"+h1.span+"\' style=\'background:"+h1.bg+";color:"+h1.color+";font-size:"+hs+"px;\'>";'
+    +'    if(dt) h+="<div style=\'font-size:"+(hs-1)+"px;font-weight:400;opacity:.85;\'>"+dt+"</div>";'
+    +'    h+=lbl+"</th>";'
+    +'  });'
+    +'  h+="</tr><tr>";'
+    +'  D.hdr2.forEach(function(h2){ h+="<th style=\'background:"+h2.bg+";color:"+h2.color+";font-size:"+hs+"px;\'>"+h2.label+"</th>"; });'
+    +'  h+="</tr></thead><tbody>";'
+    +'  D.rows.forEach(function(row){'
+    +'    h+="<tr><td class=\'td-num\' style=\'font-size:"+(hs-1)+"px;\'>"+row.n+"</td>";'
+    +'    var ns2="font-size:"+ns+"px;font-weight:"+fw+";";'
+    +'    if(af) ns2+="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";'
+    +'    h+="<td class=\'td-name\' style=\'"+ns2+"\'>"+esc(row.name)+"</td>";'
+    +'    row.cells.forEach(function(c){'
+    +'      var cls2=""; var cMax=20;'
+    +'      if(c.type==="beh"){cls2="td-beh";cMax=10;}'
+    +'      else if(c.type==="avg"){cls2="td-avg";cMax=20;}'
+    +'      else if(c.type==="ex"){cls2="td-ex";cMax=30;}'
+    +'      else if(c.type==="tot"){cls2="td-tot";cMax=70;}'
+    +'      else if(c.type==="fail"){cls2="td-fail";cMax=70;}'
+    +'      var fw2=(c.type==="tot"||c.type==="fail")?900:fw;'
+    +'      var fs2=(c.type==="tot"||c.type==="fail")?tot:ts;'
+    +'      var cfS=cfStyle(c.v,cMax,c.type==="fail"?"tot":c.type);'
+    +'      var cellStyle="font-size:"+fs2+"px;font-weight:"+fw2+";";'
+    +'      if(cfS) cellStyle+=cfS;'
+    +'      h+="<td class=\'"+cls2+"\' style=\'"+cellStyle+"\'>"+fmtV(c.v)+"</td>";'
+    +'    });'
+    +'    h+="</tr>";'
+    +'  });'
+    +'  h+="</tbody></table>";'
+    +'  }' // end if rows
+    +'  h+="<div class=\'note\'>📌 المج = م.تقييم(20)+م.واجب(10)+م.سلوك(10)+اختبارات(30)=70 | الأسابيع: "+D.selWeeks.join("،")+"</div>";'
+    +'  h+="<div class=\'sigs\'>";'
+    +'  h+="<div class=\'sig\'><div class=\'sig-t\'>توقيع معلم المادة</div><div class=\'sig-n\'>ا/ "+esc(D.teacher||"................")+"</div></div>";'
+    +'  h+="<div class=\'sig\'><div class=\'sig-t\'>توقيع المشرف</div><div class=\'sig-n\'>&nbsp;</div></div>";'
+    +'  h+="<div class=\'sig\'><div class=\'sig-t\'>مدير المدرسة</div><div class=\'sig-n\'>&nbsp;</div></div>";'
+    +'  h+="</div></div>"; // .page'
+    +'  return h;'
+    +'}'
+
+    // ── بناء كل الصفحات ──
+    +'function buildPages(){'
+    +'  var fam=document.getElementById("pFamily").value;'
+    +'  var ts=Number(document.getElementById("pTable").value);'
+    +'  var hs=Number(document.getElementById("pHdr").value);'
+    +'  var ns=Number(document.getElementById("pName").value);'
+    +'  var tot=Number(document.getElementById("pTot").value);'
+    +'  var fw=document.getElementById("pWeight").value;'
+    +'  var nw=Number(document.getElementById("pNameW").value);'
+    +'  var af=document.getElementById("pAutoFit").checked;'
+    +'  var chosen=ALL_DATA.filter(function(_,i){return selCls[i];});'
+    +'  var wrap=document.getElementById("pagesWrap");'
+    +'  if(!chosen.length){'
+    +'    wrap.innerHTML="<div style=\'text-align:center;padding:60px;color:#64748b;font-size:13px;\'>📋 اختر فصلاً واحداً على الأقل من الشريط أعلاه</div>";'
+    +'    return;'
+    +'  }'
+    +'  var h="";'
+    +'  chosen.forEach(function(D,i){'
+    +'    h+=\'<div class="page-wrapper">\';'
+    +'    h+=buildOnePage(D,fam,ts,hs,ns,tot,fw,nw,af,i===chosen.length-1);'
+    +'    h+=\'</div>\';'
+    +'  });'
+    +'  wrap.innerHTML=h;'
+    +'}'
+
+    // ── تهيئة عناصر التحكم ──
+    +'function initControls(){'
+    +'  var f={family:'+JSON.stringify(initFamily)+',tableSize:'+initTS+',headerSize:'+initHS+',nameSize:'+initNS+',totalSize:'+initTot+',weight:'+initW+',nameWidth:'+initNW+'};'
+    +'  var sel=document.getElementById("pFamily");'
+    +'  for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===f.family){sel.selectedIndex=i;break;}}'
+    +'  document.getElementById("pTable").value=f.tableSize; document.getElementById("pTableV").textContent=f.tableSize;'
+    +'  document.getElementById("pHdr").value=f.headerSize;  document.getElementById("pHdrV").textContent=f.headerSize;'
+    +'  document.getElementById("pName").value=f.nameSize;   document.getElementById("pNameV").textContent=f.nameSize;'
+    +'  document.getElementById("pTot").value=f.totalSize;   document.getElementById("pTotV").textContent=f.totalSize;'
+    +'  document.getElementById("pNameW").value=f.nameWidth; document.getElementById("pNameWV").textContent=f.nameWidth;'
+    +'  var ws=document.getElementById("pWeight");'
+    +'  for(var j=0;j<ws.options.length;j++){if(ws.options[j].value==f.weight){ws.selectedIndex=j;break;}}'
+    +'}'
+    +'function applySettings(){buildPages();}'
+    +'window.addEventListener("load",function(){initControls();buildPages();});'
+    +'<\/script>'
+    +'</body></html>';
+
+  var win = window.open('', '_blank', 'width=1100,height=900,scrollbars=yes');
+  if(!win){ alert('يرجى السماح بالنوافذ المنبثقة في المتصفح'); return; }
+  win.document.write(winHTML);
+  win.document.close();
+}
+window.tfrPrintMulti = tfrPrintMulti;
 
 
 
