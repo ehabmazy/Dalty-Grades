@@ -1005,21 +1005,48 @@ var TFR = {
   font: {family:'Cairo,sans-serif', tableSize:10, headerSize:9, nameSize:10, totalSize:12, weight:700, nameWidth:45},
   cols: {showAssess:true, showHw:true, showBeh:true, showAvgAssess:true, showAvgHw:true, showAvgBeh:true, showExam:true}
 };
-(function(){try{var tf=JSON.parse(localStorage.getItem('tfr_font_v1'));if(tf)TFR.font=Object.assign(TFR.font,tf);}catch(e){}}());
-(function(){try{var tc=JSON.parse(localStorage.getItem('tfr_cols_v1'));if(tc)TFR.cols=Object.assign(TFR.cols,tc);}catch(e){}}());
+// ── تحميل الإعدادات المحفوظة عند بدء التطبيق ──
+(function(){
+  try{var tf=JSON.parse(localStorage.getItem('tfr_font_v1'));if(tf)TFR.font=Object.assign(TFR.font,tf);}catch(e){}
+  try{var tc=JSON.parse(localStorage.getItem('tfr_cols_v1'));if(tc)TFR.cols=Object.assign(TFR.cols,tc);}catch(e){}
+  try{
+    var ts=JSON.parse(localStorage.getItem('tfr_state_v1'));
+    if(ts){
+      if(ts.cls)          TFR.cls         = ts.cls;
+      if(Array.isArray(ts.weeks)) TFR.weeks = ts.weeks;
+      if(ts.teacherName !== undefined) TFR.teacherName = ts.teacherName;
+      if(ts.subject     !== undefined) TFR.subject     = ts.subject;
+      if(ts.term        !== undefined) TFR.term        = ts.term;
+      if(ts.schoolYear  !== undefined) TFR.schoolYear  = ts.schoolYear;
+    }
+  }catch(e){}
+}());
 
-// تهيئة بيانات كشف التفريغ من الإعدادات (تُنفَّذ مرة واحدة عند أول فتح للصفحة)
-var _tfrSyncedFromDB = false;
+// ── حفظ حالة TFR في localStorage ──
+function tfrSaveState(){
+  try{
+    localStorage.setItem('tfr_state_v1', JSON.stringify({
+      cls:         TFR.cls,
+      weeks:       TFR.weeks,
+      teacherName: TFR.teacherName,
+      subject:     TFR.subject,
+      term:        TFR.term,
+      schoolYear:  TFR.schoolYear
+    }));
+  }catch(e){}
+}
+
+// ── تزامن حقول البيانات الوصفية من إعدادات التطبيق (يعمل دائماً ولا يُلغي التعديل اليدوي) ──
 function tfrSyncFromDB(){
-  if(_tfrSyncedFromDB) return;
-  _tfrSyncedFromDB = true;
-  if(!TFR.teacherName && DB.meta.teacherName) TFR.teacherName = DB.meta.teacherName;
-  if(!TFR.subject    && DB.meta.subject)      TFR.subject     = DB.meta.subject;
-  if(!TFR.schoolYear && DB.meta.schoolYear)   TFR.schoolYear  = DB.meta.schoolYear;
-  // الفصل الدراسي من DB.meta.semester
-  if(!TFR.term && DB.meta.semester){
+  // المعلم: إذا كانت القيمة المحفوظة فارغة أو تطابق القيمة القديمة من DB → حدّثها
+  if(DB.meta.teacherName && !TFR.teacherName)
+    TFR.teacherName = DB.meta.teacherName;
+  if(DB.meta.subject && !TFR.subject)
+    TFR.subject = DB.meta.subject;
+  if(DB.meta.schoolYear && !TFR.schoolYear)
+    TFR.schoolYear = DB.meta.schoolYear;
+  if(!TFR.term && DB.meta.semester)
     TFR.term = Number(DB.meta.semester)===2 ? 'الفصل الدراسي الثاني' : 'الفصل الدراسي الأول';
-  }
 }
 
 function tfrEsc(v){ return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1472,6 +1499,9 @@ window.tfrPrint = tfrPrint;
 
 
 
+// متغير يُميّز بين "لم تُحمَّل الأسابيع بعد" و"مسحها المستخدم"
+var _tfrWeeksInitialized = false;
+
 function renderTafrighPage(){
   var root=document.getElementById('tafrighRoot');
   if(!root)return;
@@ -1480,7 +1510,14 @@ function renderTafrighPage(){
   if(!TFR.cls && DB.classes.length) TFR.cls=DB.classes[0];
   var aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
   var availWeeks=ALL_WEEKS.slice(0,aw);
-  if(!TFR.weeks.length) TFR.weeks=availWeeks.slice();
+  // ملء الأسابيع الافتراضية فقط عند أول فتح للصفحة (وليس بعد مسح المستخدم لها)
+  if(!_tfrWeeksInitialized){
+    _tfrWeeksInitialized = true;
+    // إذا لم تكن هناك أسابيع محفوظة → كل الأسابيع المتاحة
+    if(!TFR.weeks.length) TFR.weeks=availWeeks.slice();
+  }
+  // حفظ الحالة عند كل تحديث
+  tfrSaveState();
 
   var cls=TFR.cls;
   var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
@@ -1647,7 +1684,7 @@ function tfrClsBarToggle(){
     h+='<span style="font-size:9px;color:#94a3b8;font-weight:700;white-space:nowrap;">🏫 الفصل:</span>';
     DB.classes.forEach(function(c){
       var on=c===TFR.cls;
-      h+='<button onclick="TFR.cls=\''+tfrEsc(c)+'\';TFR.weeks=[];tfrAllBarsClose();renderTafrighPage();" '
+      h+='<button onclick="TFR.cls=\''+tfrEsc(c)+'\';TFR.weeks=ALL_WEEKS.slice(0,Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length));tfrSaveState();tfrAllBarsClose();renderTafrighPage();" '
        +'style="padding:3px 12px;border-radius:6px;font-size:10px;font-weight:700;font-family:inherit;cursor:pointer;'
        +'border:1px solid '+(on?'#0f766e':'#334155')+';background:'+(on?'rgba(15,118,110,.3)':'rgba(255,255,255,.07)')+';color:'+(on?'#34d399':'#94a3b8')+';">'
        +tfrEsc(c)+'</button>';
@@ -1665,14 +1702,14 @@ function _tfrRenderWeeksBar(){
   var availWeeks=ALL_WEEKS.slice(0,aw);
   var h='<div class="sub-bar-inner" style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;padding:0 8px;">';
   h+='<span style="font-size:9px;color:#94a3b8;font-weight:700;white-space:nowrap;">📅 الأسابيع:</span>';
-  h+='<button onclick="TFR.weeks='+JSON.stringify(availWeeks)+';renderTafrighPage();_tfrRenderWeeksBar();" '
+  h+='<button onclick="TFR.weeks='+JSON.stringify(availWeeks)+';tfrSaveState();renderTafrighPage();_tfrRenderWeeksBar();" '
    +'style="padding:2px 9px;border-radius:12px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;border:none;background:#0f766e;color:white;">✓ كل</button>';
-  h+='<button onclick="TFR.weeks=[];renderTafrighPage();_tfrRenderWeeksBar();" '
+  h+='<button onclick="TFR.weeks=[];tfrSaveState();renderTafrighPage();_tfrRenderWeeksBar();" '
    +'style="padding:2px 9px;border-radius:12px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;border:none;background:#7f1d1d;color:white;">✕ مسح</button>';
   h+='<div style="width:1px;height:16px;background:#1e3a5f;margin:0 2px;"></div>';
   availWeeks.forEach(function(w){
     var on=TFR.weeks.indexOf(w)>=0;
-    h+='<button onclick="var i=TFR.weeks.indexOf('+w+');if(i>=0)TFR.weeks.splice(i,1);else TFR.weeks.push('+w+');renderTafrighPage();_tfrRenderWeeksBar();" '
+    h+='<button onclick="var i=TFR.weeks.indexOf('+w+');if(i>=0)TFR.weeks.splice(i,1);else TFR.weeks.push('+w+');tfrSaveState();renderTafrighPage();_tfrRenderWeeksBar();" '
      +'style="padding:2px 9px;border-radius:12px;font-size:10px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .1s;'
      +'border:1px solid '+(on?'#3b82f6':'#334155')+';background:'+(on?'#1d4ed8':'rgba(255,255,255,.06)')+';color:'+(on?'#fff':'#64748b')+';">'
      +'أ'+w+'</button>';
@@ -1730,11 +1767,11 @@ function tfrMetaBarToggle(){
     }
     var h='<div class="sub-bar-inner" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:0 8px;">';
     h+='<span style="font-size:9px;color:#94a3b8;font-weight:700;white-space:nowrap;align-self:center;">📝 بيانات الكشف:</span>';
-    h+=inp('tfr_teacher','اسم المعلم',TFR.teacherName,'TFR.teacherName=this.value',140);
-    h+=inp('tfr_subject','المادة',TFR.subject,'TFR.subject=this.value',90);
-    h+=inp('tfr_term','الفصل الدراسي',TFR.term,'TFR.term=this.value',140);
-    h+=inp('tfr_syear','العام الدراسي',TFR.schoolYear,'TFR.schoolYear=this.value',110);
-    h+='<button onclick="TFR.teacherName=DB.meta.teacherName||TFR.teacherName;TFR.subject=DB.meta.subject||TFR.subject;TFR.schoolYear=DB.meta.schoolYear||TFR.schoolYear;TFR.term=(Number(DB.meta.semester)===2?\'الفصل الدراسي الثاني\':\'الفصل الدراسي الأول\');renderTafrighPage();" '
+    h+=inp('tfr_teacher','اسم المعلم',TFR.teacherName,'TFR.teacherName=this.value;tfrSaveState()',140);
+    h+=inp('tfr_subject','المادة',TFR.subject,'TFR.subject=this.value;tfrSaveState()',90);
+    h+=inp('tfr_term','الفصل الدراسي',TFR.term,'TFR.term=this.value;tfrSaveState()',140);
+    h+=inp('tfr_syear','العام الدراسي',TFR.schoolYear,'TFR.schoolYear=this.value;tfrSaveState()',110);
+    h+='<button onclick="TFR.teacherName=DB.meta.teacherName||TFR.teacherName;TFR.subject=DB.meta.subject||TFR.subject;TFR.schoolYear=DB.meta.schoolYear||TFR.schoolYear;TFR.term=(Number(DB.meta.semester)===2?\'الفصل الدراسي الثاني\':\'الفصل الدراسي الأول\');tfrSaveState();renderTafrighPage();tfrMetaBarToggle();" '
      +'style="padding:4px 10px;border-radius:6px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid #3b82f6;background:rgba(59,130,246,.15);color:#93c5fd;white-space:nowrap;align-self:flex-end;">🔄 من الإعدادات</button>';
     h+='</div>';
     bar.innerHTML=h;
@@ -1746,6 +1783,7 @@ window.tfrWeeksBarToggle=tfrWeeksBarToggle;
 window.tfrColsBarToggle=tfrColsBarToggle;
 window.tfrMetaBarToggle=tfrMetaBarToggle;
 window.tfrAllBarsClose=tfrAllBarsClose;
+window.tfrSaveState=tfrSaveState;
 
 
 
