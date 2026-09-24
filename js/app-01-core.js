@@ -130,7 +130,7 @@ function switchPage(p){
   var _tbView=document.getElementById("tbViewBtn");
   if(_tbView)_tbView.style.display=_isWeekly?"flex":"none";
   var _isTafrigh=(p==="tafrigh");
-  var _tfrIds=["tbMenuTfrCls","tbMenuTfrWeeks","tbMenuTfrCols","tbMenuTfrMeta","tbMenuTfrPrint","tbMenuTfrPrintMulti","tbMenuTfrCF","tbMenuTfrExcel","tbMenuTfrFont"];
+  var _tfrIds=["tbMenuTfrCls","tbMenuTfrWeeks","tbMenuTfrCols","tbMenuTfrMeta","tbMenuTfrPrint","tbMenuTfrCF","tbMenuTfrExcel","tbMenuTfrFont"];
   _tfrIds.forEach(function(id){var el=document.getElementById(id);if(el)el.style.display=_isTafrigh?"flex":"none";});
   if(!_isTafrigh&&typeof tfrAllBarsClose==="function") tfrAllBarsClose();
   var _isAbsence=(p==="absence");

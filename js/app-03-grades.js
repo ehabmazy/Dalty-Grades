@@ -15,6 +15,7 @@ function renderGrades(){
   var filtered=search?students.filter(function(s,i){return s.name.indexOf(search)>=0||String(i+1)===search;}):students;
   var tmax=totalMax();
   var rmax=GS.distRange.max!==null?GS.distRange.max:tmax;
+  var namesLocked=!!(DB.meta&&DB.meta.namesLocked);
 
   // Active page cols
   var activePg=null;
@@ -46,6 +47,8 @@ function renderGrades(){
   html+='<div class="g-info-right">';
   html+='<span class="badge badge-blue">'+filtered.length+' طالب</span>';
   html+='<button class="btn btn-sm" style="background:#0e7490;color:white;border:none;" onclick="gradesSortAlpha()">🔤 أبجدي</button>';
+  html+='<button class="btn btn-sm" style="background:'+(namesLocked?'#b45309':'#475569')+';color:white;border:none;" onclick="gradesToggleNamesLock()" title="'+(namesLocked?'الأسماء مقفلة — اضغط للفتح':'اضغط لقفل تعديل الأسماء')+'">'+(namesLocked?'🔒 الأسماء مقفلة':'🔓 قفل الأسماء')+'</button>';
+  html+='<button class="btn btn-sm" style="background:#059669;color:white;border:none;'+(namesLocked?'opacity:.45;':'')+'" onclick="openPasteNamesModal()">📋 لصق أسماء</button>';
   html+='<button class="btn btn-sm" style="background:#7c3aed;color:white;border:none;" onclick="showStudentFormLinks()">📲 روابط التسجيل</button>';
   html+='<button class="btn btn-primary btn-sm" onclick="gradesAddStudent()">+ جديد</button>';
   html+='</div></div>';
@@ -164,7 +167,7 @@ function renderGrades(){
       html+='</div>';
       html+='<input id="hph'+s.id+'" type="file" accept="image/*" capture="environment" style="display:none" onchange="gradesPhotoChange(event,'+idx+')" />';
       html+='</td>';
-      html+='<td class="td-name" style="font-size:10px;padding:3px 5px;">'+esc(s.name)+'</td>';
+      html+='<td class="td-name" style="padding:2px 3px;"><input class="ni"'+(namesLocked?' readonly':'')+' style="font-size:10px;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/></td>';
       var behSum=0,behCnt=0;
       weeks.forEach(function(w){
         var aField='a'+w, hField='h'+w, bField='bw'+w;
@@ -312,7 +315,7 @@ function renderGrades(){
     html+=(s.photo?'<img src="'+s.photo+'" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>':(_defP?'<img src="'+_defP+'" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>':'<span style="font-size:12px;color:#94a3b8">👤</span>'));
     html+='</div><input id="ph'+s.id+'" type="file" accept="image/*" style="display:none" onchange="gradesPhotoChange(event,'+idx+')"/></td>';
     // Name
-    html+='<td class="td-name"><input class="ni" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesSetField('+idx+',\'name\',this.value)" placeholder="اسم الطالب"/></td>';
+    html+='<td class="td-name"><input class="ni"'+(namesLocked?' readonly':'')+' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/></td>';
     // Grade cells for this page
     pageCols.forEach(function(c){
         var v=s[c.field];
@@ -727,6 +730,31 @@ function renderGradesModals(students,tmax,rmax){
     html+='</div></div>';
   }
 
+  // ── Paste names modal ────────────────────────────────
+  if(m.type==="pasteNames"){
+    var _pnMode=m.data.mode||"empty";
+    var _pnEmpty=(students||[]).filter(function(x){return !(x.name||"").trim();}).length;
+    html+='<div class="mo" onclick="closeModal()"><div class="md" style="max-width:480px" '+stopProp+'>';
+    html+='<div class="mh"><h2>📋 لصق الأسماء</h2><button class="xbtn" onclick="closeModal()">✕</button></div>';
+    html+='<div class="mb" style="display:flex;flex-direction:column;gap:8px;">';
+    html+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:7px 10px;font-size:10px;color:#475569;line-height:1.7;">';
+    html+='الصق قائمة الأسماء (اسم في كل سطر) من Excel أو Word أو واتساب.<br/>الترقيم في بداية السطر (1- / 2. / ٣)) يُحذف تلقائياً، ويمكن أيضاً فصل الأسماء بفاصلة.';
+    html+='</div>';
+    html+='<div style="position:relative;">';
+    html+='<textarea class="input-std" id="pnTA" rows="7" placeholder="الصق الأسماء هنا..." oninput="pnUpdatePreview()" style="resize:vertical;width:100%;box-sizing:border-box;"></textarea>';
+    html+='<button onclick="pnPasteClipboard()" style="position:absolute;top:6px;left:6px;background:#ede9fe;border:1px solid #7c3aed;border-radius:5px;font-size:9px;color:#6d28d9;cursor:pointer;padding:3px 8px;font-weight:700;">📋 لصق سريع</button>';
+    html+='</div>';
+    html+='<div style="display:flex;flex-direction:column;gap:6px;font-size:10.5px;color:#1e293b;">';
+    html+='<label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer;"><input type="radio" name="pnMode" value="empty" '+(_pnMode==="empty"?'checked ':'')+'onchange="pnSetMode(\'empty\')" style="margin-top:2px;"/><span><b>تعبئة الصفوف الفارغة أولاً ثم إضافة الباقي</b> <span style="color:#059669;">(آمن — لا يغيّر أي اسم موجود)</span>'+(_pnEmpty?' <span style="color:#64748b;">· يوجد '+_pnEmpty+' صف فارغ</span>':'')+'</span></label>';
+    html+='<label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer;"><input type="radio" name="pnMode" value="fill" '+(_pnMode==="fill"?'checked ':'')+'onchange="pnSetMode(\'fill\')" style="margin-top:2px;"/><span><b>استبدال الأسماء بالترتيب</b> ابتداءً من الصف <input type="number" id="pnStart" min="1" value="1" oninput="pnUpdatePreview()" '+(_pnMode==="fill"?'':'disabled ')+'style="width:54px;padding:1px 4px;border:1px solid #cbd5e1;border-radius:4px;font-size:10.5px;"/> <span style="color:#64748b;">(الدرجات تبقى مع الصف كما هي)</span></span></label>';
+    html+='<label style="display:flex;gap:6px;align-items:flex-start;cursor:pointer;"><input type="radio" name="pnMode" value="append" '+(_pnMode==="append"?'checked ':'')+'onchange="pnSetMode(\'append\')" style="margin-top:2px;"/><span><b>إضافة كطلاب جدد</b> في آخر الجدول <label style="margin-inline-start:6px;color:#475569;cursor:pointer;"><input type="checkbox" id="pnSkipDup" checked onchange="pnUpdatePreview()"/> تجاهل الأسماء المكررة</label></span></label>';
+    html+='</div>';
+    html+='<div id="pnPreview" style="display:none;"></div>';
+    html+='</div>';
+    html+='<div class="mf"><button class="btn btn-ghost" onclick="closeModal()">إلغاء</button><button class="btn btn-success" onclick="gradesApplyPasteNames()">تطبيق</button></div>';
+    html+='</div></div>';
+  }
+
   // ── Smart Distribution modal ─────────────────────────
   if(m.type==="smartDist"){
     var _aw2=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
@@ -973,6 +1001,189 @@ function gradesApplyPaste(){
   saveDB();GS.modal=null;
   showSnack("✅ تم تطبيق "+applied+" سجل"+(added?" ("+added+" جديد)":""));
   renderGrades();
+}
+
+// ── تعديل الأسماء ولصقها ─────────────────────────────
+function gradesToggleNamesLock(){
+  DB.meta=DB.meta||{};
+  DB.meta.namesLocked=!DB.meta.namesLocked;
+  saveDB();renderGrades();
+  showSnack(DB.meta.namesLocked?"🔒 تم قفل تعديل الأسماء":"🔓 تم فتح تعديل الأسماء");
+}
+function _namesLockedWarn(){
+  if(DB.meta&&DB.meta.namesLocked){showSnack("⚠️ الأسماء مقفلة — اضغط «🔒 الأسماء مقفلة» لفتحها");return true;}
+  return false;
+}
+function gradesRenameStudent(idx,val){
+  if(DB.meta&&DB.meta.namesLocked)return;
+  var arr=DB.data[GS.activeClass];
+  if(!arr||!arr[idx])return;
+  var nv=String(val==null?"":val).replace(/\s+/g," ").trim();
+  var dup=!!nv&&arr.some(function(s,i){return i!==idx&&(s.name||"").trim()===nv;});
+  arr[idx].name=nv;
+  saveDB();
+  if(dup)showSnack("⚠️ يوجد طالب آخر بنفس الاسم في هذا الفصل");
+}
+
+// يحوّل نصاً ملصوقاً إلى قائمة أسماء نظيفة
+function parseNamesText(text){
+  var raw=String(text==null?"":text).replace(/^\s+|\s+$/g,"");
+  if(!raw)return [];
+  var lines=raw.split(/\r\n|\n|\r/);
+  // سطر واحد مفصول بفواصل: أحمد، محمد، علي
+  if(lines.length===1&&/[,،;؛]/.test(raw)&&raw.indexOf("\t")<0)lines=raw.split(/[,،;؛]/);
+  var out=[];
+  lines.forEach(function(line){
+    if(!line||!line.trim())return;
+    var cells=line.split("\t").map(function(c){return c.trim();}).filter(Boolean);
+    var cell=null;
+    for(var i=0;i<cells.length;i++){if(/[A-Za-z\u0600-\u06FF]/.test(cells[i])){cell=cells[i];break;}} // أول خلية فيها حروف (تجاهل عمود الترقيم)
+    if(cell===null)return;
+    cell=cell.replace(/[\u200e\u200f\u202a-\u202e]/g,"");
+    cell=cell.replace(/^\s*(?:[0-9\u0660-\u0669]+(?:\s*[\-\.\)\]\u060C:_\u2013\u2014]+\s*|\s+)|[\u2022\u00b7\u25aa\u25cf\*\-]+\s+)/,""); // 1- / 2. / ٣) / • 
+    cell=cell.replace(/^["'\u201c\u201d]+|["'\u201c\u201d]+$/g,"").replace(/\s+/g," ").trim();
+    if(cell)out.push(cell);
+  });
+  return out;
+}
+
+// يبني خطة التنفيذ (بدون تعديل البيانات) — تُستخدم للمعاينة والتطبيق
+function _namesPlan(arr,names,mode,opts){
+  var plan=[];
+  opts=opts||{};
+  if(mode==="fill"){
+    var start=Math.max(0,(parseInt(opts.start,10)||1)-1);
+    names.forEach(function(n,i){var t=start+i;plan.push({name:n,idx:t<arr.length?t:-1});});
+  } else if(mode==="empty"){
+    var p=0;
+    names.forEach(function(n){
+      while(p<arr.length&&(arr[p].name||"").trim())p++;
+      if(p<arr.length){plan.push({name:n,idx:p});p++;}
+      else plan.push({name:n,idx:-1});
+    });
+  } else {
+    var have={};arr.forEach(function(s){have[(s.name||"").trim()]=true;});
+    names.forEach(function(n){
+      if(opts.skipDup&&have[n]){plan.push({name:n,idx:-1,skip:true});return;}
+      have[n]=true;plan.push({name:n,idx:-1});
+    });
+  }
+  return plan;
+}
+
+function _namesApply(cls,names,mode,opts){
+  var arr=DB.data[cls]=DB.data[cls]||[];
+  var plan=_namesPlan(arr,names,mode,opts);
+  var renamed=[],addedIds=[],skipped=0,seq=Date.now();
+  plan.forEach(function(it){
+    if(it.skip){skipped++;return;}
+    if(it.idx>=0){
+      var st=arr[it.idx];
+      if(st.name!==it.name){renamed.push({id:st.id,old:st.name});st.name=it.name;}
+    } else {
+      var ns=emptyStudent(seq++,it.name);
+      arr.push(ns);addedIds.push(ns.id);
+    }
+  });
+  saveDB();
+  return {renamed:renamed,added:addedIds.length,skipped:skipped,undo:function(){
+    var a=DB.data[cls]||[];
+    renamed.forEach(function(r){a.forEach(function(s){if(s.id===r.id)s.name=r.old;});});
+    DB.data[cls]=a.filter(function(s){return addedIds.indexOf(s.id)<0;});
+    saveDB();renderGrades();
+  }};
+}
+
+function _namesSnackMsg(res){
+  return "✅ تم: "+res.renamed.length+" تعديل"+(res.added?" + "+res.added+" طالب جديد":"")+(res.skipped?" (تجاهل "+res.skipped+" مكرر)":"");
+}
+
+// لصق قائمة أسماء مباشرةً داخل خلية الاسم (مثل Excel): تُملأ الصفوف ابتداءً من الصف الحالي
+function gradesNamePaste(e,idx){
+  if(DB.meta&&DB.meta.namesLocked){e.preventDefault();_namesLockedWarn();return;}
+  var cd=e.clipboardData||window.clipboardData;
+  var txt=cd?cd.getData("text"):"";
+  if(!txt||!/[\r\n]/.test(txt.replace(/\s+$/,"")))return; // سطر واحد → لصق عادي
+  var names=parseNamesText(txt);
+  if(names.length<2)return;
+  e.preventDefault();
+  var cls=GS.activeClass,arr=DB.data[cls]||[];
+  var over=0;
+  names.forEach(function(n,i){var t=idx+i;if(i>0&&t<arr.length&&(arr[t].name||"").trim()&&arr[t].name!==n)over++;});
+  if(over&&!confirm("سيتم لصق "+names.length+" اسم ابتداءً من الصف "+(idx+1)+"\nواستبدال "+over+" اسم موجود (الدرجات تبقى مع الصف كما هي).\n\nمتابعة؟"))return;
+  var res=_namesApply(cls,names,"fill",{start:idx+1});
+  renderGrades();
+  showSnack(_namesSnackMsg(res),res.undo);
+}
+
+function openPasteNamesModal(){
+  if(_namesLockedWarn())return;
+  GS.modal={type:"pasteNames",data:{mode:"empty"}};
+  renderGrades();
+  setTimeout(function(){var t=document.getElementById("pnTA");if(t)t.focus();},60);
+}
+function pnSetMode(mode){
+  if(GS.modal&&GS.modal.data)GS.modal.data.mode=mode;
+  var st=document.getElementById("pnStart");
+  if(st)st.disabled=(mode!=="fill");
+  pnUpdatePreview();
+}
+function pnPasteClipboard(){
+  if(!navigator.clipboard||!navigator.clipboard.readText){showSnack("المتصفح لا يدعم اللصق التلقائي، استخدم Ctrl+V داخل المربع");return;}
+  navigator.clipboard.readText().then(function(text){
+    var ta=document.getElementById("pnTA");
+    if(ta){ta.value=text;ta.focus();pnUpdatePreview();}
+  }).catch(function(){showSnack("تعذّر الوصول للحافظة — استخدم Ctrl+V داخل المربع");});
+}
+function _pnOpts(){
+  var st=document.getElementById("pnStart"),sk=document.getElementById("pnSkipDup");
+  return {start:st?parseInt(st.value,10)||1:1,skipDup:!!(sk&&sk.checked)};
+}
+function pnUpdatePreview(){
+  var ta=document.getElementById("pnTA"),box=document.getElementById("pnPreview");
+  if(!ta||!box||!GS.modal||GS.modal.type!=="pasteNames")return;
+  var names=parseNamesText(ta.value);
+  if(!names.length){box.style.display="none";box.innerHTML="";return;}
+  var arr=DB.data[GS.activeClass]||[];
+  var plan=_namesPlan(arr,names,GS.modal.data.mode||"empty",_pnOpts());
+  var nFill=0,nRep=0,nNew=0,nSkip=0,nSame=0;
+  plan.forEach(function(it){
+    if(it.skip){nSkip++;return;}
+    if(it.idx<0){nNew++;return;}
+    var old=(arr[it.idx].name||"").trim();
+    if(!old)nFill++;else if(old===it.name)nSame++;else nRep++;
+  });
+  var sum=[];
+  sum.push("<b>"+names.length+"</b> اسم");
+  if(nFill)sum.push(nFill+" في صفوف فارغة");
+  if(nRep)sum.push('<span style="color:#b45309;">'+nRep+" استبدال</span>");
+  if(nNew)sum.push(nNew+" طالب جديد");
+  if(nSkip)sum.push(nSkip+" مكرر متجاهَل");
+  if(nSame)sum.push(nSame+" دون تغيير");
+  var h='<div style="font-size:10px;color:#334155;margin-bottom:4px;">'+sum.join(" · ")+"</div>";
+  h+='<div style="max-height:130px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px;font-size:10px;">';
+  plan.slice(0,80).forEach(function(it){
+    var rowLbl=it.skip?"—":(it.idx>=0?String(it.idx+1):"+");
+    var old=it.idx>=0?(arr[it.idx].name||"").trim():"";
+    var bg=it.skip?"#f1f5f9":(it.idx<0?"#ecfdf5":(old&&old!==it.name?"#fffbeb":"#fff"));
+    h+='<div style="display:flex;gap:6px;padding:2px 8px;border-bottom:1px solid #f1f5f9;background:'+bg+';'+(it.skip?'color:#94a3b8;text-decoration:line-through;':'')+'">';
+    h+='<span style="min-width:22px;color:#64748b;">'+rowLbl+"</span>";
+    h+='<span style="flex:1;">'+(old&&old!==it.name?'<span style="color:#94a3b8;text-decoration:line-through;">'+esc(old)+'</span> ← ':"")+esc(it.name)+"</span></div>";
+  });
+  if(plan.length>80)h+='<div style="padding:3px 8px;color:#94a3b8;">… و'+(plan.length-80)+" اسم آخر</div>";
+  h+="</div>";
+  box.innerHTML=h;box.style.display="block";
+}
+function gradesApplyPasteNames(){
+  if(DB.meta&&DB.meta.namesLocked)return;
+  var ta=document.getElementById("pnTA");
+  if(!ta||!GS.modal||GS.modal.type!=="pasteNames")return;
+  var names=parseNamesText(ta.value);
+  if(!names.length){showSnack("⚠️ لم أجد أسماء — الصق القائمة أولاً");return;}
+  var res=_namesApply(GS.activeClass,names,GS.modal.data.mode||"empty",_pnOpts());
+  GS.modal=null;
+  renderGrades();
+  showSnack(_namesSnackMsg(res),res.undo);
 }
 
 // ── Column config actions ─────────────────────────────

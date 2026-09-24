@@ -148,10 +148,7 @@
       <button class="tb-menu-btn" id="tbTfrMetaBtn" onclick="tfrMetaBarToggle()">📝 <span class="btn-txt">بيانات الكشف</span></button>
     </div>
     <div class="tb-menu-wrap" id="tbMenuTfrPrint" style="display:none;">
-      <button class="tb-menu-btn" id="tbTfrPrintBtn" onclick="tfrPrint()" style="background:rgba(21,128,61,.25);border-color:rgba(21,128,61,.6);color:#86efac;">🖨️ <span class="btn-txt">طباعة الفصل</span></button>
-    </div>
-    <div class="tb-menu-wrap" id="tbMenuTfrPrintMulti" style="display:none;">
-      <button class="tb-menu-btn" id="tbTfrPrintMultiBtn" onclick="tfrPrintMulti()" style="background:rgba(21,128,61,.18);border-color:rgba(21,128,61,.5);color:#4ade80;">🖨️ <span class="btn-txt">طباعة متعددة</span></button>
+      <button class="tb-menu-btn" id="tbTfrPrintBtn" onclick="tfrPrint()" style="background:rgba(21,128,61,.25);border-color:rgba(21,128,61,.6);color:#86efac;">🖨️ <span class="btn-txt">طباعة</span></button>
     </div>
     <div class="tb-menu-wrap" id="tbMenuTfrCF" style="display:none;">
       <button class="tb-menu-btn" id="tbTfrCFBtn" onclick="tfrOpenCFModal()" style="background:rgba(139,92,246,.18);border-color:rgba(139,92,246,.6);color:#c4b5fd;">🎨 <span class="btn-txt">تنسيق</span></button>
@@ -967,6 +964,13 @@ var HELP = {
       { h:'🗂 اختيار الفصل', items: [
         'تظهر الصفحة الرئيسية لاختيار الفصل أولاً، ثم تنتقل لجدول الدرجات الخاص به.',
         'يمكن إنشاء فصول متعددة وإضافة الطلاب مع صورهم.'
+      ]},
+      { h:'✏️ تعديل الأسماء ولصقها', items: [
+        'اضغط على اسم أي طالب في الجدول لتعديله مباشرة (Enter للحفظ).',
+        'زر «📋 لصق أسماء» يفتح نافذة للصق قائمة أسماء (اسم في كل سطر) مع معاينة قبل التطبيق، وخيارات: تعبئة الصفوف الفارغة، أو استبدال الأسماء بالترتيب، أو إضافتهم كطلاب جدد.',
+        'يمكنك أيضاً لصق قائمة أسماء مباشرةً داخل خانة اسم الطالب لتُملأ الصفوف ابتداءً من ذلك الصف.',
+        'الدرجات تبقى مرتبطة بالصف عند تغيير الاسم، ويمكن التراجع عن آخر لصق من الزر الظاهر أسفل الشاشة.',
+        'زر «🔓 قفل الأسماء» يمنع تعديل الأسماء ولصقها حتى لا تتغير بالخطأ، ويُحفظ اختيارك؛ اضغطه مرة أخرى للفتح.'
       ]},
       { h:'➕ الأعمدة والدرجات', items: [
         'زر «الأعمدة» يتيح إظهار/إخفاء أي عمود (أعمال، اختبار، سلوك، إملاء...) لتبسيط العرض.',
