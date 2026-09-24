@@ -167,7 +167,7 @@ function renderGrades(){
       html+='</div>';
       html+='<input id="hph'+s.id+'" type="file" accept="image/*" capture="environment" style="display:none" onchange="gradesPhotoChange(event,'+idx+')" />';
       html+='</td>';
-      html+='<td class="td-name" style="padding:2px 3px;"><input class="ni"'+(namesLocked?' readonly':'')+' style="font-size:10px;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/></td>';
+      html+='<td class="td-name" style="padding:2px 3px;">'+_sickBadge(GS.activeClass,s.id)+'<input class="ni"'+(namesLocked?' readonly':'')+' style="font-size:10px;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/></td>';
       var behSum=0,behCnt=0;
       weeks.forEach(function(w){
         var aField='a'+w, hField='h'+w, bField='bw'+w;
@@ -350,6 +350,8 @@ function renderGrades(){
     html+='<td>';
     html+='<button class="abs-btn" onclick="switchPage(\'absence\')">'+( absPer>0?'<span class="abs-cnt">'+absPer+'</span>':"")+' 📋</button>';
     if(absPer>0)html+='<div style="font-size:8px;color:#f97316;">'+absPer+'ف</div>';
+    var _sickPer=countStudentSickPeriods(cls,s.id);
+    if(_sickPer>0)html+='<div style="font-size:8px;color:#d97706;" title="فترات مرض">🤒'+_sickPer+'</div>';
     html+='</td>';
     // Distribute — clickable cell
     var _gsDistId2='gs_dist_'+idx;
@@ -1003,6 +1005,12 @@ function gradesApplyPaste(){
   renderGrades();
 }
 
+// شارة المرض بجوار اسم الطالب
+function _sickBadge(cls,id){
+  var n=countStudentSickPeriods(cls,id);
+  if(!n)return "";
+  return '<span title="'+n+' فترة مرض" style="float:left;font-size:8px;line-height:1;background:rgba(245,158,11,.2);color:#b45309;border-radius:6px;padding:1px 4px;margin-top:6px;">🤒'+n+'</span>';
+}
 // ── تعديل الأسماء ولصقها ─────────────────────────────
 function gradesToggleNamesLock(){
   DB.meta=DB.meta||{};

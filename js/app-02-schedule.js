@@ -291,17 +291,23 @@ function applyAbsenceToGrades(cls,studentId,week){
     Object.keys(s._autoExc||{}).forEach(function(f){var m=f.match(/^[ah](\d+)$/);if(m)seen[m[1]]=true;});
     weeks=Object.keys(seen).map(Number);
   }
+  // إن لم تُربط أي فترة بالواجب/التقييم، يُطبَّق المرض على واجب وتقييم الأسبوع كله
+  // حتى يظهر في الدرجات دون إعداد إضافي (الغياب العادي يبقى كما هو).
+  var _ppw=Math.max(1,Number(DB.meta.periodsPerWeek)||3),_anyLinked=false;
+  for(var _ci=0;_ci<_ppw;_ci++){if(getAbsColType(_ci)!=='attendance'){_anyLinked=true;break;}}
   weeks.forEach(function(wk){
-    var hwAbs=false,asAbs=false,hwSick=false,asSick=false;
+    var hwAbs=false,asAbs=false,hwSick=false,asSick=false,sickAny=false;
     Object.keys(abs).forEach(function(k){
       var st=abs[k];
       if(st!=="abs"&&st!=="sick")return;
       var m=k.match(/^w(\d+)_ci(\d+)$/);
       if(!m||Number(m[1])!==wk)return;
+      if(st==="sick")sickAny=true;
       var t=getAbsColType(m[2]);
       if(t==='hw'){if(st==="abs")hwAbs=true;else hwSick=true;}
       else if(t==='assess'){if(st==="abs")asAbs=true;else asSick=true;}
     });
+    if(!_anyLinked&&sickAny){hwSick=true;asSick=true;}
     _applyAbsSickField(s,'a'+wk,asAbs,asSick);
     _applyAbsSickField(s,'h'+wk,hwAbs,hwSick);
   });
