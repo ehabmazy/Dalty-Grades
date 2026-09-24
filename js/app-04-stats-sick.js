@@ -75,7 +75,16 @@ function renderSick(){
     Object.keys(absData).forEach(function(k){
       if(absData[k]==="sick"){
         var dt=absKeyDate(k);
-        if(dt)sickEntries.push(dt);
+        if(!dt){
+          var mk=k.match(/^w(\d+)_ci(\d+)$/);
+          if(mk){
+            var _cols=buildAbsCols(cls,Number(mk[1]));
+            var _c=_cols[Number(mk[2])];
+            var _d=getWeekDateForDay(Number(mk[1]),_c&&_c.dayIdx>=0?_c.dayIdx:0);
+            if(_d)dt=dateToStr(_d);
+          }
+        }
+        if(dt&&sickEntries.indexOf(dt)<0)sickEntries.push(dt);
       }
     });
     sickEntries.sort();
@@ -172,8 +181,9 @@ function applySickRange(cls,studentId){
   var t=document.getElementById("sickTo_"+studentId);
   if(!f||!t||!f.value||!t.value){showSnack("⚠️ حدد تاريخ البداية والنهاية");return;}
   if(new Date(f.value)>new Date(t.value)){showSnack("⚠️ تاريخ البداية بعد النهاية");return;}
+  if(!DB.meta.startDate){showSnack("⚠️ حدد تاريخ بداية الفصل (السبت للأسبوع 1) من الإعدادات أولاً ليُربط المرض بالأسابيع");return;}
   setSickRange(cls,studentId,null,null,null,f.value,t.value);
-  showSnack("✅ تم تسجيل المرضى");
+  showSnack("✅ تم تسجيل المرضى وتطبيقه على الأسابيع (م) — الواجب/التقييم حسب نوع الفترة في صفحة الغياب");
   renderSick();
 }
 function clearSickRangeUI(cls,studentId){

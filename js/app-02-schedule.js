@@ -190,7 +190,9 @@ function clearSickRange(cls,studentId,fromDate,toDate){
     var cols=buildAbsCols(cls,w);
     cols.forEach(function(col,ci){
       var k="w"+w+"_ci"+ci;
-      if(abs[k]==="sick")delete abs[k];
+      if(abs[k]!=="sick")return;
+      var d=getWeekDateForDay(w,col.dayIdx>=0?col.dayIdx:0);
+      if(d&&d>=from&&d<=to)delete abs[k];
     });
   });
   applyAbsenceToGrades(cls,studentId);
@@ -268,33 +270,56 @@ function setAbsColType(ci,type){
 }
 
 function applyAbsenceToGrades(cls,studentId,week){
-  // ── ربط فترات الغياب بحقول الواجب/التقييم، حسب نوع كل فترة (يُضبط من رأس
-  // كل عمود في صفحة الغياب). فترة من نوع "واجب" أو "تقييم" وغائب فيها الطالب
-  // هذا الأسبوع → الحقل المقابل لذلك الأسبوع يُعلَّم "غ" تلقائياً، ويظهر هذا
-  // فوراً وبنفس القيمة في كل الصفحات (الغياب/الأسبوعي/الدرجات) لأنه يُكتب
-  // مباشرة في بيانات الطالب الموحّدة. فترات "غياب" العادية لا تؤثر على أي درجة.
-  if(!week)return;
+  // ── ربط فترات الغياب/المرض بحقول الواجب/التقييم، حسب نوع كل فترة (يُضبط من رأس
+  // كل عمود في صفحة الغياب). فترة من نوع "واجب" أو "تقييم":
+  //   • غائب فيها الطالب → الحقل المقابل لذلك الأسبوع يُعلَّم "غ"
+  //   • مريض فيها الطالب → يُعلَّم "م" (معذور)، والغياب له الأولوية إن اجتمعا
+  // تُكتب القيمة مباشرة في بيانات الطالب الموحّدة فتظهر في كل الصفحات.
+  // إن لم يُمرَّر أسبوع (مثل تسجيل فترة مرض) تُطبَّق على كل الأسابيع.
   var sts=DB.data[cls]||[];
   var idx=-1;
   for(var i=0;i<sts.length;i++){if(sts[i].id===studentId){idx=i;break;}}
   if(idx<0)return;
   var s=sts[idx];
   var abs=getStudentAbsences(cls,studentId);
-  var hwAbsent=false,assessAbsent=false;
-  Object.keys(abs).forEach(function(k){
-    if(abs[k]!=="abs")return;
-    var m=k.match(/^w(\d+)_ci(\d+)$/);
-    if(!m||Number(m[1])!==Number(week))return;
-    var t=getAbsColType(m[2]);
-    if(t==='hw')hwAbsent=true;
-    else if(t==='assess')assessAbsent=true;
+  var weeks;
+  if(week)weeks=[Number(week)];
+  else{
+    var seen={};
+    Object.keys(abs).forEach(function(k){var m=k.match(/^w(\d+)_/);if(m)seen[m[1]]=true;});
+    // أسابيع كان فيها "م" تلقائي سابقاً لإزالتها إذا انتهت فترة المرض
+    Object.keys(s._autoExc||{}).forEach(function(f){var m=f.match(/^[ah](\d+)$/);if(m)seen[m[1]]=true;});
+    weeks=Object.keys(seen).map(Number);
+  }
+  weeks.forEach(function(wk){
+    var hwAbs=false,asAbs=false,hwSick=false,asSick=false;
+    Object.keys(abs).forEach(function(k){
+      var st=abs[k];
+      if(st!=="abs"&&st!=="sick")return;
+      var m=k.match(/^w(\d+)_ci(\d+)$/);
+      if(!m||Number(m[1])!==wk)return;
+      var t=getAbsColType(m[2]);
+      if(t==='hw'){if(st==="abs")hwAbs=true;else hwSick=true;}
+      else if(t==='assess'){if(st==="abs")asAbs=true;else asSick=true;}
+    });
+    _applyAbsSickField(s,'a'+wk,asAbs,asSick);
+    _applyAbsSickField(s,'h'+wk,hwAbs,hwSick);
   });
-  var aF='a'+week,hF='h'+week;
-  if(assessAbsent)s[aF]='غ'; else if(s[aF]==='غ')s[aF]='';
-  if(hwAbsent)s[hF]='غ'; else if(s[hF]==='غ')s[hF]='';
 }
-
-
+function _applyAbsSickField(s,field,isAbs,isSick){
+  var auto=s._autoExc||(s._autoExc={});
+  var cur=s[field];
+  if(isAbs){s[field]='غ';delete auto[field];}
+  else if(isSick){
+    // لا نكتب فوق درجة رقمية أدخلها المعلم يدوياً
+    if(cur===''||cur===undefined||cur===null||cur==='غ'||cur==='م'){s[field]='م';auto[field]=true;}
+  } else {
+    if(cur==='غ')s[field]='';
+    else if(cur==='م'&&auto[field])s[field]='';
+    delete auto[field];
+  }
+  if(!Object.keys(auto).length)delete s._autoExc;
+}
 
 
 // ══════════════════════════════════════════════════════

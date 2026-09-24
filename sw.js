@@ -3,9 +3,9 @@
    النسخة: 1.0.0
    ══════════════════════════════════════════ */
 
-const CACHE_NAME = 'dalty-grades-v41';
-const STATIC_CACHE = 'dalty-static-v41';
-const DYNAMIC_CACHE = 'dalty-dynamic-v41';
+const CACHE_NAME = 'dalty-grades-v44';
+const STATIC_CACHE = 'dalty-static-v44';
+const DYNAMIC_CACHE = 'dalty-dynamic-v44';
 
 /* ── الملفات المخزنة مسبقاً عند التثبيت ── */
 const PRE_CACHE = [
