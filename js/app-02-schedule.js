@@ -116,9 +116,13 @@ function toggleAbsence(cls,studentId,week,colIndex){
 function toggleSickCol(cls,studentId,week,colIndex){
   var abs=getStudentAbsences(cls,studentId);
   var k="w"+week+"_ci"+colIndex;
-  if(abs[k]==="sick"){delete abs[k];}
-  else abs[k]="sick";
-  applyAbsenceToGrades(cls,studentId,week);
+  if(abs[k]==="sick"){
+    delete abs[k];
+    applyAbsenceToGrades(cls,studentId,week);
+  } else {
+    abs[k]="sick";
+    _applySickWithConfirm(cls,studentId,week);
+  }
   saveDB();
   _refreshCurrentAndRelated();
 }
@@ -152,9 +156,13 @@ function toggleSick(cls,studentId,week,periodId,dayIdx,dateStr){
   var dt=dateStr||(DB.meta.startDate?dateToStr(getWeekDateForDay(week,dayIdx>=0?dayIdx:0)):null);
   var k=absKey(week,periodId,dayIdx,dt);
   var oldK=absKey(week,periodId,dayIdx);
-  if(abs[k]==="sick"||abs[oldK]==="sick"){delete abs[k];delete abs[oldK];}
-  else{delete abs[oldK];abs[k]="sick";}
-  applyAbsenceToGrades(cls,studentId);
+  if(abs[k]==="sick"||abs[oldK]==="sick"){
+    delete abs[k];delete abs[oldK];
+    applyAbsenceToGrades(cls,studentId);
+  } else {
+    delete abs[oldK];abs[k]="sick";
+    _applySickWithConfirm(cls,studentId);
+  }
   saveDB();
   _refreshCurrentAndRelated();
 }
@@ -162,21 +170,37 @@ function setSickRange(cls,studentId,week,periodId,dayIdx,fromDate,toDate){
   if(!fromDate||!toDate)return;
   var from=new Date(fromDate),to=new Date(toDate);
   var abs=getStudentAbsences(cls,studentId);
+  var touchedWeeks=[];
   ALL_WEEKS.forEach(function(w){
     var wStart=getWeekDateForDay(w,0);
     if(!wStart)return;
     var wEnd=new Date(wStart);wEnd.setDate(wEnd.getDate()+5);
     if(wStart>to||wEnd<from)return;
     var cols=buildAbsCols(cls,w);
+    var touched=false;
     cols.forEach(function(col,ci){
       var d=getWeekDateForDay(w,col.dayIdx>=0?col.dayIdx:0);
       if(!d||d<from||d>to)return;
-      abs["w"+w+"_ci"+ci]="sick";
+      abs["w"+w+"_ci"+ci]="sick";touched=true;
     });
+    if(touched)touchedWeeks.push(w);
   });
-  applyAbsenceToGrades(cls,studentId);
+  // نُطبّق فقط على أسابيع هذه الفترة تحديداً — حتى لا يعيد سؤال «استبدال؟» فتح أو تغيير
+  // أسابيع من فترات مرض سابقة اختار فيها المستخدم إبقاء الدرجة كما هي.
+  _applySickWithConfirm(cls,studentId,touchedWeeks);
   saveDB();
   _refreshCurrentAndRelated();
+}
+// يطبّق المرض على الدرجات، ويسأل مرة واحدة إن كانت هناك درجات مُدخلة مسبقاً
+// ستُستبدل بعلامة "م" — الدرجات الفارغة تُعلَّم فوراً دون سؤال.
+function _applySickWithConfirm(cls,studentId,week){
+  var conflicts=[];
+  applyAbsenceToGrades(cls,studentId,week,{conflicts:conflicts});
+  if(conflicts.length){
+    var n=conflicts.length;
+    if(confirm("يوجد "+n+" "+(n===1?"درجة مُدخلة مسبقاً":"درجات مُدخلة مسبقاً")+" ضمن فترة المرض، هل تريد استبدالها بعلامة \"م\" (مرض)؟"))
+      applyAbsenceToGrades(cls,studentId,week,{force:true});
+  }
 }
 function clearSickRange(cls,studentId,fromDate,toDate){
   var from=new Date(fromDate),to=new Date(toDate);
@@ -269,7 +293,8 @@ function setAbsColType(ci,type){
   showSnack('✅ تم تحديث نوع الفترة ومزامنة الدرجات المرتبطة بها');
 }
 
-function applyAbsenceToGrades(cls,studentId,week){
+function applyAbsenceToGrades(cls,studentId,week,ctx){
+  ctx=ctx||{};
   // ── ربط فترات الغياب/المرض بحقول الواجب/التقييم، حسب نوع كل فترة (يُضبط من رأس
   // كل عمود في صفحة الغياب). فترة من نوع "واجب" أو "تقييم":
   //   • غائب فيها الطالب → الحقل المقابل لذلك الأسبوع يُعلَّم "غ"
@@ -283,7 +308,7 @@ function applyAbsenceToGrades(cls,studentId,week){
   var s=sts[idx];
   var abs=getStudentAbsences(cls,studentId);
   var weeks;
-  if(week)weeks=[Number(week)];
+  if(week!=null)weeks=(Array.isArray(week)?week:[week]).map(Number);
   else{
     var seen={};
     Object.keys(abs).forEach(function(k){var m=k.match(/^w(\d+)_/);if(m)seen[m[1]]=true;});
@@ -308,17 +333,20 @@ function applyAbsenceToGrades(cls,studentId,week){
       else if(t==='assess'){if(st==="abs")asAbs=true;else asSick=true;}
     });
     if(!_anyLinked&&sickAny){hwSick=true;asSick=true;}
-    _applyAbsSickField(s,'a'+wk,asAbs,asSick);
-    _applyAbsSickField(s,'h'+wk,hwAbs,hwSick);
+    _applyAbsSickField(s,'a'+wk,asAbs,asSick,ctx);
+    _applyAbsSickField(s,'h'+wk,hwAbs,hwSick,ctx);
   });
 }
-function _applyAbsSickField(s,field,isAbs,isSick){
+function _applyAbsSickField(s,field,isAbs,isSick,ctx){
+  ctx=ctx||{};
   var auto=s._autoExc||(s._autoExc={});
   var cur=s[field];
   if(isAbs){s[field]='غ';delete auto[field];}
   else if(isSick){
-    // لا نكتب فوق درجة رقمية أدخلها المعلم يدوياً
-    if(cur===''||cur===undefined||cur===null||cur==='غ'||cur==='م'){s[field]='م';auto[field]=true;}
+    var isEmpty=(cur===''||cur===undefined||cur===null||cur==='غ'||cur==='م'||auto[field]);
+    if(isEmpty){s[field]='م';auto[field]=true;}
+    else if(ctx.force){s[field]='م';auto[field]=true;}
+    else if(ctx.conflicts){ctx.conflicts.push(field);} // درجة مدخلة مسبقاً — تُترك ويُبلَّغ عنها
   } else {
     if(cur==='غ')s[field]='';
     else if(cur==='م'&&auto[field])s[field]='';
