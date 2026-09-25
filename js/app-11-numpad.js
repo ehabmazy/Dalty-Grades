@@ -2451,6 +2451,10 @@ function _tblSelectCell(stuIdx, fld, field, maxVal, dispIdx) {
     renderWeekly();
     return;
   }
+  var _clsChk2=WKS.activeClass;
+  var _stuChk2=(typeof DB!=='undefined'&&DB.data[_clsChk2])?DB.data[_clsChk2][stuIdx]:null;
+  if(!_gradeConfirmOverwrite(_stuChk2,field))return; // المستخدم رفض الكتابة فوق الدرجة الموجودة
+
   WKS._tblCell = { stuIdx: stuIdx, fld: fld, field: field, maxVal: maxVal, dispIdx: dispIdx };
   WKS._tblInput = '';
   if(typeof buildFloatingNumpad === 'function') buildFloatingNumpad();
@@ -2503,9 +2507,12 @@ function _tblFnpSubmit() {
   if(!WKS._tblCell) return;
   var cls = WKS.activeClass;
   var cur = WKS._tblCell;
+  var _tblHintArgs=null;
   if(WKS._tblInput !== '' && typeof DB !== 'undefined' && DB.data && DB.data[cls] && DB.data[cls][cur.stuIdx]) {
-    DB.data[cls][cur.stuIdx][cur.field] = clamp(Number(WKS._tblInput), 0, cur.maxVal);
+    var _tblVal=clamp(Number(WKS._tblInput), 0, cur.maxVal);
+    DB.data[cls][cur.stuIdx][cur.field] = _tblVal;
     if(typeof saveDB === 'function') saveDB();
+    _tblHintArgs=[DB.data[cls][cur.stuIdx],cur.field,cur.maxVal,_tblVal];
   }
   var students = (typeof DB !== 'undefined' && DB.data && DB.data[cls]) ? DB.data[cls].filter(function(s){return s.name;}) : [];
   var week = WKS.activeWeek || 1;
@@ -2540,6 +2547,8 @@ function _tblFnpSubmit() {
     renderWeekly();
     if(typeof showSnack === 'function') showSnack('✅ تم الانتهاء من رصد جميع الطلاب');
   }
+  // يُعرَض أخيراً حتى لا تُخفيه رسالة أخرى ظهرت أثناء الانتقال بين الخلايا
+  if(_tblHintArgs)_gradeMaybeHintDeviation.apply(null,_tblHintArgs);
 }
 
 /* ── CSS لخلايا الجدول المحددة — يُضاف ديناميكياً ── */
@@ -2570,6 +2579,66 @@ function _tblFnpSubmit() {
   }
 })();
 
+// ══════════════════════════════════════════════════════
+// تحذير الاستبدال + تلميح الانحراف عن متوسط الطالب
+// تُستخدم في صفحة الدرجات (gs) وصفحة الرصد الأسبوعي (tbl)
+// ══════════════════════════════════════════════════════
+
+/* هل تحتوي قيمة الحقل على درجة فعلية (وليست فارغة/غياب/عذر)؟ */
+function _gradeHasData(v){
+  return !(v===''||v===undefined||v===null||v==='غ'||v==='م');
+}
+
+/* يسأل المستخدم قبل الكتابة فوق درجة موجودة بالفعل في الخلية. يُعيد true للمتابعة. */
+function _gradeConfirmOverwrite(s,field){
+  if(!s)return true;
+  var v=s[field];
+  if(!_gradeHasData(v))return true;
+  return confirm('⚠️ هذه الخلية تحتوي على درجة مُسجَّلة بالفعل ('+v+')\nهل تريد الكتابة فوقها؟');
+}
+
+/* يبحث عن أعمدة أخرى من نفس نوع الحقل (نفس صفحة الأعمدة) لحساب متوسط مقارَن */
+function _gradeFieldPeers(field){
+  var pages=(typeof DB!=='undefined'&&DB&&DB.colPages)||[];
+  for(var i=0;i<pages.length;i++){
+    var cols=pages[i].cols||[];
+    for(var j=0;j<cols.length;j++){
+      if(cols[j].field===field){
+        return cols.filter(function(c){return c.field!==field&&typeof c.max==='number'&&c.max>0;});
+      }
+    }
+  }
+  return [];
+}
+
+/* متوسط درجات الطالب (كنسبة ٪) في نفس نوع الحقل، أو null إذا لم تتوفر بيانات كافية */
+function _gradeStudentAvgPercent(s,peers){
+  var sum=0,cnt=0;
+  peers.forEach(function(c){
+    var v=s[c.field];
+    if(!_gradeHasData(v))return;
+    var n=Number(v);
+    if(isNaN(n))return;
+    sum+=(n/c.max)*100;cnt++;
+  });
+  return cnt>=2?(sum/cnt):null;
+}
+
+/* تلميح غير مُعطِّل إذا كانت الدرجة المُدخلة تختلف بوضوح عن متوسط الطالب المعتاد */
+function _gradeMaybeHintDeviation(s,field,maxVal,enteredVal){
+  if(!s||enteredVal===''||enteredVal===undefined||enteredVal===null)return;
+  var n=Number(enteredVal);
+  if(isNaN(n)||!maxVal)return;
+  var pct=(n/maxVal)*100;
+  var avg=_gradeStudentAvgPercent(s,_gradeFieldPeers(field));
+  if(avg===null)return;
+  var diff=pct-avg;
+  if(Math.abs(diff)<25)return; // فرق طبيعي — لا داعي للتنبيه
+  var dir=diff<0?'أقل من':'أعلى من';
+  if(typeof showSnack==='function')
+    showSnack('💡 درجة '+(s.name||'الطالب')+' هنا ('+Math.round(pct)+'٪) '+dir+' متوسط درجاته المعتاد في هذا النوع (≈'+Math.round(avg)+'٪) — تأكد من صحتها.');
+}
+
 /**
  * يُستدعى عند الضغط على خلية درجة في صفحة الدرجات
  * @param {number} stuIdx  - فهرس الطالب في DB.data[cls]
@@ -2587,6 +2656,10 @@ function _gsSelectCell(stuIdx, field, maxVal, cellId, colKey) {
     return;
   }
   /* بناء قائمة كل الخلايا في نفس العمود للتنقل */
+  var _clsChk=GS.activeClass;
+  var _stuChk=DB.data[_clsChk]&&DB.data[_clsChk][stuIdx];
+  if(!_gradeConfirmOverwrite(_stuChk,field))return; // المستخدم رفض الكتابة فوق الدرجة الموجودة
+
   GS._gsCellList = _gsBuildColList(stuIdx, field, maxVal, colKey);
   GS._gsCellListIdx = GS._gsCellList.findIndex(function(c){ return c.cellId === cellId; });
   if(GS._gsCellListIdx < 0) GS._gsCellListIdx = 0;
@@ -2675,9 +2748,12 @@ function _gsFnpSubmit() {
   var cls = GS.activeClass;
   var cur = GS._gsCell;
   /* حفظ */
+  var _gsHintArgs=null;
   if(GS._gsInput !== '' && DB.data && DB.data[cls] && DB.data[cls][cur.stuIdx]) {
-    DB.data[cls][cur.stuIdx][cur.field] = clamp(Number(GS._gsInput), 0, cur.maxVal);
+    var _gsVal=clamp(Number(GS._gsInput), 0, cur.maxVal);
+    DB.data[cls][cur.stuIdx][cur.field] = _gsVal;
     saveDB();
+    _gsHintArgs=[DB.data[cls][cur.stuIdx],cur.field,cur.maxVal,_gsVal];
   }
   /* انتقل للتالي */
   var nextIdx = GS._gsCellListIdx + 1;
@@ -2701,6 +2777,8 @@ function _gsFnpSubmit() {
     renderGrades();
     if(typeof showSnack === 'function') showSnack('✅ تم الانتهاء من رصد جميع الطلاب');
   }
+  // يُعرَض أخيراً حتى لا تُخفيه رسالة أخرى ظهرت أثناء الانتقال بين الخلايا
+  if(_gsHintArgs)_gradeMaybeHintDeviation.apply(null,_gsHintArgs);
 }
 
 /* CSS لخلايا الدرجات المحددة */
