@@ -55,6 +55,15 @@ var _pendingSave = false;
    تهيئة Firebase
    ════════════════════════════════════════ */
 function initFirebaseSync() {
+  /* لم يتحمّل Firebase (بدون إنترنت): التطبيق يعمل محلياً بدون مزامنة */
+  if (typeof firebase === "undefined") {
+    console.warn("[Dalty Sync] Firebase غير متاح — وضع محلي");
+    showSyncStatus("warn", "📴 غير متصل — البيانات محلية");
+    window.addEventListener("online", function () {
+      showSyncStatus("ok", "🌐 عاد الاتصال — أعد فتح التطبيق لتفعيل المزامنة");
+    });
+    return;
+  }
   try {
     _fbApp = (firebase.apps && firebase.apps.length > 0)
                ? firebase.apps[0]

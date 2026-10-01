@@ -41,6 +41,49 @@ var _authFS   = null;   /* Firestore — لتخزين الاشتراكات فق�
 var _currentUser = null;
 var _userRef  = null;
 
+/* ════════════════════════════════════════
+   وضع العمل بدون إنترنت
+   نتذكر آخر مستخدم دخل على هذا الجهاز لنفتح بياناته المحلية
+   مباشرة لو لم يتوفر الإنترنت أو لم يتحمّل Firebase
+   ════════════════════════════════════════ */
+var LAST_UID_KEY = "dalty_last_uid";
+function _getLastUid() {
+  try { return localStorage.getItem(LAST_UID_KEY) || ""; } catch (e) { return ""; }
+}
+function _rememberUid(uid) {
+  try { localStorage.setItem(LAST_UID_KEY, sanitizeUID(uid)); } catch (e) {}
+}
+function _forgetUid() {
+  try { localStorage.removeItem(LAST_UID_KEY); } catch (e) {}
+}
+/* يضبط مفتاح التخزين على بيانات آخر مستخدم (إن كانت موجودة على الجهاز) قبل أن يقرأها التطبيق */
+function _applyRememberedStoreKey() {
+  var uid = _getLastUid();
+  if (!uid) return false;
+  try {
+    if (localStorage.getItem("grades_v6_" + uid)) {
+      window.STORE_KEY = "grades_v6_" + uid;
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+function _openOfflineFallback(reason) {
+  if (window._offlineOpened) return;
+  window._offlineOpened = true;
+  console.warn("[Auth] فتح التطبيق من بيانات الجهاز (بدون تحقق من الشبكة):", reason);
+  _applyRememberedStoreKey();
+  setTimeout(function () {
+    removeAuthScreen();
+    if (!window._booted) openAppNow();
+    var shell = document.getElementById("appShell");
+    if (shell) shell.classList.add("visible");
+    if (typeof showSnack === "function") {
+      showSnack("📴 تعمل بدون إنترنت — بياناتك محفوظة على جهازك وستتزامن عند عودة الاتصال", null, "warn");
+    }
+  }, 50);
+}
+
 /* Firebase SDK محمّل مباشرة من index.html */
 window.addEventListener("load", function () { initAuth(); });
 
@@ -48,6 +91,15 @@ window.addEventListener("load", function () { initAuth(); });
    تهيئة Firebase Auth
    ════════════════════════════════════════ */
 function initAuth() {
+  /* قبل أن يقرأ التطبيق بياناته: اختر آخر نسخة محلية لهذا المستخدم */
+  _applyRememberedStoreKey();
+
+  /* لم يتحمّل Firebase (لا إنترنت ولا نسخة مخزنة) — افتح التطبيق محلياً */
+  if (typeof firebase === "undefined") {
+    _openOfflineFallback("firebase-sdk-missing");
+    return;
+  }
+
   try {
     /* إذا كان firebase مُهيَّأ مسبقاً من firebase-sync.js استخدمه */
     if (firebase.apps && firebase.apps.length > 0) {
@@ -69,7 +121,9 @@ function initAuth() {
     /* احتفظ بالجلسة حتى بعد إغلاق المتصفح — تسجيل دخول مرة واحدة فقط */
     function _startListening() {
       interceptShowApp();
+      var _authResolved = false;
       _authInst.onAuthStateChanged(function(user) {
+        _authResolved = true;
         if (user) {
           _currentUser = user;
           _userRef = _authDB.ref(AUTH_DB_PATH + "/" + sanitizeUID(user.uid));
@@ -77,9 +131,18 @@ function initAuth() {
         } else {
           _currentUser = null;
           _userRef = null;
+          /* بدون إنترنت ومعنا بيانات مستخدم سابق: لا فائدة من شاشة دخول لا تعمل */
+          if (!navigator.onLine && _getLastUid()) {
+            _openOfflineFallback("offline-no-session");
+            return;
+          }
           showAuthScreen();
         }
       });
+      /* شبكة بطيئة/ميتة ("واي فاي بدون إنترنت"): لا تنتظر الدخول أكثر من ٥ ثوانٍ */
+      setTimeout(function () {
+        if (!_authResolved && _getLastUid()) _openOfflineFallback("auth-timeout");
+      }, 5000);
     }
 
     _authInst.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
@@ -93,6 +156,7 @@ function initAuth() {
     console.error("[Auth] خطأ في التهيئة:", e);
     /* في حالة الفشل افتح التطبيق عادياً */
     if (window._origShowApp) window._origShowApp();
+    else _openOfflineFallback("init-error");
   }
 }
 
@@ -123,6 +187,7 @@ function onUserLoggedIn(user) {
   /* حدّث STORE_KEY لكل مستخدم */
   var uid = sanitizeUID(user.uid);
   window.STORE_KEY = "grades_v6_" + uid;
+  _rememberUid(user.uid);
 
   /* أخفِ شاشة الدخول */
   removeAuthScreen();
@@ -269,6 +334,11 @@ window.showSubDetails = function() {
 };
 
 function openAppNow() {
+  /* فُتح التطبيق بالفعل بدون إنترنت، ثم وصل تأكيد الدخول: لا تُعد تحميل الصفحة الرئيسية */
+  if (window._offlineOpened && window._booted && !window._offlineReconciled) {
+    window._offlineReconciled = true;
+    return;
+  }
   if (window._origShowApp) {
     window._origShowApp();
   } else if (typeof initDB === "function") {
@@ -608,6 +678,8 @@ window.signInLocal = function() {
 window.signOut = function() {
   if (!confirm("تسجيل الخروج؟")) return;
   removeSubscriptionBlockedScreen();
+  _forgetUid();
+  if (!_authInst) { location.reload(); return; }
   _authInst.signOut().then(function() {
     window._booted = false;
     window.DB = null;
