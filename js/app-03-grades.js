@@ -91,8 +91,9 @@ function renderGrades(){
     var _showDist=_hv.dist!==false;
     // حساب colspan لكل أسبوع
     var _wkSpan=(_showAssess?1:0)+(_showHw?1:0)+(_showBeh?1:0);
-    var _firstShownFld=_showAssess?'assess':(_showHw?'hw':(_showBeh?'beh':null));
-    var _lastShownFld=_showBeh?'beh':(_showHw?'hw':(_showAssess?'assess':null));
+    /* ترتيب الأعمدة داخل كل أسبوع: واجب ← تقييم ← سلوك */
+    var _firstShownFld=_showHw?'hw':(_showAssess?'assess':(_showBeh?'beh':null));
+    var _lastShownFld=_showBeh?'beh':(_showAssess?'assess':(_showHw?'hw':null));
     var _wkBorderClr='rgba(251,191,36,.55)'; // لون فاصل الأسابيع
     function _wkEdgeStyle(fld){
       var s='';
@@ -127,8 +128,8 @@ function renderGrades(){
     html+='<th></th><th></th><th></th>';
     weeks.forEach(function(w){
       var _wc=_wkComplete[w];
-      if(_showAssess)html+='<th style="background:'+(_wc.assess?'#0d9488':'#102060')+';font-size:8px;'+(_wc.assess?'color:#ffffff;':'')+_wkEdgeStyle('assess')+'">'+(_wc.assess?'✅ ':'')+'تقييم<br>/20</th>';
       if(_showHw)html+='<th style="background:'+(_wc.hw?'#0d9488':'#102060')+';font-size:8px;'+(_wc.hw?'color:#ffffff;':'')+_wkEdgeStyle('hw')+'">'+(_wc.hw?'✅ ':'')+'واجب<br>/10</th>';
+      if(_showAssess)html+='<th style="background:'+(_wc.assess?'#0d9488':'#102060')+';font-size:8px;'+(_wc.assess?'color:#ffffff;':'')+_wkEdgeStyle('assess')+'">'+(_wc.assess?'✅ ':'')+'تقييم<br>/20</th>';
       if(_showBeh)html+='<th style="background:'+(_wc.beh?'#0d9488':'#1a0d3a')+';font-size:8px;color:'+(_wc.beh?'#ffffff':'#c4b5fd')+';'+_wkEdgeStyle('beh')+'">'+(_wc.beh?'✅ ':'')+'سلوك<br>/10</th>';
     });
     if(_wkSpan===0){
@@ -180,21 +181,6 @@ function renderGrades(){
         var isHA=(hv==="غ"),isHM=(hv==="م");
         var isBA=(bv==="غ"),isBM=(bv==="م");
         var _isPastWk=(w<=_curWk);
-        // خلية التقييم
-        if(_showAssess){
-          var _gsCellIdA='gs_'+idx+'_'+aField;
-          var _gsSelA=(GS._gsCell&&GS._gsCell.cellId===_gsCellIdA);
-          var _aMissing=(_isPastWk&&!isAA&&!isAM&&(av===''||av===undefined));
-          html+='<td style="padding:1px;'+(_aMissing&&!_gsSelA?'background:rgba(239,68,68,.22);':'')+_wkEdgeStyle('assess')+'">';
-          if(!isAA&&!isAM){
-            html+='<div class="gs-tbl-cell'+(_gsSelA?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+aField+'\','+aMax+',\''+_gsCellIdA+'\',\'assess_w'+w+'\')">';
-            html+='<span class="gv '+(_gsSelA?'gv-sel':(av!==''&&av!==undefined?'gv-assess':(_aMissing?'gv-missing':'gv-empty')))+'">';
-            html+=(_gsSelA&&GS._gsInput!==''?GS._gsInput:(av!==''&&av!==undefined?av:'—'))+'</span>';
-            html+='</div>';
-          } else if(isAA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+aField+'\',\'\');renderGrades();">غ</span>';
-          else html+='<span class="gc-lbl-exc" onclick="gradesSetField('+idx+',\''+aField+'\',\'\');renderGrades();">م</span>';
-          html+='</td>';
-        }
         // خلية الواجب
         if(_showHw){
           var _gsCellIdH='gs_'+idx+'_'+hField;
@@ -208,6 +194,21 @@ function renderGrades(){
             html+='</div>';
           } else if(isHA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+hField+'\',\'\');renderGrades();">غ</span>';
           else html+='<span class="gc-lbl-exc" onclick="gradesSetField('+idx+',\''+hField+'\',\'\');renderGrades();">م</span>';
+          html+='</td>';
+        }
+        // خلية التقييم
+        if(_showAssess){
+          var _gsCellIdA='gs_'+idx+'_'+aField;
+          var _gsSelA=(GS._gsCell&&GS._gsCell.cellId===_gsCellIdA);
+          var _aMissing=(_isPastWk&&!isAA&&!isAM&&(av===''||av===undefined));
+          html+='<td style="padding:1px;'+(_aMissing&&!_gsSelA?'background:rgba(239,68,68,.22);':'')+_wkEdgeStyle('assess')+'">';
+          if(!isAA&&!isAM){
+            html+='<div class="gs-tbl-cell'+(_gsSelA?' gs-tbl-sel':'')+'" onclick="_gsSelectCell('+idx+',\''+aField+'\','+aMax+',\''+_gsCellIdA+'\',\'assess_w'+w+'\')">';
+            html+='<span class="gv '+(_gsSelA?'gv-sel':(av!==''&&av!==undefined?'gv-assess':(_aMissing?'gv-missing':'gv-empty')))+'">';
+            html+=(_gsSelA&&GS._gsInput!==''?GS._gsInput:(av!==''&&av!==undefined?av:'—'))+'</span>';
+            html+='</div>';
+          } else if(isAA)html+='<span class="gc-lbl-abs" onclick="gradesSetField('+idx+',\''+aField+'\',\'\');renderGrades();">غ</span>';
+          else html+='<span class="gc-lbl-exc" onclick="gradesSetField('+idx+',\''+aField+'\',\'\');renderGrades();">م</span>';
           html+='</td>';
         }
         // خلية السلوك
