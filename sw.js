@@ -11,7 +11,7 @@
    ⚠️ عند أي تعديل على ملفات التطبيق: غيّر رقم VERSION بالأسفل.
    ══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'v53';
+const VERSION       = 'v54';
 const STATIC_CACHE  = 'dalty-static-'  + VERSION;
 const DYNAMIC_CACHE = 'dalty-dynamic-' + VERSION;
 
