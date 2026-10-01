@@ -225,8 +225,26 @@ function loadDB(){
   try{var s=localStorage.getItem(STORE_KEY);if(s)return JSON.parse(s);}catch(e){}
   return null;
 }
+var _saveFailAt=0;
 function saveDB(){
-  try{localStorage.setItem(STORE_KEY,JSON.stringify(DB));}catch(e){}
+  try{
+    localStorage.setItem(STORE_KEY,JSON.stringify(DB));
+    window._lastSaveOk=true;
+    window._lastLocalSaveAt=Date.now();
+    return true;
+  }catch(e){
+    /* كان الخطأ يُبتلع بصمت فتبدو التعديلات محفوظة وهي ليست كذلك (امتلاء مساحة الجهاز مثلاً) */
+    window._lastSaveOk=false;
+    console.error('[saveDB] فشل الحفظ على الجهاز:',e);
+    var n=Date.now();
+    if(n-_saveFailAt>20000){
+      _saveFailAt=n;
+      setTimeout(function(){
+        alert('⚠️ تعذّر حفظ آخر تعديل على الجهاز (مساحة التخزين ممتلئة غالباً).\nلا تُغلق التطبيق الآن: صدّر نسخة احتياطية، وقلّل أو احذف الصور الكبيرة، ثم جرّب من جديد.');
+      },0);
+    }
+    return false;
+  }
 }
 function initDB(){
   var saved=loadDB();
