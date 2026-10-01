@@ -69,6 +69,7 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
   h += '<button class="np2-ftab'+(fld==='ex1'?' on':'')+'" onclick="_npSetField(\'ex1\');renderWeekly();" style="flex:1;touch-action:manipulation;">اختبار1<span class="np2-ftab-max">/15</span></button>';
   h += '<button class="np2-ftab'+(fld==='ex2'?' on':'')+'" onclick="_npSetField(\'ex2\');renderWeekly();" style="flex:1;touch-action:manipulation;">اختبار2<span class="np2-ftab-max">/15</span></button>';
   h += '</div>';
+  h += _npUndoBarHtml();
   h += '</div>'; /* np2-top */
 
   /* ══ شريط سجل الجلسة ══ */
@@ -1155,6 +1156,7 @@ function _npPickCandidate(id, stuIdx) {
   WKS.numpadStudentIdx = stuIdx;
   WKS._npCandidates = null;
   WKS._npDirectMode = true;
+  WKS._npDirectEntry = null;
   WKS.npTextInput = '';
   WKS.npStatus = '👤 ' + st.name + ' — أدخل الدرجة';
   renderWeekly();
@@ -1167,6 +1169,7 @@ function _npSelectStudent(id, stuIdx) {
   WKS.numpadStudent = st;
   WKS.numpadStudentIdx = stuIdx;
   WKS.numpadInput = '';
+  WKS._npDirectEntry = null;
   renderWeekly();
 }
 
@@ -1269,7 +1272,17 @@ function _npLogDirectRemove(st, fld) {
 function _npToggleAbs(colIndex) {
   if(!WKS.numpadStudent) return;
   var cls=WKS.activeClass, week=WKS.activeWeek;
+  var _taFld = WKS.numpadField||'assess';
+  var _taFresh = (DB.data[cls]||[]).find(function(x){return x.id==WKS.numpadStudent.id;}) || WKS.numpadStudent;
+  /* ⚠️ تحذير: تسجيل غياب فوق درجة موجودة */
+  if((_taFld==='hw'||_taFld==='assess') && !getAbsenceState(cls, _taFresh.id, week, colIndex)) {
+    var _taF = _taFld==='hw' ? 'h'+week : 'a'+week;
+    if(!_npConfirmOverwrite(_taFresh, _taF, _taFld, 'غ', _npMaxFor(_taFld, week))) return;
+  }
+  var _taE = _npUndoBegin(_taFresh, cls, week, _taFld, ['a'+week,'h'+week,'bw'+week,'ex1','ex2'], ['w'+week+'_ci'+colIndex]);
+  _taE.field = (_taFld==='hw') ? 'h'+week : (_taFld==='assess') ? 'a'+week : null;
   toggleAbsence(cls, WKS.numpadStudent.id, week, colIndex);
+  _npUndoCommit(_taE);
   /* تحديث كائن الطالب في WKS */
   var st=(DB.data[cls]||[]).find(function(s){return s.id==WKS.numpadStudent.id;});
   if(st){
@@ -1309,8 +1322,12 @@ function _npSetExamAbs(val) {
   /* إذا كانت القيمة مضبوطة بالفعل — ألغِها (toggle) */
   var cur = DB.data[cls] && DB.data[cls][stuIdx] ? DB.data[cls][stuIdx][fld] : '';
   var newVal = (cur === val) ? '' : val;
+  /* ⚠️ تحذير: الخانة بها بيانات */
+  if(newVal !== '' && !_npConfirmOverwrite(DB.data[cls][stuIdx], fld, fld, newVal, 15)) return;
+  var _exE = _npUndoBegin(DB.data[cls][stuIdx], cls, WKS.activeWeek, fld, [fld], []);
   WKS.numpadInput = '';
   gradesSetField(stuIdx, fld, newVal);
+  _npUndoCommit(_exE);
   /* تحديث كائن الطالب في WKS */
   var st = (DB.data[cls]||[]).find(function(s){ return s.id == WKS.numpadStudent.id; });
   if(st){ WKS.numpadStudent = st; }
@@ -1668,6 +1685,10 @@ function _npMicToggle() {
 
 
 function _npKeyPress(ch) {
+  /* ⚠️ أول رقم في الإدخال المباشر: تحذير إن كانت الخانة بها بيانات + بدء لقطة التراجع */
+  if(WKS._npDirectMode && WKS.numpadStudent && /^\d$/.test(String(ch))) {
+    if(!_npDirectGuard()) return;
+  }
   /* دائماً: اكتب الحرف/الرقم في صندوق الإملاء */
   _npPressToInput(ch);
   if(WKS._npDirectMode && WKS.numpadStudent) {
@@ -1689,6 +1710,9 @@ function _npKeyPress(ch) {
         _gradesUpdateTotCell(activeCls, WKS.numpadStudentIdx);
         /* تسجيل في سجل جلسة الراصد */
         _npLogDirectSet(WKS.numpadStudent, fld, _npVal, maxVal, false);
+        /* سجل التراجع + تنويه المستوى/الشذوذ بعد توقف الكتابة */
+        if(WKS._npDirectEntry) { _npUndoCommit(WKS._npDirectEntry); }
+        _npDirectFeedbackSoon(WKS.numpadStudent.id, activeCls, fld, curField, maxVal);
       }
     }
     _npRefreshDisplay();
@@ -1705,7 +1729,11 @@ function _npKeyReset() {
   if(WKS._npDirectMode && WKS.numpadStudent) {
     WKS.numpadInput='';
     var cls=WKS.activeClass,week=WKS.activeWeek,fld=WKS.numpadField||'assess';
-    gradesSetField(WKS.numpadStudentIdx, fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2', '');
+    var _rkF = fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
+    var _rkE = _npDirectTrackBegin(fld, _rkF);
+    gradesSetField(WKS.numpadStudentIdx, _rkF, '');
+    _npUndoCommit(_rkE);
+    WKS._npDirectEntry = null;
     _npLogDirectRemove(WKS.numpadStudent, fld);
     WKS._npDirectMode=false; WKS.numpadStudent=null; WKS.npStatus='';
     renderWeekly();
@@ -1797,18 +1825,31 @@ function _npSubmit() {
     WKS.numpadStudent    = st;
     WKS.numpadStudentIdx = stuIdx;
     WKS._npCandidates    = null;
+    var _undoE = null, _fb = null;
     if(gradeStr !== null) {
       var val = clamp(Number(gradeStr), 0, maxVal);
+      var _ev = _npEvaluate(st, cls, fld, curField, val, maxVal);
+      /* ⚠️ تحذير: الخانة بها بيانات بالفعل */
+      if(!_npConfirmOverwrite(st, curField, fld, val, maxVal, _ev)) {
+        WKS.npStatus     = '↩ أُلغي الرصد — بقيت الدرجة القديمة كما هي';
+        WKS.npStatusType = 'info';
+        renderWeekly();
+        return;
+      }
+      _undoE = _npUndoBegin(st, cls, week, fld, [curField], []);
       gradesSetField(stuIdx, curField, val);
-      WKS.npStatus     = '✅ ' + st.name + ' — ' + val + '/' + maxVal;
-      WKS.npStatusType = 'ok';
+      _npUndoCommit(_undoE);
+      /* تنويه بمستوى الدرجة + تحذير الشذوذ عن بقية درجات الطالب */
+      _fb = _npGradeFeedback(st, cls, fld, curField, val, maxVal, _ev);
+      WKS.npStatus     = _fb.text;
+      WKS.npStatusType = _fb.abnormal ? 'warn' : 'ok';
       if(ta) ta.value = '';
       WKS.npTextInput = '';
       WKS._npDirectMode = false;
       WKS.numpadInput   = '';
       /* تسجيل في سجل الجلسة */
       if(!WKS.npSessionLog) WKS.npSessionLog = [];
-      WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:val,field:fld,maxVal:maxVal,isAbsent:false,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0});
+      WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:val,field:fld,maxVal:maxVal,isAbsent:false,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0,undoId:(_undoE?_undoE.id:null)});
       if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
     } else {
       /* لا توجد درجة — سجّل غائباً حسب نوع الحقل */
@@ -1817,6 +1858,11 @@ function _npSubmit() {
       var targetCi = WKS.npAbsTarget !== undefined ? WKS.npAbsTarget : 0;
       if(fld === 'ex1' || fld === 'ex2') {
         /* اختبار: سجّل غياب الفترة فقط بدون تغيير التقييم/الواجب + "غ" في حقل الاختبار */
+        if(!_npConfirmOverwrite(st, curField, fld, 'غ', maxVal)) {
+          WKS.npStatus = '↩ أُلغي — لم يُسجَّل غياب'; WKS.npStatusType = 'info';
+          renderWeekly(); return;
+        }
+        _undoE = _npUndoBegin(st, cls, week, fld, [curField], (absCols[targetCi] ? ['w'+week+'_ci'+targetCi] : []));
         if(absCols.length > 0 && absCols[targetCi]) {
           var absData = getStudentAbsences(cls, st.id);
           var k = 'w' + week + '_ci' + targetCi;
@@ -1824,17 +1870,24 @@ function _npSubmit() {
           saveDB(); /* حفظ الغياب مباشرة بدون applyAbsenceToGrades */
         }
         gradesSetField(stuIdx2, fld, 'غ');
+        _npUndoCommit(_undoE);
         var _exLabel = fld === 'ex1' ? 'اختبار 1' : 'اختبار 2';
         WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _exLabel + (absCols[targetCi] ? ' + ' + absCols[targetCi].label : '') + ')';
         WKS.npStatusType = 'warn';
         if(!WKS.npSessionLog) WKS.npSessionLog = [];
-        WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:'غ',field:fld,isAbsent:true,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0});
+        WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:'غ',field:fld,isAbsent:true,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0,undoId:(_undoE?_undoE.id:null)});
         if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
       } else {
         /* تقييم / واجب / سلوك — السلوك الافتراضي */
         var targetCi2 = WKS.npAbsTarget!==undefined ? WKS.npAbsTarget : 0;
         var _absField = fld==='hw' ? hF : aF;
         var _absLabel = fld==='hw' ? 'الواجب' : 'التقييم';
+        var _absFld = (_absField === hF) ? 'hw' : 'assess';
+        if(!_npConfirmOverwrite(st, _absField, _absFld, 'غ', _npMaxFor(_absFld, week))) {
+          WKS.npStatus = '↩ أُلغي — لم يُسجَّل غياب'; WKS.npStatusType = 'info';
+          renderWeekly(); return;
+        }
+        _undoE = _npUndoBegin(st, cls, week, _absFld, [_absField], (absCols[targetCi2] ? ['w'+week+'_ci'+targetCi2] : []));
         if(absCols.length > 0 && absCols[targetCi2]) {
           var absData2 = getStudentAbsences(cls, st.id);
           var k2 = 'w' + week + '_ci' + targetCi2;
@@ -1842,10 +1895,11 @@ function _npSubmit() {
           saveDB();
         }
         gradesSetField(stuIdx2, _absField, 'غ');
+        _npUndoCommit(_undoE);
         WKS.npStatus     = '🔴 ' + st.name + ' — غائب (' + _absLabel + (absCols[targetCi2] ? ' + ' + absCols[targetCi2].label : '') + ')';
         WKS.npStatusType = 'warn';
         if(!WKS.npSessionLog) WKS.npSessionLog = [];
-        WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:'غ',field:fld,isAbsent:true,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0});
+        WKS.npSessionLog.unshift({inputText:raw,matchedName:st.name,grade:'غ',field:fld,isAbsent:true,status:'ok',byNum:!isNaN(queryNum)&&queryNum>0,undoId:(_undoE?_undoE.id:null)});
         if(WKS.npSessionLog.length>100) WKS.npSessionLog.pop();
       }
       if(ta) ta.value = '';
@@ -1855,6 +1909,7 @@ function _npSubmit() {
     var _sy = window.scrollY || window.pageYOffset;
     renderWeekly();
     if((window.scrollY || window.pageYOffset) !== _sy) window.scrollTo(0, _sy);
+    if(_fb && _fb.abnormal) setTimeout(function(){ showSnack(_fb.snack, function(){ _npUndo(1); }, 'warn'); }, 250);
   }
 
   if(matched.length === 0) {
@@ -1965,10 +2020,12 @@ function _npDel() {
     var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
     /* حفظ مباشر */
     if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
+      var _ue = _npDirectTrackBegin(fld, curField);
       DB.data[cls][WKS.numpadStudentIdx][curField] = '';
       saveDB();
       _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
       _npLogDirectRemove(WKS.numpadStudent, fld);
+      _npUndoCommit(_ue);
     }
   }
 }
@@ -1980,10 +2037,12 @@ function _npClear() {
   var curField=fld==='assess'?'a'+week:fld==='hw'?'h'+week:fld==='beh'?'bw'+week:fld==='ex1'?'ex1':'ex2';
   /* حفظ مباشر */
   if(DB.data[cls] && DB.data[cls][WKS.numpadStudentIdx]) {
+    var _ue = _npDirectTrackBegin(fld, curField);
     DB.data[cls][WKS.numpadStudentIdx][curField] = '';
     saveDB();
     _gradesUpdateTotCell(cls, WKS.numpadStudentIdx);
     _npLogDirectRemove(WKS.numpadStudent, fld);
+    _npUndoCommit(_ue);
   }
   _npRefreshDisplay();
 }
@@ -3124,4 +3183,357 @@ function _npSessionReportPrint() {
     +'<table><thead><tr><th>#</th><th>الطالب</th><th>الدرجة</th><th>الحقل</th><th>نص الإدخال</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'</body></html>');
   _openReportBlob(_rHtml);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   الراصد — تحذيرات الرصد الذكية + سجل التراجع (متعدد)
+   ① تحذير عند الكتابة فوق خانة بها بيانات (مع مستوى الدرجة الجديدة)
+   ② تنويه بمستوى الدرجة المرصودة (ممتاز / جيد جداً / جيد / مقبول / ضعيف)
+   ③ تحذير عند شذوذ الدرجة عن مستوى الطالب في بقية درجاته
+   ④ زر «تراجع» عن آخر رصد + «تراجع متعدد» + اختصار Ctrl+Z
+   ══════════════════════════════════════════════════════════════════════ */
+
+var NP_UNDO_MAX = 100;      /* أقصى عدد عمليات محفوظة للتراجع */
+var NP_DEVIATION_PCT = 25;  /* فرق (نقطة مئوية) يُعدّ عنده الرصد شاذاً عن مستوى الطالب */
+var NP_CLASS_DEV_PCT = 40;  /* فرق عن متوسط الفصل عند قلة بيانات الطالب */
+
+function _npFieldName(fld, week) {
+  return fld==='assess' ? 'a'+week : fld==='hw' ? 'h'+week : fld==='beh' ? 'bw'+week : fld;
+}
+function _npMaxFor(fld, week) {
+  return fld==='assess' ? _getNpMax('assess',week) : fld==='hw' ? _getNpMax('hw',week) : (fld==='ex1'||fld==='ex2') ? 15 : 10;
+}
+function _npFieldLabel(fld) {
+  return fld==='assess'?'التقييم' : fld==='hw'?'الواجب' : fld==='beh'?'السلوك' : fld==='ex1'?'الاختبار 1' : fld==='ex2'?'الاختبار 2' : fld;
+}
+function _npTypeOf(fld) { return (fld==='ex1'||fld==='ex2') ? 'ex' : fld; }
+
+/* مستوى الدرجة وفق نسبتها المئوية */
+function _npLevel(p) {
+  if(p>=90) return {l:'ممتاز',   i:'🟢'};
+  if(p>=75) return {l:'جيد جداً', i:'🟢'};
+  if(p>=60) return {l:'جيد',     i:'🟡'};
+  if(p>=50) return {l:'مقبول',   i:'🟠'};
+  return            {l:'ضعيف',    i:'🔴'};
+}
+
+/* كل درجات الطالب الرقمية (كنسب مئوية) عدا الحقل الجاري رصده */
+function _npStudentProfile(s, excludeField) {
+  var out = [];
+  var aw = Math.min(Math.max(1, Number(DB && DB.meta && DB.meta.activeWeeks) || 14), ALL_WEEKS.length);
+  var awList = ALL_WEEKS.slice(0, aw);
+  function add(field, max, type) {
+    if(field === excludeField) return;
+    var v = s[field];
+    if(!_gradeHasData(v)) return;
+    var n = Number(v);
+    if(isNaN(n) || !(max > 0)) return;
+    out.push({field:field, type:type, pct:Math.min(100, n/max*100)});
+  }
+  allCols().forEach(function(c) {
+    var id = c.id || c.field, m;
+    if((m = /^a(\d+)$/.exec(id)))      { if(awList.indexOf(parseInt(m[1],10)) >= 0) add(c.field, c.max, 'assess'); }
+    else if((m = /^h(\d+)$/.exec(id))) { if(awList.indexOf(parseInt(m[1],10)) >= 0) add(c.field, c.max, 'hw'); }
+    else if(id==='ex1' || id==='ex2')  { add(c.field, c.max, 'ex'); }
+  });
+  awList.forEach(function(w) { add('bw'+w, 10, 'beh'); });
+  return out;
+}
+function _npMean(arr) {
+  if(!arr.length) return null;
+  var t = 0; arr.forEach(function(x){ t += x.pct; });
+  return t / arr.length;
+}
+
+/* تقييم الدرجة المرصودة: المستوى + هل هي شاذة عن مستوى الطالب */
+function _npEvaluate(st, cls, fld, curField, val, maxVal) {
+  var pct = maxVal ? (Number(val)/maxVal*100) : 0;
+  var type = _npTypeOf(fld);
+  var prof = _npStudentProfile(st, curField);
+  var same = prof.filter(function(x){ return x.type === type; });
+  var avgAll  = prof.length >= 3 ? _npMean(prof) : null;
+  var avgSame = same.length >= 2 ? _npMean(same) : null;
+  var abn = false;
+  if(avgAll  !== null && Math.abs(pct-avgAll)  >= NP_DEVIATION_PCT) abn = true;
+  if(avgSame !== null && Math.abs(pct-avgSame) >= NP_DEVIATION_PCT) abn = true;
+
+  /* احتياطي: لو بيانات الطالب قليلة، قارن بمتوسط الفصل في نفس الخانة */
+  var classAvg = null, classN = 0;
+  if(avgAll === null && avgSame === null) {
+    var others = [];
+    (DB.data[cls]||[]).forEach(function(o) {
+      if(o === st || !o.name) return;
+      var v = o[curField];
+      if(_gradeHasData(v) && !isNaN(Number(v)) && maxVal > 0) others.push({pct:Number(v)/maxVal*100});
+    });
+    if(others.length >= 5) {
+      classAvg = _npMean(others); classN = others.length;
+      if(Math.abs(pct-classAvg) >= NP_CLASS_DEV_PCT) abn = true;
+    }
+  }
+  var ref = avgAll !== null ? avgAll : avgSame !== null ? avgSame : classAvg;
+  return {
+    pct:pct, level:_npLevel(pct), abnormal:abn,
+    dir: (ref !== null && pct < ref) ? 'أقل' : 'أعلى',
+    avgAll:avgAll, nAll:prof.length, avgSame:avgSame, nSame:same.length,
+    classAvg:classAvg, classN:classN
+  };
+}
+
+/* جملة شرح الشذوذ (مستوى الطالب في بقية الدرجات) */
+function _npDeviationText(ev) {
+  var parts = [];
+  if(ev.avgAll !== null)
+    parts.push('متوسطه في بقية درجاته ('+ev.nAll+(ev.nAll>=3&&ev.nAll<=10?' درجات':' درجة')+') '+Math.round(ev.avgAll)+'٪ — '+_npLevel(ev.avgAll).l);
+  if(ev.avgSame !== null && (ev.avgAll === null || Math.abs(ev.avgSame-ev.avgAll) >= 5))
+    parts.push('وفي نفس النوع ('+ev.nSame+(ev.nSame>=3&&ev.nSame<=10?' درجات':' درجة')+') '+Math.round(ev.avgSame)+'٪ — '+_npLevel(ev.avgSame).l);
+  if(ev.classAvg !== null)
+    parts.push('متوسط الفصل في هذه الخانة '+Math.round(ev.classAvg)+'٪ ('+ev.classN+' طالب)');
+  return parts.join('، ');
+}
+
+/* رسالة الحالة بعد الرصد */
+function _npGradeFeedback(st, cls, fld, curField, val, maxVal, ev) {
+  ev = ev || _npEvaluate(st, cls, fld, curField, val, maxVal);
+  var base = st.name+' — '+val+'/'+maxVal+' · '+Math.round(ev.pct)+'٪ · '+ev.level.i+' '+ev.level.l;
+  if(!ev.abnormal) return {abnormal:false, text:'✅ '+base, snack:''};
+  var warn = '⚠️ درجة غير معتادة! '+base+' — '+ev.dir+' من مستواه المعتاد؛ '+_npDeviationText(ev)+'. راجع الدرجة أو اضغط تراجع.';
+  return {abnormal:true, text:warn, snack:'⚠️ '+st.name+': '+val+'/'+maxVal+' ('+Math.round(ev.pct)+'٪) '+ev.dir+' من مستواه المعتاد — '+_npDeviationText(ev)};
+}
+
+/* تحذير: الخانة بها بيانات بالفعل. newVal: رقم | 'غ' | null (غير معروف بعد) */
+function _npConfirmOverwrite(st, field, fld, newVal, maxVal, ev) {
+  if(!st) return true;
+  var old = st[field];
+  if(old === '' || old === undefined || old === null) return true;
+  if(newVal !== null && String(old) === String(newVal)) return true;
+  var oldTxt = old==='غ' ? 'غائب' : old==='م' ? 'معفى' : (old+'/'+maxVal+' · '+Math.round(Number(old)/maxVal*100)+'٪ · '+_npLevel(Number(old)/maxVal*100).l);
+  var msg = '⚠️ تنبيه: خانة «'+_npFieldLabel(fld)+'» للطالب «'+st.name+'» بها بيانات مسجَّلة بالفعل:\n   القيمة الحالية: '+oldTxt+'\n';
+  if(newVal === 'غ') {
+    msg += '   ستُستبدل بتسجيل «غائب».\n';
+  } else if(newVal !== null && newVal !== 'م') {
+    ev = ev || _npEvaluate(st, '', fld, field, newVal, maxVal);
+    msg += '   الدرجة الجديدة: '+newVal+'/'+maxVal+' · '+Math.round(ev.pct)+'٪ · '+ev.level.l+'\n';
+    if(ev.abnormal) msg += '\n⚠️ والدرجة الجديدة غير معتادة لهذا الطالب: '+_npDeviationText(ev)+'.\n';
+  } else if(newVal === 'م') {
+    msg += '   ستُستبدل بتسجيل «معفى».\n';
+  } else {
+    msg += '   الأرقام التي ستكتبها ستحلّ محلها.\n';
+  }
+  msg += '\nهل تريد استبدال القيمة الحالية؟ (يمكنك التراجع بعدها بزر «تراجع»)';
+  return confirm(msg);
+}
+
+/* ═══════════════ سجل التراجع ═══════════════ */
+if(!WKS.npUndoStack) WKS.npUndoStack = [];
+
+/* لقطة قبل التعديل: قيم الحقول المعنية + مفاتيح الغياب المعنية */
+function _npUndoBegin(st, cls, week, fld, fields, absKeys) {
+  var e = {
+    id: Date.now()+'_'+Math.floor(Math.random()*1e5),
+    cls: cls, week: week, stuId: st.id, stuName: st.name,
+    fld: fld, field: fields[0] || null, max: _npMaxFor(fld, week),
+    prev: {}, absPrev: {}, pushed: false, direct: false, t: Date.now()
+  };
+  fields.forEach(function(f){ e.prev[f] = st[f]; });
+  var ab = getStudentAbsences(cls, st.id);
+  (absKeys||[]).forEach(function(k){ e.absPrev[k] = ab[k]; });
+  return e;
+}
+function _npUndoDiffers(e) {
+  var list = DB.data[e.cls] || [];
+  var st = list.find(function(s){ return s.id == e.stuId; });
+  if(!st) return false;
+  var norm = function(v){ return (v===undefined||v===null) ? '' : String(v); };
+  var ch = Object.keys(e.prev).some(function(f){ return norm(st[f]) !== norm(e.prev[f]); });
+  if(ch) return true;
+  var ab = getStudentAbsences(e.cls, e.stuId);
+  return Object.keys(e.absPrev).some(function(k){ return norm(ab[k]) !== norm(e.absPrev[k]); });
+}
+/* بعد التعديل: تُحفظ العملية في المكدّس إن تغيّر شيء فعلاً */
+function _npUndoCommit(e) {
+  if(!e) return null;
+  var stack = WKS.npUndoStack;
+  var differs = _npUndoDiffers(e);
+  var i = stack.indexOf(e);
+  if(!differs) { if(i >= 0) stack.splice(i, 1); e.pushed = false; return null; }
+  if(i < 0) {
+    stack.push(e); e.pushed = true;
+    if(stack.length > NP_UNDO_MAX) stack.shift();
+  }
+  return e;
+}
+function _npFmtVal(v) {
+  return (v===''||v===undefined||v===null) ? 'فارغ' : v==='غ' ? 'غائب' : v==='م' ? 'معفى' : String(v);
+}
+function _npUndoDesc(e) {
+  var list = DB.data[e.cls] || [];
+  var st = list.find(function(s){ return s.id == e.stuId; });
+  var cur = st && e.field ? st[e.field] : undefined;
+  var lbl = e.field ? _npFieldLabel(e.fld) : 'الغياب';
+  return e.stuName+' — '+lbl+': '+_npFmtVal(cur)+' ← '+_npFmtVal(e.prev[e.field]);
+}
+
+function _npUndoApply(e) {
+  var list = DB.data[e.cls] || [];
+  var st = list.find(function(s){ return s.id == e.stuId; });
+  if(!st) return;
+  Object.keys(e.prev).forEach(function(f) {
+    if(e.prev[f] === undefined) delete st[f]; else st[f] = e.prev[f];
+  });
+  var ab = getStudentAbsences(e.cls, e.stuId);
+  Object.keys(e.absPrev).forEach(function(k) {
+    if(!e.absPrev[k]) delete ab[k]; else ab[k] = e.absPrev[k];
+  });
+  saveDB();
+  var idx = list.indexOf(st);
+  _gradesUpdateTotCell(e.cls, idx);
+  /* مزامنة سجل الجلسة */
+  if(WKS.npSessionLog) WKS.npSessionLog = WKS.npSessionLog.filter(function(l){ return l.undoId !== e.id; });
+  if(e.direct) {
+    _npLogDirectRemove(st, e.fld);
+    /* لو هناك رصد مباشر أقدم في الجلسة لنفس الخانة، أعده إلى السجل */
+    var earlier = (WKS.npUndoStack||[]).filter(function(x){ return x !== e && x.direct && x.stuId == e.stuId && x.fld === e.fld; });
+    if(earlier.length && e.field) {
+      var cv = st[e.field];
+      if(_gradeHasData(cv) || cv==='غ' || cv==='م') _npLogDirectSet(st, e.fld, cv, e.max, cv==='غ'||cv==='م');
+    }
+  }
+  if(WKS.numpadStudent && WKS.numpadStudent.id == st.id) { WKS.numpadStudent = st; WKS.numpadStudentIdx = idx; }
+}
+
+/* تراجع عن آخر n عملية رصد */
+function _npUndo(n) {
+  n = n || 1;
+  var stack = WKS.npUndoStack || [];
+  if(!stack.length) { showSnack('لا توجد عمليات رصد للتراجع عنها', null, 'warn'); return; }
+  var done = 0, lastDesc = '';
+  while(n > 0 && stack.length) {
+    var e = stack.pop();
+    lastDesc = _npUndoDesc(e);
+    _npUndoApply(e);
+    done++; n--;
+  }
+  WKS._npDirectEntry = null;
+  WKS.numpadInput = '';
+  WKS.npTextInput = '';
+  WKS.npStatus = done === 1 ? ('↩ تم التراجع — ' + lastDesc) : ('↩ تم التراجع عن ' + done + ' عملية رصد');
+  WKS.npStatusType = 'info';
+  var m = document.getElementById('npUndoModal');
+  if(m) m.remove();
+  renderWeekly();
+}
+
+/* نافذة التراجع المتعدد */
+function _npUndoOpen() {
+  var stack = WKS.npUndoStack || [];
+  var old = document.getElementById('npUndoModal');
+  if(old) old.remove();
+  if(!stack.length) { showSnack('لا توجد عمليات رصد للتراجع عنها', null, 'warn'); return; }
+  var ov = document.createElement('div');
+  ov.id = 'npUndoModal';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px;';
+  ov.onclick = function(ev){ if(ev.target === ov) ov.remove(); };
+  var h = '<div style="background:#0f172a;border:1px solid #334155;border-radius:14px;width:min(440px,100%);max-height:80vh;display:flex;flex-direction:column;direction:rtl;font-family:inherit;">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #334155;">';
+  h += '<span style="font-weight:900;color:#fcd34d;font-size:14px;">📜 التراجع المتعدد ('+stack.length+')</span>';
+  h += '<button onclick="document.getElementById(\'npUndoModal\').remove()" style="background:none;border:none;color:#f87171;font-size:18px;cursor:pointer;">✕</button></div>';
+  h += '<div style="padding:6px 14px;font-size:10px;color:#94a3b8;">اضغط «تراجع حتى هنا» لإلغاء هذه العملية وكل ما بعدها (الأحدث في الأعلى).</div>';
+  h += '<div style="overflow-y:auto;padding:4px 10px 10px;">';
+  for(var i = stack.length-1, k = 1; i >= 0; i--, k++) {
+    var e = stack[i];
+    var d = new Date(e.t);
+    var tm = ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+    h += '<div style="display:flex;align-items:center;gap:6px;padding:6px 6px;border-bottom:1px solid #1e293b;">';
+    h += '<span style="font-size:10px;color:#64748b;min-width:34px;">'+tm+'</span>';
+    h += '<span style="flex:1;font-size:12px;color:#e2e8f0;">'+esc(_npUndoDesc(e))+'</span>';
+    h += '<button onclick="_npUndo('+k+')" style="background:rgba(251,191,36,.15);border:1px solid #d97706;color:#fcd34d;border-radius:7px;padding:3px 8px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;">↩ '+(k===1?'تراجع':'حتى هنا ('+k+')')+'</button>';
+    h += '</div>';
+  }
+  h += '</div></div>';
+  ov.innerHTML = h;
+  document.body.appendChild(ov);
+}
+
+/* شريط أزرار التراجع (يظهر أسفل أزرار اختيار الحقل) */
+function _npUndoBarHtml() {
+  var n = (WKS.npUndoStack || []).length, dis = (n === 0);
+  var base = 'border-radius:8px;padding:6px 8px;font-size:11px;font-weight:800;font-family:inherit;touch-action:manipulation;';
+  var h = '<div style="display:flex;gap:4px;margin-top:6px;">';
+  h += '<button onclick="_npUndo(1)" '+(dis?'disabled ':'')+'style="'+base+'flex:2;cursor:'+(dis?'default':'pointer')+';background:'+(dis?'rgba(100,116,139,.12)':'rgba(251,191,36,.15)')+';border:1px solid '+(dis?'#334155':'#d97706')+';color:'+(dis?'#64748b':'#fcd34d')+';">↩ تراجع عن آخر رصد'+(n?' ('+n+')':'')+'</button>';
+  h += '<button onclick="_npUndoOpen()" '+(dis?'disabled ':'')+'style="'+base+'flex:1;cursor:'+(dis?'default':'pointer')+';background:'+(dis?'rgba(100,116,139,.12)':'rgba(99,102,241,.15)')+';border:1px solid '+(dis?'#334155':'#6366f1')+';color:'+(dis?'#64748b':'#a5b4fc')+';">📜 تراجع متعدد</button>';
+  h += '</div>';
+  return h;
+}
+
+/* اختصار Ctrl+Z داخل صفحة الراصد */
+document.addEventListener('keydown', function(ev) {
+  if(!(ev.ctrlKey || ev.metaKey) || ev.shiftKey || ev.altKey) return;
+  if(ev.key !== 'z' && ev.key !== 'Z') return;
+  if(typeof _currentPage === 'undefined' || _currentPage !== 'weekly' || WKS.viewMode !== 'numpad') return;
+  var t = ev.target;
+  if(t && (t.tagName === 'INPUT' || t.isContentEditable || (t.tagName === 'TEXTAREA' && t.id !== 'npDictInput'))) return;
+  if(!(WKS.npUndoStack || []).length) return;
+  ev.preventDefault();
+  _npUndo(1);
+});
+
+/* ═══════════════ الإدخال المباشر (اختيار طالب ثم ضغط الأرقام) ═══════════════ */
+function _npDirectEntryValid(curField) {
+  var e = WKS._npDirectEntry, s = WKS.numpadStudent;
+  if(!e || !s) return false;
+  var stack = WKS.npUndoStack;
+  return e.field === curField && e.stuId == s.id && e.cls === WKS.activeClass &&
+         (!e.pushed || stack[stack.length-1] === e);
+}
+/* عند أول رقم: تحذير لو الخانة بها بيانات + بدء لقطة التراجع. يُعيد false لإلغاء الإدخال */
+function _npDirectGuard() {
+  var s = WKS.numpadStudent;
+  if(!s) return true;
+  var cls = WKS.activeClass, week = WKS.activeWeek, fld = WKS.numpadField || 'assess';
+  var f = _npFieldName(fld, week), max = _npMaxFor(fld, week);
+  var fresh = (DB.data[cls]||[])[WKS.numpadStudentIdx] || s;
+  if(_npDirectEntryValid(f)) return true;
+  if(!_npConfirmOverwrite(fresh, f, fld, null, max)) {
+    WKS.npStatus = '↩ أُلغي الإدخال — بقيت الدرجة القديمة كما هي';
+    WKS.npStatusType = 'info';
+    renderWeekly();
+    return false;
+  }
+  var e = _npUndoBegin(fresh, cls, week, fld, [f], []);
+  e.direct = true;
+  WKS._npDirectEntry = e;
+  return true;
+}
+/* تحديث الحالة بدون إعادة رسم كاملة إن أمكن */
+function _npSetStatusLive(text, type) {
+  WKS.npStatus = text; WKS.npStatusType = type;
+  var box = document.querySelector('.np2-wrap .np2-status-box');
+  if(!box) { renderWeekly(); return; }
+  box.className = 'np2-status-box ' + (type==='ok'?'np2-status-ok':type==='warn'?'np2-status-warn':type==='info'?'np2-status-info':'np2-status-err');
+  var sp = box.querySelector('span');
+  if(sp) sp.textContent = text;
+}
+/* بعد توقف المستخدم عن الكتابة: مستوى الدرجة + تحذير الشذوذ */
+function _npDirectFeedbackSoon(stuId, cls, fld, curField, maxVal) {
+  clearTimeout(window._npDfT);
+  window._npDfT = setTimeout(function() {
+    var s = (DB.data[cls]||[]).find(function(x){ return x.id == stuId; });
+    if(!s) return;
+    var v = s[curField];
+    if(!_gradeHasData(v)) return;
+    var fb = _npGradeFeedback(s, cls, fld, curField, Number(v), maxVal);
+    _npSetStatusLive(fb.text, fb.abnormal ? 'warn' : 'ok');
+    if(fb.abnormal) showSnack(fb.snack, function(){ _npUndo(1); }, 'warn');
+  }, 900);
+}
+/* تتبّع تعديل مباشر (حذف/مسح) ضمن نفس لقطة التراجع أو في لقطة جديدة */
+function _npDirectTrackBegin(fld, curField) {
+  if(_npDirectEntryValid(curField)) return WKS._npDirectEntry;
+  var cls = WKS.activeClass, week = WKS.activeWeek;
+  var fresh = (DB.data[cls]||[])[WKS.numpadStudentIdx] || WKS.numpadStudent;
+  var e = _npUndoBegin(fresh, cls, week, fld, [curField], []);
+  e.direct = true;
+  WKS._npDirectEntry = e;
+  return e;
 }

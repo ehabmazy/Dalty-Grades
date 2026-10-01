@@ -2011,7 +2011,7 @@ function _sgUpdateUrl() {
 }
 
 function copyViewerLink(){
-  var user = firebase.auth && firebase.auth().currentUser;
+  var user = (typeof firebase !== 'undefined') && firebase.auth && firebase.auth().currentUser;
   if(!user){ alert('يجب تسجيل الدخول أولاً'); return; }
   window._sgUID = user.uid;
 

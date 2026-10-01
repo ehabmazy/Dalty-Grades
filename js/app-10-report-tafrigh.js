@@ -9,17 +9,20 @@ if('serviceWorker' in navigator){
       /* ── استخراج مسار sw.js ديناميكياً بناءً على موقع التطبيق الفعلي ──
          يحل مشكلة: مسار ثابت /grades-project/sw.js لا يتطابق مع
          أسماء مستودعات مختلفة على GitHub Pages أو رفع مباشر ── */
+      /* sw.js بجوار index.html. نحسب مساره من رابط هذا السكريبت (js/app-10...) صعوداً مستوى واحداً.
+         كان الكود القديم لا يطابق المسار النسبي فيسجّل ملف app-10 نفسه كـ Service Worker،
+         ولذلك لم يكن التطبيق يعمل بدون إنترنت. */
       var swPath = (function(){
-        var scripts = document.querySelectorAll('script[src]');
-        for(var i=0; i<scripts.length; i++){
-          var src = scripts[i].getAttribute('src');
-          if(src && src.indexOf('app-10') !== -1){
-            /* مجلد js/ داخل مجلد التطبيق → ارجع مستوى للأعلى */
-            return src.replace(/\/js\/app-10[^/]*$/, '/sw.js');
+        try {
+          var scripts = document.querySelectorAll('script[src]');
+          for(var i=0; i<scripts.length; i++){
+            var src = scripts[i].getAttribute('src');
+            if(src && src.indexOf('app-10') !== -1){
+              return new URL('../sw.js', scripts[i].src).href;
+            }
           }
-        }
-        /* احتياطي: مسار نسبي من الصفحة الحالية */
-        return './sw.js';
+        } catch(e){}
+        return new URL('sw.js', location.href).href;
       })();
 
       navigator.serviceWorker.register(swPath)
