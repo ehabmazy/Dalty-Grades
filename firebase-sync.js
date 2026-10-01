@@ -50,6 +50,41 @@ var _lastSaveTS = 0;
 var _isOnline   = navigator.onLine;
 var _pendingSave = false;
 
+/* ════════════════════════════════════════
+   حالة "تعديلات لم تُرفع بعد" — تُحفظ على الجهاز
+   (كانت تُحفظ في الذاكرة فقط، فتضيع عند إغلاق التطبيق
+    وتحلّ نسخة السحابة القديمة محل تعديلاتك عند الفتح)
+   ════════════════════════════════════════ */
+function _fbStoreKey() { return window.STORE_KEY || "grades_v6"; }
+function _dirtyKey()   { return "dalty_dirty_"  + _fbStoreKey(); }
+function _syncedKey()  { return "dalty_synced_" + _fbStoreKey(); }
+function _getDirty() {
+  try { return Number(localStorage.getItem(_dirtyKey())) || 0; } catch (e) { return 0; }
+}
+function _markDirty() {
+  try { localStorage.setItem(_dirtyKey(), String(Date.now())); } catch (e) {}
+}
+function _clearDirtyIfNotNewer(seen) {
+  try { if ((Number(localStorage.getItem(_dirtyKey())) || 0) <= seen) localStorage.removeItem(_dirtyKey()); } catch (e) {}
+}
+function _setSynced(ts) {
+  try { localStorage.setItem(_syncedKey(), JSON.stringify({ ts: ts, at: Date.now() })); } catch (e) {}
+}
+function _getSynced() {
+  try { return JSON.parse(localStorage.getItem(_syncedKey())) || null; } catch (e) { return null; }
+}
+function _hhmm(t) {
+  if (!t) return "—";
+  var d = new Date(t);
+  return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) + ":" + ("0" + d.getSeconds()).slice(-2);
+}
+/* مؤشر دائم: هل آخر تعديل محفوظ ومرفوع؟ */
+function _refreshSaveBadge() {
+  if (_getDirty()) {
+    showSyncStatus("warn", _isOnline ? "⏳ جاري الرفع" : "📴 محفوظ بالجهاز");
+  }
+}
+
 
 /* ════════════════════════════════════════
    تهيئة Firebase
@@ -114,6 +149,17 @@ function setFirebaseUserPath(uid) {
 
   /* ابدأ الاستماع من جديد */
   listenForRemoteChanges();
+
+  /* اتصال فعلي بالخادم (أدق من حدث online عند واي فاي بدون إنترنت): ارفع أي تعديلات معلّقة */
+  if (!window._fbConnWatch) {
+    window._fbConnWatch = true;
+    _fbDB.ref(".info/connected").on("value", function (s) {
+      if (s.val() === true) {
+        _isOnline = true;
+        if (_getDirty()) scheduleSyncToFirebase();
+      }
+    });
+  }
 }
 
 /* تصدير للاستخدام من auth.js */
@@ -141,15 +187,37 @@ function repairDB(clean) {
 function listenForRemoteChanges() {
   _fbRef.on("value", function (snapshot) {
     var remote = snapshot.val();
-    if (!remote) return;
+
+    /* السحابة فارغة ولدينا بيانات محلية: ارفعها */
+    if (!remote) {
+      if (window.DB && window.DB.data && window.DB.classes) setTimeout(pushToFirebase, 1500);
+      return;
+    }
 
     /* تجاهل التحديثات التي أرسلناها نحن */
     if (remote._ts && remote._ts === _lastSaveTS) return;
 
-    /* تجاهل لو البيانات المحلية أحدث */
-    var localDB = null;
-    try { localDB = JSON.parse(localStorage.getItem("grades_v6")); } catch(e) {}
-    if (localDB && localDB._ts && remote._ts && localDB._ts > remote._ts) return;
+    /* ✅ الإصلاح الجوهري: لو عندنا تعديلات محلية لم تُرفع بعد، لا نستبدلها أبداً بنسخة السحابة */
+    var dirty = _getDirty();
+    if (dirty) {
+      if (remote._ts && remote._ts > dirty) {
+        /* جهاز آخر حفظ بعد آخر تعديل لك: نحتفظ بتعديلاتك ونحفظ نسخة السحابة احتياطياً */
+        try { localStorage.setItem("dalty_remote_backup_" + _fbStoreKey(), JSON.stringify(remote)); } catch (e) {}
+        if (typeof showSnack === "function") {
+          showSnack("⚠️ جهاز آخر عدّل البيانات أيضاً. احتفظنا بتعديلاتك على هذا الجهاز ورفعناها.", null, "warn");
+        }
+      }
+      console.warn("[Dalty Sync] تعديلات محلية غير مرفوعة — لن تُستبدل، سيتم رفعها");
+      setTimeout(pushToFirebase, 500);
+      return;
+    }
+
+    /* لا تعديلات معلّقة، ونسخة السحابة هي نفسها التي لدينا: لا حاجة لإعادة تحميل */
+    var syn = _getSynced();
+    if (syn && remote._ts && syn.ts === remote._ts && window.DB && window.DB.data) {
+      showSyncStatus("ok", "☁️ متزامن");
+      return;
+    }
 
     /* حفظ البيانات الواردة محلياً */
     var clean = restoreKeys(Object.assign({}, remote));
@@ -176,8 +244,9 @@ function listenForRemoteChanges() {
     console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
 
     try {
-      localStorage.setItem("grades_v6", JSON.stringify(clean));
+      localStorage.setItem(_fbStoreKey(), JSON.stringify(clean));
     } catch(e) {}
+    _setSynced(remote._ts || Date.now());
 
     /* تحديث DB في الذاكرة وإعادة الرسم */
     if (window.DB !== undefined) {
@@ -208,9 +277,13 @@ function hookSaveDB() {
       window.saveDB = function () {
         /* _fbHooked — علامة لمنع التكرار */
         /* استدعاء الدالة الأصلية أولاً */
-        _origSave.apply(this, arguments);
+        var _r = _origSave.apply(this, arguments);
+        /* علّم أن هناك تعديلاً لم يُرفع بعد (يبقى حتى بعد إغلاق التطبيق) */
+        _markDirty();
+        _refreshSaveBadge();
         /* ثم إرسال لـ Firebase بعد تأخير */
         scheduleSyncToFirebase();
+        return _r;
       };
 
       /* علامة تمنع الـ hook مرة ثانية */
@@ -289,18 +362,30 @@ function pushToFirebase() {
 
   var ts = Date.now();
   _lastSaveTS = ts;
+  var dirtyAtPush = _getDirty();
 
   var payload = sanitizeKeys(JSON.parse(JSON.stringify(db)));
   payload._ts     = ts;
   payload._device = getDeviceId();
 
+  /* شبكة "واي فاي بدون إنترنت": الرفع يتأخر — أخبر المستخدم أن التعديل محفوظ بالجهاز */
+  var slowT = setTimeout(function () {
+    if (_isSyncing) showSyncStatus("warn", "📴 محفوظ بالجهاز — بانتظار الاتصال");
+  }, 8000);
+
   _fbRef.set(payload)
     .then(function () {
+      clearTimeout(slowT);
       _isSyncing = false;
-      showSyncStatus("ok", "☁️ متزامن");
+      _pendingSave = false;
+      _setSynced(ts);
+      _clearDirtyIfNotNewer(dirtyAtPush);
+      if (_getDirty()) { scheduleSyncToFirebase(); }   /* حدث تعديل أثناء الرفع */
+      else { showSyncStatus("ok", "✅ تم الحفظ والمزامنة"); setTimeout(function () { if (!_getDirty()) showSyncStatus("ok", "☁️ متزامن"); }, 2500); }
       console.log("[Dalty Sync] ✅ تم الحفظ على Firebase");
     })
     .catch(function (err) {
+      clearTimeout(slowT);
       _isSyncing = false;
       _pendingSave = true;
       showSyncStatus("error", "❌ فشل التزامن: " + err.message);
@@ -314,7 +399,7 @@ function pushToFirebase() {
    ════════════════════════════════════════ */
 function onComeOnline() {
   showSyncStatus("ok", "🌐 عاد الاتصال");
-  if (_pendingSave) {
+  if (_pendingSave || _getDirty()) {
     _pendingSave = false;
     setTimeout(pushToFirebase, 1000);
   }
@@ -469,8 +554,16 @@ function openSyncPanel() {
       'margin-bottom:12px;font-family:monospace;">' + getDeviceId() + '</div>',
 
     '<div style="font-size:10px;color:#475569;margin-bottom:8px;">الحالة:</div>',
-    '<div id="fbPanelStatus" style="font-size:11px;color:#6ee7b7;margin-bottom:14px;">',
+    '<div id="fbPanelStatus" style="font-size:11px;color:#6ee7b7;margin-bottom:10px;">',
       _isOnline ? "🟢 متصل" : "🔴 غير متصل",
+    '</div>',
+    '<div style="font-size:11px;line-height:1.9;background:#0a1628;border-radius:8px;padding:8px 10px;margin-bottom:12px;color:#cbd5e1;">',
+      '💾 آخر حفظ على الجهاز: <b>' + _hhmm(window._lastLocalSaveAt) + '</b><br>',
+      (window._lastSaveOk === false ? '<span style="color:#fca5a5;">⚠️ فشل آخر حفظ على الجهاز!</span><br>' : ''),
+      '☁️ آخر رفع للسحابة: <b>' + _hhmm((_getSynced() || {}).at) + '</b><br>',
+      (_getDirty()
+        ? '<span style="color:#fcd34d;">⏳ توجد تعديلات لم تُرفع بعد (محفوظة على جهازك)</span>'
+        : '<span style="color:#6ee7b7;">✅ كل التعديلات مرفوعة</span>'),
     '</div>',
 
     '<div style="display:flex;flex-direction:column;gap:7px;">',
@@ -525,7 +618,9 @@ function pullFromFirebase() {
 
       if (!confirm("⚠️ سيتم استبدال بياناتك الحالية ببيانات السحابة. متأكد؟")) return;
 
-      localStorage.setItem("grades_v6", JSON.stringify(clean));
+      try { localStorage.setItem(_fbStoreKey(), JSON.stringify(clean)); } catch (e) {}
+      try { localStorage.removeItem(_dirtyKey()); } catch (e) {}
+      _setSynced(remote._ts || Date.now());
       window.DB = clean;
 
       if (typeof window.renderGrades  === "function") window.renderGrades();
