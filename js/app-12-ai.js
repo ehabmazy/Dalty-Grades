@@ -784,19 +784,21 @@ function viewSettings() {
     return '<button onclick="DAI.setProv(\'' + p + '\')" style="' + BTN + 'flex:1;padding:9px 6px;font-size:12px;' +
       (on ? 'background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;' : 'background:#1e293b;color:#94a3b8;border:1px solid #334155;') + '">' + label + '</button>';
   };
+  var pasteBtn = '<div style="margin-bottom:8px;">' + btn('📋 لصق المفتاح من الحافظة', 'DAI.pasteKey()', 'background:#0f766e;color:#fff;padding:9px 12px;font-size:12px;width:100%;') +
+    '<div style="font-size:10px;color:#64748b;margin-top:3px;line-height:1.7;">انسخ المفتاح أولاً ثم اضغط هذا الزر. إن لم ينجح ستظهر نافذة تلصق فيها المفتاح.</div></div>';
   var h = '<div style="display:flex;gap:6px;margin-bottom:12px;">' + tab('gemini', '🆓 مجاني — Gemini') + tab('claude', '💳 Claude (مدفوع)') + '</div>';
   if (gem) {
     h += '<div style="font-size:12px;color:#cbd5e1;line-height:2;margin-bottom:10px;">للحصول على مفتاح <b>مجاني</b> (بدون بطاقة دفع):<br>' +
       '١) افتح <b style="color:#93c5fd;">aistudio.google.com/apikey</b> بحساب Google (عمر 18 سنة فأكثر).<br>' +
       '٢) اضغط <b>Create API key</b> وانسخ المفتاح.<br>٣) الصقه هنا ثم اضغط «اختبار الاتصال».</div>' +
       '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">مفتاح Gemini</div>' +
-      '<input id="daiKey" type="password" dir="ltr" placeholder="AIza..." value="' + esc(c.gkey) + '" oninput="DAI.setSet(\'gkey\',this.value)" style="' + SEL + 'width:100%;box-sizing:border-box;margin-bottom:6px;" autocomplete="off">';
+      '<input id="daiKey" type="text" dir="ltr" placeholder="AIza..." value="' + esc(c.gkey) + '" oninput="DAI.setSet(\'gkey\',this.value)" style="' + SEL + 'width:100%;box-sizing:border-box;margin-bottom:6px;-webkit-text-security:disc;" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">' + pasteBtn;
   } else {
     h += '<div style="font-size:12px;color:#cbd5e1;line-height:1.9;margin-bottom:10px;">يعمل بمفتاح Claude الخاص بك: أنشئ حساباً في <b style="color:#93c5fd;">console.anthropic.com</b> ثم <b>API Keys</b> ← <b>Create Key</b>، واشحن رصيداً صغيراً. تُخصم تكلفة كل عملية من رصيدك مباشرة.</div>' +
       '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">مفتاح Claude</div>' +
-      '<input id="daiKey" type="password" dir="ltr" placeholder="sk-ant-..." value="' + esc(c.key) + '" oninput="DAI.setSet(\'key\',this.value)" style="' + SEL + 'width:100%;box-sizing:border-box;margin-bottom:6px;" autocomplete="off">';
+      '<input id="daiKey" type="text" dir="ltr" placeholder="sk-ant-..." value="' + esc(c.key) + '" oninput="DAI.setSet(\'key\',this.value)" style="' + SEL + 'width:100%;box-sizing:border-box;margin-bottom:6px;-webkit-text-security:disc;" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">' + pasteBtn;
   }
-  h += '<label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:10px;"><input type="checkbox" onchange="document.getElementById(\'daiKey\').type=this.checked?\'text\':\'password\'"> إظهار المفتاح</label>' +
+  h += '<label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:10px;"><input type="checkbox" onchange="document.getElementById(\'daiKey\').style.webkitTextSecurity=this.checked?\'none\':\'disc\'"> إظهار المفتاح</label>' +
     '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">النموذج</div>' +
     '<select style="' + SEL + 'width:100%;margin-bottom:10px;" onchange="DAI.setSet(\'' + (gem ? 'gmodel' : 'model') + '\',this.value)">' + opt(gem ? GMODELS : MODELS, gem ? c.gmodel : c.model) + '</select>' +
     '<label style="font-size:11px;color:#cbd5e1;display:block;line-height:1.8;margin-bottom:12px;"><input type="checkbox" ' + (c.sendRoster ? 'checked' : '') + ' onchange="DAI.setSet(\'sendRoster\',this.checked)"> أرسل أسماء الفصل مع الصورة (تُحسّن قراءة الخط الصعب؛ الأسماء الظاهرة في الصورة تُرسل في كل الأحوال)</label>' +
@@ -835,6 +837,26 @@ function delKey() {
   var c = cfgGet();
   if (c.provider === 'gemini') c.gkey = ''; else c.key = '';
   cfgSet(c); ST.sets = null; render();
+}
+
+function pasteKey() {
+  if (!ST.sets) ST.sets = cfgGet();
+  var fld = ST.sets.provider === 'gemini' ? 'gkey' : 'key';
+  var put = function (v) {
+    v = String(v || '').trim();
+    if (!v) { if (typeof showSnack === 'function') showSnack('⚠️ الحافظة فارغة — انسخ المفتاح أولاً'); return; }
+    ST.sets[fld] = v;
+    var el = document.getElementById('daiKey'); if (el) el.value = v;
+    if (typeof showSnack === 'function') showSnack('✅ تم لصق المفتاح — اضغط «حفظ» ثم «اختبار الاتصال»');
+  };
+  var manual = function () { var v = prompt('الصق المفتاح هنا (اضغط مطولاً داخل الخانة ← لصق):', ''); if (v !== null) put(v); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(put).catch(manual);
+      return;
+    }
+  } catch (e) {}
+  manual();
 }
 
 /* ───────── اختيار الوضع ───────── */
@@ -1279,6 +1301,7 @@ window.DAI = {
   example: function (i) { ST.cmd.text = EXAMPLES[i]; render(); },
   runCmd: runCmd, applyCmd: applyCmd,
   saveCfg: function () { saveCfg(false); }, testCfg: testCfg, delKey: delKey,
+  pasteKey: pasteKey,
   setProv: function (p) { if (!ST.sets) ST.sets = cfgGet(); ST.sets.provider = p; render(); },
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   undo: function (fromDone) { doUndo(fromDone === true); }
