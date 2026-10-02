@@ -352,7 +352,7 @@ function fmtVal(v) { return !hasData(v) ? 'فارغ' : (v === '\u063A' ? 'غائ
 
 /* ═════════════ خطة التغييرات + التطبيق + التراجع ═════════════ */
 var undoStack = [];
-function emptyPlan() { return { cells: [], abs: [], add: [], warn: [], over: 0, skipped: 0 }; }
+function emptyPlan() { return { cells: [], abs: [], add: [], warn: [], over: 0, skipped: 0, capped: 0, floored: 0 }; }
 
 function snapshotJSON(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -464,11 +464,36 @@ function planFromTable(tbl) {
   return plan;
 }
 
+/* ═════════════ حساب آمن للدرجات: لا تتجاوز الحد الأقصى ولا تقل عن صفر ═════════════ */
+function isNumVal(v) { return hasData(v) && v !== '\u063A' && v !== '\u0645' && !isNaN(Number(v)); }
+function round2(x) { return Math.round(x * 100) / 100; }
+/* يُرجع {val, flag}: flag='max' إن رُدّت للحد الأقصى، 'min' إن رُدّت للصفر */
+function clampGrade(x, mx) {
+  x = round2(x);
+  if (x > mx) return { val: mx, flag: 'max' };
+  if (x < 0) return { val: 0, flag: 'min' };
+  return { val: x, flag: '' };
+}
+function whereOK(cur, w, mx) {
+  if (!w || !w.op) return true;
+  var x = Number(cur), a = parseFloat(w.value), b = parseFloat(w.value2);
+  if (w.unit === 'percent') x = mx ? x / mx * 100 : 0;
+  switch (String(w.op)) {
+    case 'lt': return x < a;
+    case 'lte': return x <= a;
+    case 'gt': return x > a;
+    case 'gte': return x >= a;
+    case 'eq': return x === a;
+    case 'between': return x >= Math.min(a, b) && x <= Math.max(a, b);
+  }
+  return true;
+}
+
 /* ═════════════ خطة من أوامر مكتوبة (ops) ═════════════ */
 function planFromOps(cls, ops, opts) {
   opts = opts || {};
   var arr = DB.data[cls] || [], plan = emptyPlan();
-  var virt = {}, absVirt = {};
+  var virt = {}, absVirt = {}, flagV = {};
   var defWeek = opts.week || 1;
 
   function resolveStu(ref) {
@@ -494,7 +519,7 @@ function planFromOps(cls, ops, opts) {
     return out;
   }
   function vget(i, k) { var kk = i + '|' + k; return (kk in virt) ? virt[kk] : arr[i][k]; }
-  function vset(i, k, v) { virt[i + '|' + k] = v; }
+  function vset(i, k, v, flag) { virt[i + '|' + k] = v; flagV[i + '|' + k] = flag || ''; }
   function keyFor(ref, op) {
     var w = (ref && ref.week != null) ? ref.week : (op.week != null ? op.week : defWeek);
     var key = keyOf(ref && ref.field != null ? ref.field : op.field, w);
@@ -539,6 +564,10 @@ function planFromOps(cls, ops, opts) {
       var from = op.from || {}, to = op.to || {};
       var kf = keyFor(from, op), kt = keyFor(to, op);
       if (!kf || !kt) return;
+      var delta = (op.delta !== undefined && op.delta !== null && op.delta !== '') ? parseFloat(op.delta) : 0;
+      if (!isFinite(delta)) delta = 0;
+      if (mode === 'swap' && delta) { plan.warn.push('الإضافة/الطرح غير مدعومة مع «تبديل» — تُجوهلت.'); delta = 0; }
+      var scale = op.scale === true && maxFor(kf) !== maxFor(kt);
       var pairs = [];
       if (from.student != null || to.student != null) {
         var fi = resolveStu(from.student != null ? from.student : to.student);
@@ -548,19 +577,50 @@ function planFromOps(cls, ops, opts) {
       } else {
         resolveList(op.students).forEach(function (k) { pairs.push([k, k]); });
       }
+      /* يحوّل قيمة مصدر إلى قيمة هدف: غ/م كما هي، والأرقام تُحوَّل/تُجمع وتُقيَّد بحدّ الهدف */
+      var conv = function (v, fromKey, toKey) {
+        if (!hasData(v)) return null;
+        if (v === '\u063A' || v === '\u0645') return { val: v, flag: '' };
+        var n = Number(v); if (isNaN(n)) { plan.warn.push('قيمة غير رقمية «' + v + '» تُجوهلت.'); return null; }
+        if (scale) n = n / maxFor(fromKey) * maxFor(toKey);
+        return clampGrade(n + delta, maxFor(toKey));
+      };
       pairs.forEach(function (pr) {
         var a = vget(pr[0], kf), b = vget(pr[1], kt);
-        var nm = arr[pr[0]].name;
         if (mode === 'swap') {
-          var okA = !hasData(b) || checkVal(b, kf), okB = !hasData(a) || checkVal(a, kt);
-          if (okA && okB) { vset(pr[0], kf, hasData(b) ? b : ''); vset(pr[1], kt, hasData(a) ? a : ''); }
+          var ca = conv(a, kf, kt), cb = conv(b, kt, kf);
+          if (!hasData(a) && !hasData(b)) return;
+          vset(pr[1], kt, ca ? ca.val : '', ca ? ca.flag : '');
+          vset(pr[0], kf, cb ? cb.val : '', cb ? cb.flag : '');
         } else {
-          if (!hasData(a)) return;
-          var cv = checkVal(a, kt); if (!cv) return;
-          vset(pr[1], kt, cv.val);
+          var cv = conv(a, kf, kt); if (!cv) return;
+          vset(pr[1], kt, cv.val, cv.flag);
           if (mode === 'move' && !(pr[0] === pr[1] && kf === kt)) vset(pr[0], kf, '');
         }
       });
+    } else if (t === 'adjust') {
+      var dlt = parseFloat(op.delta);
+      if (!isFinite(dlt) || dlt === 0) { plan.warn.push('قيمة الإضافة/الطرح غير صالحة.'); return; }
+      var wf = parseInt(op.week_from != null ? op.week_from : (op.week != null ? op.week : defWeek), 10);
+      var wt = parseInt(op.week_to != null ? op.week_to : wf, 10);
+      var isEx = (String(op.field) === 'ex1' || String(op.field) === 'ex2');
+      if (isEx) { wf = 1; wt = 1; }
+      if (wt < wf) { var tmpw = wf; wf = wt; wt = tmpw; }
+      var targets = resolveList(op.students), emptySkipped = 0, any = false;
+      for (var wv = wf; wv <= wt; wv++) {
+        var ak = keyOf(op.field, wv);
+        if (!ak) { plan.warn.push('عمود غير صالح (' + op.field + ' – أسبوع ' + wv + ').'); continue; }
+        var amx = maxFor(ak);
+        targets.forEach(function (k) {
+          var cur = vget(k, ak);
+          if (!isNumVal(cur)) { emptySkipped++; return; }
+          if (!whereOK(cur, op.where, amx)) return;
+          var r = clampGrade(Number(cur) + dlt, amx);
+          vset(k, ak, r.val, r.flag); any = true;
+        });
+      }
+      if (emptySkipped) plan.warn.push('تخطّيتُ ' + emptySkipped + ' خانة فارغة/غائب/معفى (لا تُعدَّل بالجمع والطرح).');
+      if (!any && !emptySkipped) plan.warn.push('لا توجد خانات مطابقة للشرط.');
     } else if (t === 'add_students') {
       (op.names || []).forEach(function (n) {
         n = String(n || '').replace(/\s+/g, ' ').trim();
@@ -580,7 +640,9 @@ function planFromOps(cls, ops, opts) {
     if (String(hasData(old) ? old : '') === String(hasData(nu) ? nu : '')) return;
     if (opts.skipExisting && hasData(old)) { plan.skipped++; return; }
     if (hasData(old) && hasData(nu)) plan.over++;
-    plan.cells.push({ idx: i, id: s.id, key: key, old: old, nu: nu });
+    var fl = flagV[kk] || '';
+    if (fl === 'max') plan.capped++; else if (fl === 'min') plan.floored++;
+    plan.cells.push({ idx: i, id: s.id, key: key, old: old, nu: nu, cap: fl });
   });
   Object.keys(absVirt).forEach(function (kk) {
     var p = kk.split('|'), i = parseInt(p[0], 10), w = parseInt(p[1], 10), ci = parseInt(p[2], 10);
@@ -621,6 +683,11 @@ var SYS_CMD = 'You convert a teacher\'s Arabic instruction into structured edit 
   '5) {"type":"transfer","mode":"move|copy|swap","from":{"field":"hw","week":3},"to":{"field":"hw","week":4},"students":"all"|[..]}  ' +
   '— to transfer between two different students\' cells give "student" inside from/to: {"from":{"student":4,"field":"hw","week":3},"to":{"student":9,"field":"hw","week":3}}\n' +
   '6) {"type":"add_students","names":["..."]}\n' +
+  '7) {"type":"adjust","field":"hw","week":3,"delta":2,"students":"all"|[..],"where":{"op":"lt|lte|gt|gte|eq|between","value":5,"value2":8,"unit":"raw|percent"}}  — ADD (positive delta) or SUBTRACT (negative delta) points in place; ' +
+  'optional "where" limits it to students whose CURRENT value matches; for several weeks use "week_from" and "week_to" instead of "week". ' +
+  'The app itself caps results at the column maximum and floors them at 0 and skips empty/absent cells — NEVER do that arithmetic yourself, just give the delta.\n' +
+  'Transfer (op 5) also accepts an optional "delta" (points added to/subtracted from each moved value, e.g. "انقل … وأضف عليها درجتين") and "scale":true (convert proportionally when the two columns have different maximums). ' +
+  'Values that would exceed the target maximum are capped by the app automatically.\n' +
   'Rules: use only the fields/weeks/periods listed in the context. If the instruction needs something unsupported (deleting classes, changing settings) return ops [] with a clarification. ' +
   'If a student reference is ambiguous, ask in "clarification" instead of guessing. Never output students that are not in the roster unless using add_students.';
 
@@ -1177,7 +1244,10 @@ function applyNames() {
 /* ───────── أمر بالكتابة ───────── */
 var EXAMPLES = [
   'انقل درجات واجب الأسبوع 3 إلى الأسبوع 4 لكل الفصل',
-  'انسخ تقييم الأسبوع 2 إلى الأسبوع 3 للجميع',
+  'انقل واجب الأسبوع 3 إلى الأسبوع 4 وأضف عليها درجتين',
+  'أضف درجة لتقييم الأسبوع 3 لكل الطلاب',
+  'اطرح درجة من سلوك الأسبوع 2 لكل الطلاب',
+  'أضف 3 درجات لمن حصل على أقل من 5 في واجب الأسبوع 3',
   'اجعل سلوك الأسبوع الحالي 10 لكل الطلاب',
   'سجّل غياب الطالب رقم 5 في الأسبوع 3 الحصة 2',
   'بدّل بين درجة واجب الطالب 4 والطالب 9 في الأسبوع 2'
@@ -1226,7 +1296,8 @@ function planTable(plan, cls) {
   plan.add.forEach(function (nm) { if (n++ < 150) h += row('➕ ' + esc(nm), 'طالب جديد', ''); });
   plan.cells.forEach(function (c) {
     if (n++ >= 150) return;
-    h += row(esc(arr[c.idx] ? arr[c.idx].name : '?'), esc(labelFor(c.key)), '<span style="color:#64748b;text-decoration:line-through;">' + esc(fmtVal(c.old)) + '</span> ← <b>' + esc(fmtVal(c.nu)) + '</b>');
+    var cap = c.cap === 'max' ? ' <span style="color:#fbbf24;font-size:9px;">⬆ الحد الأقصى</span>' : (c.cap === 'min' ? ' <span style="color:#fbbf24;font-size:9px;">⬇ صفر</span>' : '');
+    h += row(esc(arr[c.idx] ? arr[c.idx].name : '?'), esc(labelFor(c.key)), '<span style="color:#64748b;text-decoration:line-through;">' + esc(fmtVal(c.old)) + '</span> ← <b>' + esc(fmtVal(c.nu)) + '</b>' + cap);
   });
   var ST_AR = { abs: 'غائب', sick: 'مريض', '': 'بدون' };
   plan.abs.forEach(function (a) {
@@ -1246,6 +1317,7 @@ function viewReviewPlan() {
     (p.warn.length ? '<div style="font-size:10px;color:#fbbf24;line-height:1.8;margin-bottom:8px;">' + p.warn.map(esc).join('<br>') + '</div>' : '') +
     planTable(p, ST.cls) +
     (p.over ? '<div style="font-size:11px;color:#fbbf24;margin-top:6px;">⚠️ سيُستبدل ' + p.over + ' درجة موجودة.</div>' : '') +
+    ((p.capped || p.floored) ? '<div style="font-size:11px;color:#fbbf24;margin-top:4px;line-height:1.8;">ℹ️ ' + (p.capped ? p.capped + ' درجة تجاوزت الحد فرُدّت إلى الدرجة القصوى' : '') + (p.capped && p.floored ? ' · ' : '') + (p.floored ? p.floored + ' درجة نزلت تحت الصفر فرُدّت إلى صفر' : '') + '.</div>' : '') +
     '<div style="display:flex;gap:6px;margin-top:10px;">' + btn(n ? '✅ تطبيق (' + n + ')' : 'لا يوجد ما يُطبَّق', 'DAI.applyCmd()', PRIMARY + 'flex:1;' + (n ? '' : 'opacity:.45;'), n ? '' : 'disabled') + btn('تعديل الأمر', "DAI.go('cmd')", GHOST) + '</div>';
 }
 function applyCmd() {
