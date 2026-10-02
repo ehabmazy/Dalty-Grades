@@ -666,7 +666,7 @@ function freshState() {
     tbl: null, opts: { skipExisting: true, clearPresent: false },
     names: { text: '', mode: 'empty', start: 1, skipDup: true },
     cmd: { text: '', clar: '', summary: '', plan: null },
-    gdef: { type: 'hw' }, done: null, busy: false
+    gdef: { type: 'hw' }, done: null, busy: false, repAll: false, repTxt: '', repClar: '', rep: null, presets: null
   };
 }
 
@@ -717,9 +717,9 @@ function open(mode) {
     '<div id="daiHead" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #1e293b;flex-shrink:0;"></div>' +
     '<div id="daiBody" style="flex:1;overflow-y:auto;padding:12px 14px 18px;-webkit-overflow-scrolling:touch;"></div></div>';
   document.body.appendChild(o);
-  if (!hasKey()) { ST.view = 'settings'; }
+  ST.presets = buildPresets();
   render();
-  if (mode && hasKey()) pickMode(mode);
+  if (mode) pickMode(mode);
 }
 function closeAI() {
   if (_abort) { try { _abort.abort(); } catch (e) {} }
@@ -729,7 +729,8 @@ function closeAI() {
 
 function head(title, back) {
   var h = document.getElementById('daiHead'); if (!h) return;
-  h.innerHTML = (back ? '<button onclick="DAI.go(\'home\')" style="' + BTN + 'background:#1e293b;color:#93c5fd;padding:6px 10px;font-size:13px;">→</button>' : '<span style="font-size:20px;">🤖</span>') +
+  var bt = (typeof back === 'string') ? back : 'home';
+  h.innerHTML = (back ? '<button onclick="DAI.go(\'' + bt + '\')" style="' + BTN + 'background:#1e293b;color:#93c5fd;padding:6px 10px;font-size:13px;">→</button>' : '<span style="font-size:20px;">🤖</span>') +
     '<span style="flex:1;font-weight:900;color:#e2e8f0;font-size:14px;">' + title + '</span>' +
     (ST.view === 'home' ? '<button onclick="DAI.go(\'settings\')" style="' + BTN + 'background:none;color:#94a3b8;font-size:16px;padding:4px 8px;" title="الإعدادات">⚙️</button>' : '') +
     '<button onclick="DAI.close()" style="' + BTN + 'background:none;color:#f87171;font-size:18px;padding:4px 8px;">✕</button>';
@@ -746,6 +747,8 @@ function render() {
   else if (v === 'reviewNames') viewReviewNames();
   else if (v === 'cmd') viewCmd();
   else if (v === 'reviewPlan') viewReviewPlan();
+  else if (v === 'rep') viewRep();
+  else if (v === 'repOut') viewRepOut();
   else if (v === 'done') viewDone();
   box().scrollTop = 0;
 }
@@ -766,6 +769,8 @@ function viewHome() {
     card('👥', 'إدراج الأسماء من صورة', 'صوّر قائمة الفصل وتُضاف الأسماء للفصل', 'names') +
     card('📝', 'رصد الدرجات من صورة', 'صوّر كشف درجات (واجب/تقييم/سلوك/اختبار)', 'grades') +
     card('💬', 'أمر بالكتابة', 'انقل/انسخ/بدّل درجات، سجّل غياباً، املأ عموداً…', 'cmd') +
+    card('📊', 'التقارير الذكية', 'الضعاف، المتفوقون، من لم تُرصد درجاتهم، الأكثر غياباً…', 'rep') +
+    (hasKey() ? '' : '<div style="background:#1e1b4b;border:1px solid #4338ca;color:#c7d2fe;border-radius:10px;padding:9px;font-size:11px;line-height:1.9;margin-bottom:8px;">ℹ️ الأدوات التي تقرأ الصور وتفهم الأوامر تحتاج مفتاحاً من ⚙️ (مجاني). <b>التقارير الجاهزة تعمل الآن بدونه.</b></div>') +
     (u ? '<div style="margin-top:6px;">' + btn('↩ تراجع عن آخر عملية: ' + esc(u.label) + ' (' + undoStack.length + ')', 'DAI.undo()', 'background:rgba(251,191,36,.12);border:1px solid #d97706;color:#fcd34d;padding:9px 12px;font-size:11px;width:100%;') + '</div>' : '') +
     '<div style="margin-top:10px;font-size:10px;color:#94a3b8;">الوضع الحالي: <b style="color:#a5b4fc;">' + (cfgGet().provider === 'gemini' ? '🆓 مجاني — Gemini' : '💳 Claude') + '</b> (يُغيَّر من ⚙️)</div>' +
     '<div style="margin-top:8px;font-size:10px;color:#64748b;line-height:1.8;">لا يتغيّر شيء في بياناتك قبل أن تراجع النتيجة وتضغط «تطبيق». الذكاء الاصطناعي قد يخطئ في الخط الصعب، فراجع الأسماء والعلامات قبل التطبيق.</div>';
@@ -861,6 +866,7 @@ function pasteKey() {
 
 /* ───────── اختيار الوضع ───────── */
 function pickMode(m) {
+  if (m === 'rep') { ST.err = ''; ST.repClar = ''; ST.view = 'rep'; render(); return; }
   if (!hasKey()) { ST.view = 'settings'; render(); return; }
   ST.mode = m; ST.imgs = []; ST.err = ''; ST.tbl = null;
   ST.view = (m === 'cmd') ? 'cmd' : 'input';
@@ -1269,6 +1275,481 @@ function doUndo(fromDone) {
   render();
 }
 
+
+/* ══════════════════════════════════════════════════════════════════════
+   📊 التقارير الذكية
+   • الحساب كله محلي ودقيق (لا يخمّن الذكاء الاصطناعي أرقاماً ولا أسماء).
+   • الذكاء الاصطناعي يحوّل «طلبك المكتوب» إلى معايير فقط (بدون أي بيانات طلاب).
+   • الأزرار الجاهزة تعمل بدون مفتاح وبدون إنترنت.
+   • صياغة التقرير الرسمي تُرسل إحصاءات مجمّعة فقط (بلا أسماء).
+   ══════════════════════════════════════════════════════════════════════ */
+var REP_FIELDS = [['hw', 'واجب'], ['assess', 'تقييم'], ['beh', 'سلوك'], ['ex1', 'اختبار 1'], ['ex2', 'اختبار 2']];
+var REP_METRICS = [['total', 'المجموع الكلي'], ['avg_assess', 'متوسط التقييم'], ['avg_hw', 'متوسط الواجب'], ['avg_beh', 'متوسط السلوك'],
+  ['exams', 'درجة الاختبارات'], ['cell', 'خانة محددة'], ['avg_range', 'متوسط خانات (نسبة)']];
+var REP_OPS = [['lt', 'أقل من'], ['lte', 'أقل من أو يساوي'], ['gt', 'أكبر من'], ['gte', 'أكبر من أو يساوي'], ['between', 'بين'], ['none', 'بدون شرط (ترتيب فقط)']];
+var OP_SYM = { lt: '<', lte: '≤', gt: '>', gte: '≥' };
+var PASS_RAW = 60;   /* نفس معيار «ناجحون» في صفحة الإحصائيات */
+
+function levelOf(p) { return p >= 90 ? 'ممتاز' : p >= 75 ? 'جيد جداً' : p >= 60 ? 'جيد' : p >= 50 ? 'مقبول' : 'ضعيف'; }
+function r1(x) { return Math.round(x * 10) / 10; }
+function fieldLbl(f) { var l = ''; REP_FIELDS.forEach(function (x) { if (x[0] === f) l = x[1]; }); return l || f; }
+function namedStudents(cls) {
+  var out = [];
+  (DB.data[cls] || []).forEach(function (s, i) { if (s && (s.name || '').trim()) out.push({ s: s, i: i }); });
+  return out;
+}
+function recorded(v) { return hasData(v) && v !== 'م'; }
+function hasAnyGrade(s) {
+  var aw = activeWeeks(), w, p;
+  for (w = 1; w <= aw; w++) { if (recorded(s['a' + w]) || recorded(s['h' + w]) || recorded(s['bw' + w])) return true; }
+  return recorded(s.ex1) || recorded(s.ex2);
+}
+function hasPrefix(s, pre) {
+  var aw = activeWeeks();
+  for (var w = 1; w <= aw; w++) if (recorded(s[pre + w])) return true;
+  return false;
+}
+
+/* قيمة مقياس لطالب: {v,max,absent} أو null إن لا توجد بيانات */
+function metricOf(s, cls, m) {
+  var t = m.type, key, raw, n, w;
+  if (s._totalAbsent) return null;
+  if (t === 'cell') {
+    key = keyOf(m.field, m.week); if (!key) return null;
+    raw = s[key]; if (!recorded(raw)) return null;
+    if (raw === 'غ') return { v: 0, max: maxFor(key), absent: true };
+    n = Number(raw); return isNaN(n) ? null : { v: n, max: maxFor(key) };
+  }
+  if (t === 'avg_range') {
+    var fr = Math.max(1, m.from || 1), to = Math.min(activeWeeks(), m.to || activeWeeks()), sum = 0, c = 0;
+    for (w = fr; w <= to; w++) {
+      key = keyOf(m.field, w); if (!key) continue;
+      raw = s[key]; if (!recorded(raw)) continue;
+      n = raw === 'غ' ? 0 : Number(raw); if (isNaN(n)) continue;
+      sum += n / maxFor(key) * 100; c++;
+    }
+    return c ? { v: sum / c, max: 100 } : null;
+  }
+  if (!hasAnyGrade(s)) return null;
+  var cs = calcStudent(s, cls);
+  if (t === 'total') return { v: cs.total, max: totalMax() };
+  if (t === 'avg_assess') return hasPrefix(s, 'a') ? { v: cs.avgAssess, max: maxFor('a1') } : null;
+  if (t === 'avg_hw') return hasPrefix(s, 'h') ? { v: cs.avgHw, max: maxFor('h1') } : null;
+  if (t === 'avg_beh') return (cs.avgBeh === '—' || !hasPrefix(s, 'bw')) ? null : { v: Number(cs.avgBeh), max: maxFor('bw1') };
+  if (t === 'exams') return (recorded(s.ex1) || recorded(s.ex2)) ? { v: cs.exTotal, max: 30 } : null;
+  return null;
+}
+function cmpOp(op, x, a, b) {
+  if (op === 'lt') return x < a;
+  if (op === 'lte') return x <= a;
+  if (op === 'gt') return x > a;
+  if (op === 'gte') return x >= a;
+  if (op === 'between') return x >= Math.min(a, b) && x <= Math.max(a, b);
+  return true;
+}
+
+/* ═════ تنظيف/اعتماد المعايير (من الذكاء أو من النماذج) ═════ */
+function normSpec(r) {
+  r = r || {};
+  var kinds = ['missing', 'score', 'absences', 'summary'], aw = activeWeeks(), all = DB.classes || [];
+  var sp = { kind: kinds.indexOf(r.kind) >= 0 ? r.kind : 'score', title: String(r.title || '').slice(0, 100) };
+  if (r.classes === 'all') sp.classes = all.slice();
+  else if (Array.isArray(r.classes)) sp.classes = r.classes.filter(function (c) { return all.indexOf(c) >= 0; });
+  if (!sp.classes || !sp.classes.length) sp.classes = ST && ST.repAll ? all.slice() : [ST ? ST.cls : all[0]];
+  var wk = function (v, d) { v = parseInt(v, 10); return v >= 1 ? Math.min(v, aw) : d; };
+  var dw = ST ? ST.week : 1;
+  sp.from = wk(r.from, sp.kind === 'absences' ? 1 : dw);
+  sp.to = wk(r.to, sp.kind === 'absences' ? aw : sp.from);
+  if (sp.to < sp.from) { var t = sp.from; sp.from = sp.to; sp.to = t; }
+  if (sp.kind === 'missing') {
+    var okF = REP_FIELDS.map(function (x) { return x[0]; });
+    sp.fields = (Array.isArray(r.fields) ? r.fields : []).filter(function (f) { return okF.indexOf(f) >= 0; });
+    if (!sp.fields.length) sp.fields = ['hw', 'assess', 'beh'];
+    sp.match = r.match === 'all' ? 'all' : 'any';
+  } else if (sp.kind === 'score') {
+    var mt = REP_METRICS.map(function (x) { return x[0]; });
+    var metric = (r.metric && typeof r.metric === 'object') ? r.metric.type : r.metric;
+    sp.metric = { type: mt.indexOf(metric) >= 0 ? metric : 'total', field: 'hw', week: wk(r.week, dw), from: sp.from, to: sp.to };
+    var mf = (r.metric && r.metric.field) || r.field;
+    if (['hw', 'assess', 'beh', 'ex1', 'ex2'].indexOf(mf) >= 0) sp.metric.field = mf;
+    sp.op = REP_OPS.some(function (o) { return o[0] === r.op; }) ? r.op : 'lt';
+    sp.value = isFinite(parseFloat(r.value)) ? parseFloat(r.value) : 50;
+    sp.value2 = isFinite(parseFloat(r.value2)) ? parseFloat(r.value2) : 100;
+    sp.unit = r.unit === 'raw' ? 'raw' : 'percent';
+    if (sp.metric.type === 'avg_range') sp.unit = 'percent';
+    sp.order = r.order === 'asc' || r.order === 'desc' ? r.order : ((sp.op === 'lt' || sp.op === 'lte') ? 'asc' : 'desc');
+    sp.n = Math.max(0, Math.min(500, parseInt(r.n, 10) || 0));
+  } else if (sp.kind === 'absences') {
+    sp.min = Math.max(0, parseInt(r.min, 10)); if (isNaN(sp.min)) sp.min = 3;
+  }
+  return sp;
+}
+
+function criteriaText(sp) {
+  var cl = sp.classes.length === (DB.classes || []).length && sp.classes.length > 1 ? 'كل الفصول' : sp.classes.join('، ');
+  var wk = sp.from === sp.to ? 'الأسبوع ' + sp.from : 'الأسابيع ' + sp.from + ' إلى ' + sp.to;
+  if (sp.kind === 'missing') return 'الفصول: ' + cl + ' — الخانات: ' + sp.fields.map(fieldLbl).join('، ') + ' — ' + wk + ' — الشرط: ناقص في ' + (sp.match === 'all' ? 'كل الخانات' : 'أي خانة');
+  if (sp.kind === 'absences') return 'الفصول: ' + cl + ' — ' + wk + ' — الشرط: غياب ≥ ' + sp.min;
+  if (sp.kind === 'summary') return 'الفصول: ' + cl;
+  var mname = ''; REP_METRICS.forEach(function (x) { if (x[0] === sp.metric.type) mname = x[1]; });
+  if (sp.metric.type === 'cell') mname += ' (' + fieldLbl(sp.metric.field) + (/^ex/.test(sp.metric.field) ? '' : ' أسبوع ' + sp.metric.week) + ')';
+  if (sp.metric.type === 'avg_range') mname += ' (' + fieldLbl(sp.metric.field) + ' — ' + wk + ')';
+  var u = sp.unit === 'raw' ? ' درجة' : '٪';
+  var cond = sp.op === 'none' ? 'ترتيب فقط' : (sp.op === 'between' ? 'بين ' + sp.value + ' و' + sp.value2 + u : OP_SYM[sp.op] + ' ' + sp.value + u);
+  return 'الفصول: ' + cl + ' — المقياس: ' + mname + ' — الشرط: ' + cond + (sp.n ? ' — أول ' + sp.n : '');
+}
+
+/* ═════ المحرك ═════ */
+function runReport(sp) {
+  var multi = sp.classes.length > 1, res = { kind: sp.kind, title: sp.title || '', criteria: criteriaText(sp), head: [], data: [], foot: [], agg: { kind: sp.kind, classes: sp.classes.slice() } };
+  var considered = 0;
+  if (sp.kind === 'missing') {
+    var cells = [];
+    sp.fields.forEach(function (f) {
+      if (f === 'ex1' || f === 'ex2') cells.push({ key: f, lbl: fieldLbl(f) });
+      else for (var w = sp.from; w <= sp.to; w++) { var k = keyOf(f, w); if (k) cells.push({ key: k, lbl: fieldLbl(f) + ' ' + w }); }
+    });
+    cells = cells.slice(0, 300);
+    res.title = res.title || 'الطلاب الذين لم تُرصد درجاتهم';
+    res.head = ['م', 'الاسم'].concat(multi ? ['الفصل'] : []).concat(['عدد الخانات الناقصة', 'الخانات الناقصة']);
+    var rows = [];
+    sp.classes.forEach(function (cls) {
+      namedStudents(cls).forEach(function (e) {
+        considered++;
+        var miss = cells.filter(function (c) { return !hasData(e.s[c.key]); });
+        if (!miss.length || (sp.match === 'all' && miss.length !== cells.length)) return;
+        var txt = miss.slice(0, 8).map(function (c) { return c.lbl; }).join('، ') + (miss.length > 8 ? ' …' : '');
+        rows.push({ cls: cls, no: e.i + 1, name: e.s.name, n: miss.length, txt: txt });
+      });
+    });
+    rows.sort(function (a, b) { return b.n - a.n; });
+    rows.forEach(function (r, i) { res.data.push([i + 1, r.name].concat(multi ? [r.cls] : []).concat([r.n, r.txt])); });
+    res.foot.push('عدد الخانات المفحوصة لكل طالب: ' + cells.length);
+    res.agg.cellsChecked = cells.length;
+  } else if (sp.kind === 'absences') {
+    res.title = res.title || 'تقرير الغياب';
+    res.head = ['م', 'الاسم'].concat(multi ? ['الفصل'] : []).concat(['فترات الغياب', 'فترات المرض']);
+    var arows = [];
+    sp.classes.forEach(function (cls) {
+      namedStudents(cls).forEach(function (e) {
+        considered++;
+        var ab = (DB.absences && DB.absences[cls] && DB.absences[cls][e.s.id]) || {}, a = 0, sk = 0;
+        Object.keys(ab).forEach(function (k) {
+          var m = /^w(\d+)_ci\d+$/.exec(k); if (!m) return;
+          var w = parseInt(m[1], 10); if (w < sp.from || w > sp.to) return;
+          if (ab[k] === 'abs') a++; else if (ab[k] === 'sick') sk++;
+        });
+        if (a >= sp.min && (a > 0 || sp.min === 0)) arows.push({ cls: cls, name: e.s.name, a: a, sk: sk });
+      });
+    });
+    arows.sort(function (x, y) { return y.a - x.a; });
+    arows.forEach(function (r, i) { res.data.push([i + 1, r.name].concat(multi ? [r.cls] : []).concat([r.a, r.sk])); });
+  } else if (sp.kind === 'summary') {
+    res.title = res.title || 'ملخص الفصول';
+    res.head = ['الفصل', 'الطلاب', 'المتوسط', 'الأعلى', 'الأدنى', 'متفوقون (٨٥٪+)', 'ناجحون (≥' + PASS_RAW + ')', 'ضعاف (<٥٠٪)', 'بلا درجات'];
+    var tmax = totalMax(), tot = { n: 0, sum: 0, c: 0, top: 0, pass: 0, weak: 0, none: 0 };
+    sp.classes.forEach(function (cls) {
+      var list = namedStudents(cls), vals = [], none = 0;
+      list.forEach(function (e) { var m = metricOf(e.s, cls, { type: 'total' }); if (m) vals.push(m.v); else none++; });
+      var sum = vals.reduce(function (a, b) { return a + b; }, 0);
+      var top = vals.filter(function (v) { return v / tmax * 100 >= 85; }).length;
+      var pass = vals.filter(function (v) { return v >= PASS_RAW; }).length;
+      var weak = vals.filter(function (v) { return v / tmax * 100 < 50; }).length;
+      res.data.push([cls, list.length, vals.length ? r1(sum / vals.length) + '/' + tmax : '—', vals.length ? Math.max.apply(null, vals) : '—', vals.length ? Math.min.apply(null, vals) : '—', top, pass, weak, none]);
+      tot.n += list.length; tot.sum += sum; tot.c += vals.length; tot.top += top; tot.pass += pass; tot.weak += weak; tot.none += none;
+    });
+    if (sp.classes.length > 1) res.data.push(['الإجمالي', tot.n, tot.c ? r1(tot.sum / tot.c) + '/' + tmax : '—', '', '', tot.top, tot.pass, tot.weak, tot.none]);
+    res.agg.totals = tot; considered = tot.n;
+    res.listed = res.data.length;
+  } else {
+    /* score */
+    var m = sp.metric, srows = [], skipped = 0;
+    res.title = res.title || (sp.op === 'lt' || sp.op === 'lte' ? 'تقرير الطلاب الأقل درجات' : 'تقرير الطلاب الأعلى درجات');
+    res.head = ['م', 'الاسم'].concat(multi ? ['الفصل'] : []).concat(['الدرجة', 'النسبة', 'المستوى']);
+    sp.classes.forEach(function (cls) {
+      namedStudents(cls).forEach(function (e) {
+        considered++;
+        var r = metricOf(e.s, cls, m);
+        if (!r) { skipped++; return; }
+        var pct = r.max ? r.v / r.max * 100 : 0, x = sp.unit === 'raw' ? r.v : pct;
+        if (!cmpOp(sp.op, x, sp.value, sp.value2)) return;
+        srows.push({ cls: cls, name: e.s.name, v: r.v, max: r.max, pct: pct, absent: r.absent });
+      });
+    });
+    srows.sort(function (a, b) { return sp.order === 'asc' ? a.pct - b.pct : b.pct - a.pct; });
+    if (sp.n) srows = srows.slice(0, sp.n);
+    srows.forEach(function (r, i) {
+      res.data.push([i + 1, r.name].concat(multi ? [r.cls] : []).concat([r.absent ? 'غائب' : (r1(r.v) + '/' + r1(r.max)), r1(r.pct) + '٪', levelOf(r.pct)]));
+    });
+    if (skipped) res.foot.push('لم يُحتسب ' + skipped + ' طالباً لعدم وجود درجات مرصودة لهم في هذا المقياس.');
+    if (srows.length) {
+      var ps = srows.map(function (r) { return r.pct; });
+      res.agg.avgPct = r1(ps.reduce(function (a, b) { return a + b; }, 0) / ps.length);
+      res.agg.minPct = r1(Math.min.apply(null, ps)); res.agg.maxPct = r1(Math.max.apply(null, ps));
+    }
+    res.agg.noData = skipped;
+  }
+  res.listed = res.data.length;
+  res.agg.considered = considered;
+  res.agg.listed = sp.kind === 'summary' ? sp.classes.length : res.data.length;
+  res.agg.criteria = res.criteria;
+  res.agg.title = res.title;
+  return res;
+}
+
+/* ═════ التصدير ═════ */
+function repText(res) {
+  var L = [res.title, res.criteria, ''];
+  if (res.kind === 'summary') res.data.forEach(function (r) { L.push(r.join(' | ')); });
+  else res.data.forEach(function (r) { L.push(r.join(' — ')); });
+  L.push('', 'العدد: ' + res.listed);
+  res.foot.forEach(function (f) { L.push(f); });
+  return L.join('\n');
+}
+function copyTextToClipboard(txt) {
+  var done = function () { if (typeof showSnack === 'function') showSnack('✅ تم نسخ التقرير'); };
+  var fallback = function () {
+    try {
+      var ta = document.createElement('textarea'); ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0;top:0;';
+      document.body.appendChild(ta); ta.select(); var ok = document.execCommand('copy'); ta.remove();
+      if (ok) { done(); return; }
+    } catch (e) {}
+    prompt('انسخ النص من هنا:', txt);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(txt).then(done).catch(fallback); return; }
+  } catch (e) {}
+  fallback();
+}
+function repExcel(res) {
+  if (typeof XLSX === 'undefined') { if (typeof showSnack === 'function') showSnack('⚠️ مكتبة Excel غير محمّلة — افتح التطبيق مرة بالإنترنت'); return; }
+  var aoa = [[res.title], [res.criteria], [], res.head].concat(res.data);
+  res.foot.forEach(function (f) { aoa.push([f]); });
+  var wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = res.head.map(function (h, i) { return { wch: i === 1 ? 28 : (i === res.head.length - 1 && res.kind === 'missing' ? 40 : 14) }; });
+  wb.Workbook = { Views: [{ RTL: true }] };
+  XLSX.utils.book_append_sheet(wb, ws, 'تقرير');
+  XLSX.writeFile(wb, ('تقرير_' + (res.title || 'دفتري')).replace(/[\\\/:*?"<>|\s]+/g, '_').slice(0, 60) + '.xlsx');
+}
+function repPrint(res, writeup) {
+  var th = res.head.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
+  var tr = res.data.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('');
+  var html = '<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>' + esc(res.title) + '</title><style>' +
+    '@page{size:A4;margin:12mm}body{font-family:Cairo,Tahoma,Arial,sans-serif;color:#111}h2{margin:0 0 4px;font-size:18px}.c{color:#555;font-size:12px;margin-bottom:10px}' +
+    'table{border-collapse:collapse;width:100%}td,th{border:1px solid #555;padding:4px 6px;font-size:12px;text-align:center}th{background:#e5e7eb}td:nth-child(2){text-align:right}' +
+    '.f{font-size:11px;color:#444;margin-top:8px}.w{margin:10px 0;font-size:13px;line-height:1.9;white-space:pre-wrap}</style></head><body>' +
+    '<h2>' + esc(res.title) + '</h2><div class="c">' + esc(res.criteria) + ' — ' + esc(new Date().toLocaleDateString('ar-EG')) + '</div>' +
+    (writeup ? '<div class="w">' + esc(writeup) + '</div>' : '') +
+    '<table><thead><tr>' + th + '</tr></thead><tbody>' + tr + '</tbody></table>' +
+    '<div class="f">العدد: ' + res.listed + (res.foot.length ? ' — ' + esc(res.foot.join(' ')) : '') + '</div></body></html>';
+  var fr = document.createElement('iframe');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(fr);
+  var d = fr.contentWindow.document; d.open(); d.write(html); d.close();
+  setTimeout(function () {
+    try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) {}
+    setTimeout(function () { try { fr.remove(); } catch (e) {} }, 60000);
+  }, 400);
+}
+
+/* ═════ الواجهة ═════ */
+var SYS_REP = 'You turn a teacher\'s Arabic request for a class report into a JSON report spec for a school gradebook app. You never see student data. ' +
+  'Output ONE JSON object only (no markdown): {"kind":"missing|score|absences|summary","title":"short Arabic title","classes":"selected"|"all"|["class name"],' +
+  '"fields":["hw","assess","beh","ex1","ex2"],"from":1,"to":1,"match":"any|all","metric":"total|avg_assess|avg_hw|avg_beh|exams|cell|avg_range","field":"hw","week":3,' +
+  '"op":"lt|lte|gt|gte|between|none","value":50,"value2":100,"unit":"percent|raw","order":"asc|desc","n":0,"min":3,"clarification":""}. Include only keys relevant to the kind.\n' +
+  'Rules:\n- missing = students whose grade cells are EMPTY (not recorded) in given fields (hw=الواجب, assess=التقييم, beh=السلوك, ex1/ex2=الاختبارات) for weeks from..to. match "any" unless the teacher says all.\n' +
+  '- score = filter/rank students by a metric. "ضعاف/متعثرون/ضعيف" => metric total, op lt, value 50, unit percent, order asc. "متفوقون/متميزون/الأوائل" => op gte, value 85, unit percent, order desc. ' +
+  '"ناجحون" => total gte 60 unit raw; "راسبون" => total lt 60 unit raw. If a number is given ("أقل من 5 في واجب أسبوع 3") use metric cell with field/week, unit raw. "أعلى 10 طلاب" => op none, order desc, n 10. "أضعف 5" => op none, order asc, n 5.\n' +
+  '- absences = students with many absences in weeks from..to (default all weeks); min = minimum absence periods.\n- summary = general overview of classes.\n' +
+  '- classes: "selected" unless the teacher mentions all classes ("كل الفصول") => "all", or names specific classes from the list.\n' +
+  '- weeks default to the current week for missing; for absences default all weeks.\n- If the request cannot be understood as a report, set clarification in Arabic.';
+
+function repContext() {
+  return 'Classes: ' + (DB.classes || []).join(' | ') + '\nSelected class: ' + ST.cls + '\nCurrent week: ' + ST.week + ' (active weeks 1..' + activeWeeks() + ')\n' +
+    'Max values: total ' + totalMax() + ', assess ' + maxFor('a1') + ', hw ' + maxFor('h1') + ', beh ' + maxFor('bw1') + ', exams 30.';
+}
+var REP_EXAMPLES = [
+  'الطلاب الذين لم ترصد درجاتهم في واجب الأسبوع الحالي',
+  'أضعف 10 طلاب في المجموع',
+  'المتفوقون في كل الفصول',
+  'من حصل على أقل من 5 في تقييم الأسبوع 3؟',
+  'الطلاب الذين غابوا أكثر من 4 فترات'
+];
+
+function viewRep() {
+  head('📊 التقارير', true);
+  var hk = hasKey();
+  var chips = ST.presets.map(function (p, i) {
+    return '<button onclick="DAI.repPreset(' + i + ')" style="' + BTN + 'background:#111c33;border:1px solid #1e3a5f;color:#e2e8f0;font-size:11px;padding:8px 10px;">' + p.t + '</button>';
+  }).join('');
+  box().innerHTML =
+    '<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;font-size:11px;color:#94a3b8;flex-wrap:wrap;">الفصل:' +
+    '<select style="' + SEL + '" onchange="DAI.repScope(this.value)"><option value="__all__"' + (ST.repAll ? ' selected' : '') + '>كل الفصول</option>' +
+    (DB.classes || []).map(function (c) { return '<option value="' + esc(c) + '"' + (!ST.repAll && c === ST.cls ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>' +
+    'الأسبوع:<select style="' + SEL + '" onchange="DAI.setWeekQuiet(this.value)">' + weekOptions(ST.week) + '</select></div>' +
+    '<div style="font-size:11px;color:#6ee7b7;margin-bottom:6px;">⚡ تقارير جاهزة (تعمل بدون مفتاح وبدون إنترنت):</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">' + chips + '</div>' +
+    '<div style="font-size:11px;color:#a5b4fc;margin-bottom:6px;">💬 أو اكتب طلبك بالعربية:</div>' +
+    '<textarea id="daiRepTxt" rows="3" placeholder="مثال: الطلاب الذين لم ترصد درجاتهم في تقييم الأسبوع 4" oninput="DAI.repText(this.value)" style="' + SEL + 'width:100%;box-sizing:border-box;resize:vertical;line-height:1.8;font-size:13px;">' + esc(ST.repTxt || '') + '</textarea>' +
+    '<div style="display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 10px;">' + REP_EXAMPLES.map(function (e, i) {
+      return '<button onclick="DAI.repExample(' + i + ')" style="' + BTN + 'background:#111c33;border:1px solid #1e3a5f;color:#93c5fd;font-size:10px;padding:5px 9px;font-weight:600;text-align:right;">' + esc(e) + '</button>';
+    }).join('') + '</div>' +
+    (ST.repClar ? '<div style="background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:10px;padding:9px;font-size:12px;line-height:1.9;margin-bottom:8px;">❓ ' + esc(ST.repClar) + '</div>' : '') +
+    (ST.err ? '<div style="color:#fca5a5;font-size:11px;line-height:1.8;margin-bottom:8px;">❌ ' + esc(ST.err) + '</div>' : '') +
+    btn('🔍 حلّل طلبي' + (hk ? '' : ' (يحتاج مفتاحاً من ⚙️)'), 'DAI.repAnalyze()', PRIMARY + 'width:100%;' + (hk ? '' : 'opacity:.55;'));
+}
+
+function repScopeClasses() { return ST.repAll ? (DB.classes || []).slice() : [ST.cls]; }
+function buildPresets() {
+  var aw = activeWeeks();
+  return [
+    { t: '🔴 الضعاف (أقل من ٥٠٪)', s: function () { return { kind: 'score', title: 'الطلاب الضعاف', metric: 'total', op: 'lt', value: 50, unit: 'percent', order: 'asc' }; } },
+    { t: '🟢 المتفوقون (٨٥٪ فأكثر)', s: function () { return { kind: 'score', title: 'الطلاب المتفوقون', metric: 'total', op: 'gte', value: 85, unit: 'percent', order: 'desc' }; } },
+    { t: '📭 لم يُرصد الواجب', s: function () { return { kind: 'missing', title: 'لم تُرصد درجات الواجب', fields: ['hw'] }; } },
+    { t: '📭 لم يُرصد التقييم', s: function () { return { kind: 'missing', title: 'لم تُرصد درجات التقييم', fields: ['assess'] }; } },
+    { t: '📭 لم يُرصد السلوك', s: function () { return { kind: 'missing', title: 'لم تُرصد درجات السلوك', fields: ['beh'] }; } },
+    { t: '📭 ناقص في الثلاثة', s: function () { return { kind: 'missing', title: 'الطلاب الذين لم تكتمل درجاتهم', fields: ['hw', 'assess', 'beh'] }; } },
+    { t: '🚫 الأكثر غياباً', s: function () { return { kind: 'absences', title: 'الطلاب الأكثر غياباً', from: 1, to: aw, min: 3 }; } },
+    { t: '📊 ملخص الفصول', s: function () { return { kind: 'summary', title: 'ملخص الفصول' }; } }
+  ];
+}
+function showReport(raw) {
+  raw.classes = repScopeClasses();
+  ST.rep = { spec: normSpec(raw), write: '', writing: false };
+  ST.rep.res = runReport(ST.rep.spec);
+  ST.view = 'repOut'; render();
+}
+
+/* عناصر تحكم المعايير */
+function ctl(label, inner) { return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:7px;font-size:11px;color:#94a3b8;"><span style="min-width:64px;">' + label + '</span>' + inner + '</div>'; }
+function selHtml(key, opts, cur) {
+  return '<select style="' + SEL + '" onchange="DAI.rs(\'' + key + '\',this.value)">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>';
+}
+function numHtml(key, cur, w) { return '<input type="number" inputmode="decimal" value="' + esc(cur) + '" oninput="DAI.rs(\'' + key + '\',this.value,true)" style="' + SEL + 'width:' + (w || 64) + 'px;text-align:center;">'; }
+function weekOpts() { var o = []; for (var w = 1; w <= activeWeeks(); w++) o.push([w, 'أسبوع ' + w]); return o; }
+function controlsHtml(sp) {
+  var h = '', all = DB.classes || [];
+  h += ctl('الفصول', '<select style="' + SEL + '" onchange="DAI.rs(\'scope\',this.value)"><option value="__all__"' + (sp.classes.length === all.length && all.length > 1 ? ' selected' : '') + '>كل الفصول</option>' +
+    all.map(function (c) { return '<option value="' + esc(c) + '"' + (sp.classes.length === 1 && sp.classes[0] === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select>');
+  if (sp.kind === 'missing') {
+    h += ctl('الخانات', REP_FIELDS.map(function (f) {
+      return '<label style="color:#cbd5e1;"><input type="checkbox" ' + (sp.fields.indexOf(f[0]) >= 0 ? 'checked' : '') + ' onchange="DAI.rs(\'field_' + f[0] + '\',this.checked)"> ' + f[1] + '</label>';
+    }).join(' '));
+    h += ctl('من أسبوع', selHtml('from', weekOpts(), sp.from) + ' إلى ' + selHtml('to', weekOpts(), sp.to));
+    h += ctl('الشرط', selHtml('match', [['any', 'ناقص في أي خانة'], ['all', 'ناقص في كل الخانات']], sp.match));
+  } else if (sp.kind === 'absences') {
+    h += ctl('من أسبوع', selHtml('from', weekOpts(), sp.from) + ' إلى ' + selHtml('to', weekOpts(), sp.to));
+    h += ctl('غياب لا يقل عن', numHtml('min', sp.min, 56) + ' فترة');
+  } else if (sp.kind === 'score') {
+    h += ctl('المقياس', selHtml('mtype', REP_METRICS, sp.metric.type));
+    if (sp.metric.type === 'cell') h += ctl('الخانة', selHtml('mfield', REP_FIELDS.map(function (f) { return [f[0], f[1]]; }), sp.metric.field) + (/^ex/.test(sp.metric.field) ? '' : selHtml('mweek', weekOpts(), sp.metric.week)));
+    if (sp.metric.type === 'avg_range') h += ctl('الخانة', selHtml('mfield', REP_FIELDS.slice(0, 3), sp.metric.field) + selHtml('from', weekOpts(), sp.from) + ' إلى ' + selHtml('to', weekOpts(), sp.to));
+    h += ctl('الشرط', selHtml('op', REP_OPS, sp.op) + (sp.op === 'none' ? '' : numHtml('value', sp.value) + (sp.op === 'between' ? ' و ' + numHtml('value2', sp.value2) : '') +
+      (sp.metric.type === 'avg_range' ? ' ٪' : selHtml('unit', [['percent', '٪ نسبة'], ['raw', 'درجة']], sp.unit))));
+    h += ctl('الترتيب', selHtml('order', [['asc', 'من الأقل'], ['desc', 'من الأعلى']], sp.order) + ' أول ' + numHtml('n', sp.n || '', 56) + ' <span style="color:#64748b;">(فارغ = الكل)</span>');
+  }
+  return h;
+}
+function tableHtml(res) {
+  var hd = res.head.map(function (h) { return '<th style="padding:5px 6px;background:#1e293b;color:#cbd5e1;font-size:10px;white-space:nowrap;">' + esc(h) + '</th>'; }).join('');
+  var body = res.data.map(function (r, ri) {
+    return '<tr style="background:' + (ri % 2 ? '#0b1220' : '#0f172a') + ';">' + r.map(function (c, ci) {
+      return '<td style="padding:5px 6px;font-size:11px;color:#e2e8f0;border-top:1px solid #1e293b;text-align:' + (ci === 1 && res.kind !== 'summary' ? 'right' : 'center') + ';">' + esc(c) + '</td>';
+    }).join('') + '</tr>';
+  }).join('');
+  return '<div style="overflow-x:auto;border:1px solid #1e293b;border-radius:10px;"><table style="border-collapse:collapse;width:100%;"><thead><tr>' + hd + '</tr></thead><tbody>' +
+    (body || '<tr><td colspan="' + res.head.length + '" style="padding:14px;text-align:center;color:#6ee7b7;font-size:12px;">✅ لا يوجد طلاب مطابقون لهذه المعايير</td></tr>') + '</tbody></table></div>';
+}
+function updateRepRes() {
+  var el = document.getElementById('daiRepRes'); if (!el || !ST.rep) return;
+  var res = ST.rep.res = runReport(ST.rep.spec);
+  el.innerHTML = '<div style="font-size:13px;font-weight:900;color:#e2e8f0;margin-bottom:3px;">' + esc(res.title) + '</div>' +
+    '<div style="font-size:10px;color:#94a3b8;line-height:1.8;margin-bottom:6px;">' + esc(res.criteria) + '</div>' +
+    '<div style="font-size:12px;color:#a5b4fc;margin-bottom:6px;">العدد: <b>' + res.listed + '</b>' + (res.kind !== 'summary' ? ' من ' + res.agg.considered + ' طالب' : '') + '</div>' +
+    tableHtml(res) + (res.foot.length ? '<div style="font-size:10px;color:#fbbf24;margin-top:6px;line-height:1.8;">' + res.foot.map(esc).join('<br>') + '</div>' : '');
+}
+function viewRepOut() {
+  head('📊 التقرير', 'rep');
+  var sp = ST.rep.spec;
+  box().innerHTML =
+    '<details style="background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px 10px;margin-bottom:10px;"><summary style="font-size:12px;color:#93c5fd;cursor:pointer;font-weight:800;">⚙️ تعديل المعايير</summary><div style="margin-top:8px;">' + controlsHtml(sp) + '</div></details>' +
+    '<div id="daiRepRes"></div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0;">' +
+    btn('📋 نسخ', 'DAI.repCopy()', GHOST) + btn('📊 Excel', 'DAI.repExcel()', GHOST) + btn('🖨 طباعة / PDF', 'DAI.repPrint()', GHOST) +
+    btn('✍️ صياغة رسمية بالذكاء', 'DAI.repWrite()', 'background:#312e81;color:#c7d2fe;border:1px solid #4338ca;padding:8px 12px;font-size:11px;') + '</div>' +
+    '<div id="daiRepWrite"></div>';
+  updateRepRes(); renderWriteup();
+}
+function renderWriteup() {
+  var el = document.getElementById('daiRepWrite'); if (!el || !ST.rep) return;
+  if (ST.rep.writing) { el.innerHTML = '<div style="color:#fcd34d;font-size:11px;">⏳ جاري كتابة الصياغة…</div>'; return; }
+  if (!ST.rep.write && !ST.rep.werr) { el.innerHTML = '<div style="font-size:10px;color:#64748b;line-height:1.8;">الصياغة الرسمية تُرسل للذكاء الاصطناعي أرقاماً مجمّعة فقط (أعداد ونسب) — <b>دون أسماء الطلاب</b>.</div>'; return; }
+  el.innerHTML = (ST.rep.werr ? '<div style="color:#fca5a5;font-size:11px;margin-bottom:6px;">❌ ' + esc(ST.rep.werr) + '</div>' : '') +
+    (ST.rep.write ? '<textarea rows="8" oninput="DAI.repWriteEdit(this.value)" style="' + SEL + 'width:100%;box-sizing:border-box;line-height:1.9;font-size:12px;">' + esc(ST.rep.write) + '</textarea>' +
+      '<div style="display:flex;gap:6px;margin-top:6px;">' + btn('📋 نسخ الصياغة', 'DAI.repCopyWrite()', GHOST) + '</div>' : '');
+}
+function repWrite() {
+  if (!hasKey()) { ST.view = 'settings'; render(); return; }
+  var res = ST.rep.res;
+  ST.rep.writing = true; ST.rep.werr = ''; renderWriteup();
+  callAI({
+    system: 'You write concise formal Arabic paragraphs for Egyptian school reports. Use ONLY the figures given; never invent numbers, names, or causes. ' +
+      'Write 4-7 sentences summarizing the finding, then 2-3 short practical recommendations as a numbered list. Output ONE JSON object only: {"text":"..."}',
+    content: [{ type: 'text', text: 'Subject: ' + ((DB.meta && DB.meta.subject) || 'العلوم') + '\nReport data (aggregates only, no student names):\n' + JSON.stringify(res.agg) }],
+    maxTokens: 1500
+  }).then(function (r) {
+    if (!ST || !ST.rep) return;
+    var j = parseJSON(r.text);
+    ST.rep.write = String(j.text || '').trim(); ST.rep.writing = false;
+    if (!ST.rep.write) throw new Error('BAD_JSON');
+    renderWriteup();
+  }).catch(function (e) {
+    if (!ST || !ST.rep) return;
+    ST.rep.writing = false; ST.rep.werr = errMsg(e); renderWriteup();
+  });
+}
+function repAnalyze() {
+  var txt = (ST.repTxt || '').trim();
+  if (!txt) return;
+  if (!hasKey()) { ST.view = 'settings'; render(); return; }
+  ST.view = 'loading'; ST.err = ''; ST.repClar = ''; render();
+  callAI({ system: SYS_REP, content: [{ type: 'text', text: repContext() + '\n\nRequest (Arabic): ' + txt }], maxTokens: 1200 })
+    .then(function (r) {
+      if (!ST) return;
+      var j = parseJSON(r.text);
+      ST.repClar = String(j.clarification || '').trim();
+      if (ST.repClar && !j.kind) { ST.view = 'rep'; render(); return; }
+      var raw = j; raw.classes = (j.classes === 'all') ? 'all' : (Array.isArray(j.classes) ? j.classes : 'selected');
+      if (raw.classes === 'selected') raw.classes = repScopeClasses();
+      ST.rep = { spec: normSpec(raw), write: '', writing: false };
+      ST.view = 'repOut'; render();
+    })
+    .catch(function (e) { if (!ST) return; ST.view = 'rep'; ST.err = errMsg(e); render(); });
+}
+function repSet(k, v, quiet) {
+  var sp = ST.rep.spec, all = DB.classes || [], redraw = false, m;
+  if (k === 'scope') { sp.classes = v === '__all__' ? all.slice() : [v]; ST.repAll = v === '__all__'; }
+  else if ((m = /^field_(\w+)$/.exec(k))) {
+    var i = sp.fields.indexOf(m[1]);
+    if (v && i < 0) sp.fields.push(m[1]); else if (!v && i >= 0) sp.fields.splice(i, 1);
+    if (!sp.fields.length) sp.fields = [m[1]];
+  }
+  else if (k === 'from' || k === 'to') { sp[k] = parseInt(v, 10) || 1; if (sp.to < sp.from) { if (k === 'from') sp.to = sp.from; else sp.from = sp.to; redraw = true; } if (sp.metric) { sp.metric.from = sp.from; sp.metric.to = sp.to; } }
+  else if (k === 'match') sp.match = v === 'all' ? 'all' : 'any';
+  else if (k === 'min') sp.min = Math.max(0, parseInt(v, 10) || 0);
+  else if (k === 'mtype') { sp.metric.type = v; if (v === 'avg_range') sp.unit = 'percent'; redraw = true; }
+  else if (k === 'mfield') { sp.metric.field = v; redraw = true; }
+  else if (k === 'mweek') sp.metric.week = parseInt(v, 10) || 1;
+  else if (k === 'op') { sp.op = v; if (v === 'none') sp.order = sp.order || 'desc'; redraw = true; }
+  else if (k === 'value') sp.value = isFinite(parseFloat(v)) ? parseFloat(v) : 0;
+  else if (k === 'value2') sp.value2 = isFinite(parseFloat(v)) ? parseFloat(v) : 0;
+  else if (k === 'unit') sp.unit = v === 'raw' ? 'raw' : 'percent';
+  else if (k === 'order') sp.order = v === 'asc' ? 'asc' : 'desc';
+  else if (k === 'n') sp.n = Math.max(0, Math.min(500, parseInt(v, 10) || 0));
+  ST.rep.write = ''; ST.rep.werr = '';
+  if (redraw && !quiet) { viewRepOut(); } else { updateRepRes(); renderWriteup(); }
+}
+
 /* ═════════════ واجهة عامة ═════════════ */
 window.DAI = {
   open: open, close: closeAI, mode: pickMode, cancel: cancel,
@@ -1302,6 +1783,19 @@ window.DAI = {
   runCmd: runCmd, applyCmd: applyCmd,
   saveCfg: function () { saveCfg(false); }, testCfg: testCfg, delKey: delKey,
   pasteKey: pasteKey,
+  repScope: function (v) { ST.repAll = (v === '__all__'); if (!ST.repAll) ST.cls = v; },
+  setWeekQuiet: function (v) { ST.week = parseInt(v, 10) || 1; },
+  repPreset: function (i) { showReport(ST.presets[i].s()); },
+  repText: function (v) { ST.repTxt = v; },
+  repExample: function (i) { ST.repTxt = REP_EXAMPLES[i]; viewRep(); },
+  repAnalyze: repAnalyze,
+  rs: repSet,
+  repCopy: function () { copyTextToClipboard(repText(ST.rep.res)); },
+  repExcel: function () { repExcel(ST.rep.res); },
+  repPrint: function () { repPrint(ST.rep.res, ST.rep.write); },
+  repWrite: repWrite,
+  repWriteEdit: function (v) { ST.rep.write = v; },
+  repCopyWrite: function () { copyTextToClipboard(ST.rep.write); },
   setProv: function (p) { if (!ST.sets) ST.sets = cfgGet(); ST.sets.provider = p; render(); },
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   undo: function (fromDone) { doUndo(fromDone === true); }
