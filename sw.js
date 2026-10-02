@@ -11,7 +11,7 @@
    ⚠️ عند أي تعديل على ملفات التطبيق: غيّر رقم VERSION بالأسفل.
    ══════════════════════════════════════════════════════════════ */
 
-const VERSION       = 'v54';
+const VERSION       = 'v56';
 const STATIC_CACHE  = 'dalty-static-'  + VERSION;
 const DYNAMIC_CACHE = 'dalty-dynamic-' + VERSION;
 
@@ -29,7 +29,7 @@ const CORE = [
   'js/app-01-core.js', 'js/app-02-schedule.js', 'js/app-03-grades.js',
   'js/app-04-stats-sick.js', 'js/app-05-weekly.js', 'js/app-06-settings.js',
   'js/app-07-notif.js', 'js/app-08-curric-report.js', 'js/app-09-backup-witness.js',
-  'js/app-10-report-tafrigh.js', 'js/app-11-numpad.js',
+  'js/app-10-report-tafrigh.js', 'js/app-11-numpad.js', 'js/app-12-ai.js',
 ];
 
 /* ── اختياري: يُخزَّن إن أمكن ── */
