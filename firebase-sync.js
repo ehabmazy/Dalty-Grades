@@ -50,140 +50,6 @@ var _lastSaveTS = 0;
 var _isOnline   = navigator.onLine;
 var _pendingSave = false;
 
-/* ════════════════════════════════════════
-   حالة "تعديلات لم تُرفع بعد" — تُحفظ على الجهاز
-   (كانت تُحفظ في الذاكرة فقط، فتضيع عند إغلاق التطبيق
-    وتحلّ نسخة السحابة القديمة محل تعديلاتك عند الفتح)
-   ════════════════════════════════════════ */
-function _fbStoreKey() { return window.STORE_KEY || "grades_v6"; }
-function _dirtyKey()   { return "dalty_dirty_"  + _fbStoreKey(); }
-function _syncedKey()  { return "dalty_synced_" + _fbStoreKey(); }
-function _getDirty() {
-  try { return Number(localStorage.getItem(_dirtyKey())) || 0; } catch (e) { return 0; }
-}
-function _markDirty() {
-  try { localStorage.setItem(_dirtyKey(), String(Date.now())); } catch (e) {}
-}
-function _clearDirtyIfNotNewer(seen) {
-  try { if ((Number(localStorage.getItem(_dirtyKey())) || 0) <= seen) localStorage.removeItem(_dirtyKey()); } catch (e) {}
-}
-function _setSynced(ts, sig) {
-  try { localStorage.setItem(_syncedKey(), JSON.stringify({ ts: ts, at: Date.now(), sig: sig || "" })); } catch (e) {}
-}
-function _getSynced() {
-  try { return JSON.parse(localStorage.getItem(_syncedKey())) || null; } catch (e) { return null; }
-}
-/* ════════════════════════════════════════
-   حماية من فقدان البيانات
-   ١) إحصاء ما في النسخة (طلاب + خانات درجات مرصودة)
-   ٢) لا نرفع للسحابة قبل وصول أول نسخة منها في هذه الجلسة
-   ٣) لا نستبدل نسخة غنية بنسخة أفقر بكثير (جهاز جديد/تخزين ممسوح)
-   ٤) قبل أي استبدال نحفظ نسخة احتياطية من بيانات الجهاز
-   ════════════════════════════════════════ */
-var _firstSnapshotDone = false;
-var _lastRemoteStats   = null;
-var REGRESS_RATIO = 0.6;   /* أقل من ٦٠٪ مما في السحابة = نسخة ناقصة مشبوهة */
-var REGRESS_MIN   = 15;    /* لا نطبّق الحماية إلا لو السحابة فيها ١٥ خانة فأكثر */
-
-function _statsOf(db) {
-  var st = { students: 0, cells: 0 };
-  try {
-    if (!db || !db.data) return st;
-    Object.keys(db.data).forEach(function (cls) {
-      (db.data[cls] || []).forEach(function (s) {
-        if (!s || !String(s.name || "").trim()) return;
-        st.students++;
-        Object.keys(s).forEach(function (k) {
-          if (!/^(a|h|bw)\d+$|^ex[12]$/.test(k)) return;
-          var v = s[k];
-          if (v !== "" && v !== undefined && v !== null) st.cells++;
-        });
-      });
-    });
-  } catch (e) {}
-  return st;
-}
-function _isRegression(localSt, remoteSt) {
-  if (!remoteSt || remoteSt.cells < REGRESS_MIN) return false;
-  return localSt.cells < remoteSt.cells * REGRESS_RATIO;
-}
-function _bkKey() { return "dalty_backup_local_" + _fbStoreKey(); }
-/* نسخة احتياطية من بيانات الجهاز قبل استبدالها (بدون الصور الكبيرة، ومحدودة الحجم حتى لا تزاحم الحفظ الأساسي) */
-function _backupLocal(reason) {
-  try {
-    if (!window.DB || !window.DB.data) return false;
-    var st = _statsOf(window.DB);
-    if (!st.cells && !st.students) return false;
-    var json = JSON.stringify({ at: Date.now(), reason: reason, stats: st, db: window.DB },
-      function (k, v) { return (typeof v === "string" && v.length > 20000) ? "" : v; });
-    if (json.length > 1500000) return false;
-    localStorage.setItem(_bkKey(), json);
-    return true;
-  } catch (e) { return false; }
-}
-function _getBackup() {
-  try { return JSON.parse(localStorage.getItem(_bkKey())); } catch (e) { return null; }
-}
-function restoreLocalBackup() {
-  var b = _getBackup();
-  if (!b || !b.db) { alert("لا توجد نسخة احتياطية محلية."); return; }
-  var when = new Date(b.at).toLocaleString("ar-EG");
-  if (!confirm("استرجاع نسخة الجهاز المحفوظة بتاريخ " + when + "؟\n(" + b.stats.students + " طالب، " + b.stats.cells + " خانة درجات)\n\nستحلّ محل البيانات الحالية ثم تُرفع للسحابة.")) return;
-  try {
-    localStorage.setItem(_fbStoreKey(), JSON.stringify(b.db));
-    window.DB = b.db;
-    _markDirty();
-    if (typeof window.renderGrades === "function") window.renderGrades();
-    if (typeof window.renderWeekly === "function") window.renderWeekly();
-    if (typeof window.renderAbsence === "function") window.renderAbsence();
-    scheduleSyncToFirebase();
-    if (typeof showSnack === "function") showSnack("✅ تم استرجاع النسخة الاحتياطية");
-  } catch (e) { alert("تعذّر الاسترجاع: " + e.message); }
-}
-window.restoreLocalBackup = restoreLocalBackup;
-
-/* توقيع لمحتوى الدرجات والغياب والأسماء فقط (الحقول الفارغة تُهمل) */
-function _sigOf(db) {
-  var h = 2166136261;
-  function mix(str) {
-    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
-  }
-  try {
-    if (!db) return "0";
-    (db.classes || []).slice().sort().forEach(function (cls) {
-      mix("|C" + cls);
-      ((db.data && db.data[cls]) || []).forEach(function (s) {
-        if (!s) return;
-        mix("|S" + s.id + "~" + (s.name || ""));
-        Object.keys(s).sort().forEach(function (k) {
-          if (!/^(a|h|bw|im)\d+$|^ex[12]$/.test(k)) return;
-          var v = s[k];
-          if (v === "" || v === undefined || v === null) return;
-          mix(";" + k + "=" + v);
-        });
-      });
-      var ab = (db.absences && db.absences[cls]) || {};
-      Object.keys(ab).sort().forEach(function (id) {
-        var o = ab[id] || {};
-        Object.keys(o).sort().forEach(function (k) { if (o[k]) mix("|A" + id + k + "=" + o[k]); });
-      });
-    });
-  } catch (e) { return "err"; }
-  return String(h);
-}
-
-function _hhmm(t) {
-  if (!t) return "—";
-  var d = new Date(t);
-  return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) + ":" + ("0" + d.getSeconds()).slice(-2);
-}
-/* مؤشر دائم: هل آخر تعديل محفوظ ومرفوع؟ */
-function _refreshSaveBadge() {
-  if (_getDirty()) {
-    showSyncStatus("warn", _isOnline ? "⏳ جاري الرفع" : "📴 محفوظ بالجهاز");
-  }
-}
-
 
 /* ════════════════════════════════════════
    تهيئة Firebase
@@ -248,17 +114,6 @@ function setFirebaseUserPath(uid) {
 
   /* ابدأ الاستماع من جديد */
   listenForRemoteChanges();
-
-  /* اتصال فعلي بالخادم (أدق من حدث online عند واي فاي بدون إنترنت): ارفع أي تعديلات معلّقة */
-  if (!window._fbConnWatch) {
-    window._fbConnWatch = true;
-    _fbDB.ref(".info/connected").on("value", function (s) {
-      if (s.val() === true) {
-        _isOnline = true;
-        if (_getDirty()) scheduleSyncToFirebase();
-      }
-    });
-  }
 }
 
 /* تصدير للاستخدام من auth.js */
@@ -286,53 +141,15 @@ function repairDB(clean) {
 function listenForRemoteChanges() {
   _fbRef.on("value", function (snapshot) {
     var remote = snapshot.val();
-    _firstSnapshotDone = true;
-
-    /* السحابة فارغة ولدينا بيانات محلية: ارفعها */
-    if (!remote) {
-      _lastRemoteStats = { students: 0, cells: 0 };
-      if (window.DB && window.DB.data && window.DB.classes) setTimeout(pushToFirebase, 1500);
-      return;
-    }
+    if (!remote) return;
 
     /* تجاهل التحديثات التي أرسلناها نحن */
     if (remote._ts && remote._ts === _lastSaveTS) return;
 
-    try { _lastRemoteStats = _statsOf(restoreKeys(Object.assign({}, remote))); } catch (e) { _lastRemoteStats = null; }
-
-    /* 🛡️ نسخة الجهاز أفقر بكثير من السحابة (جهاز جديد، تخزين ممسوح، نسخة قديمة…):
-       لا نرفعها فوق السحابة أبداً — نحفظ نسخة احتياطية منها ونأخذ نسخة السحابة */
-    var dirty = _getDirty();
-    var _localSt = _statsOf(window.DB);
-    if (dirty && _isRegression(_localSt, _lastRemoteStats)) {
-      _backupLocal("regression-before-remote");
-      try { localStorage.removeItem(_dirtyKey()); } catch (e) {}
-      dirty = 0;
-      if (typeof showSnack === "function") {
-        showSnack("⚠️ بيانات هذا الجهاز كانت ناقصة (" + _localSt.cells + " درجة مقابل " + _lastRemoteStats.cells + " في السحابة). اعتمدنا نسخة السحابة وحفظنا نسخة الجهاز احتياطياً.", null, "warn");
-      }
-    }
-
-    /* ✅ الإصلاح الجوهري: لو عندنا تعديلات محلية لم تُرفع بعد، لا نستبدلها أبداً بنسخة السحابة */
-    if (dirty) {
-      if (remote._ts && remote._ts > dirty) {
-        /* جهاز آخر حفظ بعد آخر تعديل لك: نحتفظ بتعديلاتك ونحفظ نسخة السحابة احتياطياً */
-        try { localStorage.setItem("dalty_remote_backup_" + _fbStoreKey(), JSON.stringify(remote)); } catch (e) {}
-        if (typeof showSnack === "function") {
-          showSnack("⚠️ جهاز آخر عدّل البيانات أيضاً. احتفظنا بتعديلاتك على هذا الجهاز ورفعناها.", null, "warn");
-        }
-      }
-      console.warn("[Dalty Sync] تعديلات محلية غير مرفوعة — لن تُستبدل، سيتم رفعها");
-      setTimeout(pushToFirebase, 500);
-      return;
-    }
-
-    /* لا تعديلات معلّقة، ونسخة السحابة هي نفسها التي لدينا: لا حاجة لإعادة تحميل */
-    var syn = _getSynced();
-    if (syn && remote._ts && syn.ts === remote._ts && window.DB && window.DB.data) {
-      showSyncStatus("ok", "☁️ متزامن");
-      return;
-    }
+    /* تجاهل لو البيانات المحلية أحدث */
+    var localDB = null;
+    try { localDB = JSON.parse(localStorage.getItem("grades_v6")); } catch(e) {}
+    if (localDB && localDB._ts && remote._ts && localDB._ts > remote._ts) return;
 
     /* حفظ البيانات الواردة محلياً */
     var clean = restoreKeys(Object.assign({}, remote));
@@ -357,12 +174,10 @@ function listenForRemoteChanges() {
     clean = repairDB(clean);
 
     console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
-    _backupLocal("before-apply-remote");
 
     try {
-      localStorage.setItem(_fbStoreKey(), JSON.stringify(clean));
+      localStorage.setItem("grades_v6", JSON.stringify(clean));
     } catch(e) {}
-    _setSynced(remote._ts || Date.now(), _sigOf(clean));
 
     /* تحديث DB في الذاكرة وإعادة الرسم */
     if (window.DB !== undefined) {
@@ -393,18 +208,9 @@ function hookSaveDB() {
       window.saveDB = function () {
         /* _fbHooked — علامة لمنع التكرار */
         /* استدعاء الدالة الأصلية أولاً */
-        var _r = _origSave.apply(this, arguments);
-        /* علّم أن هناك تعديلاً لم يُرفع بعد (يبقى حتى بعد إغلاق التطبيق) —
-           فقط لو تغيّر المحتوى فعلاً عن آخر نسخة متزامنة (فتح التطبيق وحده ليس تعديلاً) */
-        var _sg = _sigOf(window.DB), _syn = _getSynced();
-        if (!_syn || !_syn.sig || _syn.sig !== _sg) {
-          _markDirty();
-          _refreshSaveBadge();
-          scheduleSyncToFirebase();
-        } else {
-          try { localStorage.removeItem(_dirtyKey()); } catch (e) {}
-        }
-        return _r;
+        _origSave.apply(this, arguments);
+        /* ثم إرسال لـ Firebase بعد تأخير */
+        scheduleSyncToFirebase();
       };
 
       /* علامة تمنع الـ hook مرة ثانية */
@@ -478,53 +284,23 @@ function pushToFirebase() {
   var db = window.DB;
   if (!db) return;
 
-  /* 🛡️ لا نكتب فوق السحابة قبل أن نرى ما فيها في هذه الجلسة */
-  if (!_firstSnapshotDone) {
-    _pendingSave = true;
-    showSyncStatus("warn", "⏳ بانتظار نسخة السحابة قبل الرفع");
-    return;
-  }
-  /* 🛡️ ولا نرفع نسخة أفقر بكثير مما في السحابة */
-  var _ls = _statsOf(db);
-  if (_isRegression(_ls, _lastRemoteStats)) {
-    _backupLocal("push-blocked-regression");
-    showSyncStatus("error", "⛔ أُوقف الرفع: بيانات الجهاز أقل بكثير من السحابة");
-    var go = confirm("⚠️ تحذير: هذا الجهاز يحتوي " + _ls.cells + " درجة فقط بينما في السحابة " + _lastRemoteStats.cells + ".\n\nرفع هذه النسخة سيمحو درجات من السحابة.\n\nموافق = استرجاع نسخة السحابة إلى هذا الجهاز (موصى به)\nإلغاء = إبقاء الرفع موقوفاً");
-    if (go && typeof window.pullFromFirebase === "function") { try { localStorage.removeItem(_dirtyKey()); } catch (e) {} window.pullFromFirebase(); }
-    return;
-  }
-
   _isSyncing = true;
   showSyncStatus("syncing", "⏫ جاري التزامن...");
 
   var ts = Date.now();
   _lastSaveTS = ts;
-  var dirtyAtPush = _getDirty();
-  var sigAtPush = _sigOf(db);
 
   var payload = sanitizeKeys(JSON.parse(JSON.stringify(db)));
   payload._ts     = ts;
   payload._device = getDeviceId();
 
-  /* شبكة "واي فاي بدون إنترنت": الرفع يتأخر — أخبر المستخدم أن التعديل محفوظ بالجهاز */
-  var slowT = setTimeout(function () {
-    if (_isSyncing) showSyncStatus("warn", "📴 محفوظ بالجهاز — بانتظار الاتصال");
-  }, 8000);
-
   _fbRef.set(payload)
     .then(function () {
-      clearTimeout(slowT);
       _isSyncing = false;
-      _pendingSave = false;
-      _setSynced(ts, sigAtPush);
-      _lastRemoteStats = _ls;
-      _clearDirtyIfNotNewer(dirtyAtPush);
-      if (_getDirty()) { scheduleSyncToFirebase(); }   /* حدث تعديل أثناء الرفع */
-      else { showSyncStatus("ok", "✅ تم الحفظ والمزامنة"); setTimeout(function () { if (!_getDirty()) showSyncStatus("ok", "☁️ متزامن"); }, 2500); }
+      showSyncStatus("ok", "☁️ متزامن");
       console.log("[Dalty Sync] ✅ تم الحفظ على Firebase");
     })
     .catch(function (err) {
-      clearTimeout(slowT);
       _isSyncing = false;
       _pendingSave = true;
       showSyncStatus("error", "❌ فشل التزامن: " + err.message);
@@ -538,7 +314,7 @@ function pushToFirebase() {
    ════════════════════════════════════════ */
 function onComeOnline() {
   showSyncStatus("ok", "🌐 عاد الاتصال");
-  if (_pendingSave || _getDirty()) {
+  if (_pendingSave) {
     _pendingSave = false;
     setTimeout(pushToFirebase, 1000);
   }
@@ -693,18 +469,8 @@ function openSyncPanel() {
       'margin-bottom:12px;font-family:monospace;">' + getDeviceId() + '</div>',
 
     '<div style="font-size:10px;color:#475569;margin-bottom:8px;">الحالة:</div>',
-    '<div id="fbPanelStatus" style="font-size:11px;color:#6ee7b7;margin-bottom:10px;">',
+    '<div id="fbPanelStatus" style="font-size:11px;color:#6ee7b7;margin-bottom:14px;">',
       _isOnline ? "🟢 متصل" : "🔴 غير متصل",
-    '</div>',
-    '<div style="font-size:11px;line-height:1.9;background:#0a1628;border-radius:8px;padding:8px 10px;margin-bottom:12px;color:#cbd5e1;">',
-      '💾 آخر حفظ على الجهاز: <b>' + _hhmm(window._lastLocalSaveAt) + '</b><br>',
-      (window._lastSaveOk === false ? '<span style="color:#fca5a5;">⚠️ فشل آخر حفظ على الجهاز!</span><br>' : ''),
-      '☁️ آخر رفع للسحابة: <b>' + _hhmm((_getSynced() || {}).at) + '</b><br>',
-      '🔢 درجات على الجهاز: <b>' + _statsOf(window.DB).cells + '</b>' + (_lastRemoteStats ? ' — في السحابة: <b>' + _lastRemoteStats.cells + '</b>' : '') + '<br>',
-      (_getBackup() ? '<button onclick="restoreLocalBackup();document.getElementById(\'fbSyncPanel\')&&document.getElementById(\'fbSyncPanel\').remove();" style="margin:4px 0;padding:6px 10px;border-radius:8px;border:1px solid #d97706;background:rgba(251,191,36,.12);color:#fcd34d;font-family:inherit;font-size:11px;cursor:pointer;">↩ استرجاع نسخة الجهاز الاحتياطية (' + _getBackup().stats.cells + ' درجة)</button><br>' : ''),
-      (_getDirty()
-        ? '<span style="color:#fcd34d;">⏳ توجد تعديلات لم تُرفع بعد (محفوظة على جهازك)</span>'
-        : '<span style="color:#6ee7b7;">✅ كل التعديلات مرفوعة</span>'),
     '</div>',
 
     '<div style="display:flex;flex-direction:column;gap:7px;">',
@@ -759,9 +525,7 @@ function pullFromFirebase() {
 
       if (!confirm("⚠️ سيتم استبدال بياناتك الحالية ببيانات السحابة. متأكد؟")) return;
 
-      try { localStorage.setItem(_fbStoreKey(), JSON.stringify(clean)); } catch (e) {}
-      try { localStorage.removeItem(_dirtyKey()); } catch (e) {}
-      _setSynced(remote._ts || Date.now(), _sigOf(clean));
+      localStorage.setItem("grades_v6", JSON.stringify(clean));
       window.DB = clean;
 
       if (typeof window.renderGrades  === "function") window.renderGrades();
