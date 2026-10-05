@@ -138,18 +138,52 @@ function repairDB(clean) {
   return clean;
 }
 
+/* ════════════════════════════════════════
+   علامة "تعديلات لم تُرفع بعد"
+   تُحفظ على الجهاز، فتبقى حتى لو أُغلق التطبيق بدون إنترنت،
+   وبها لا تُستبدل الدرجات المرصودة أوفلاين بنسخة السحابة عند عودة الاتصال
+   ════════════════════════════════════════ */
+var UNSYNCED_KEY = "dalty_unsynced_ts";
+function _markUnsynced() {
+  try { localStorage.setItem(UNSYNCED_KEY, String(Date.now())); } catch (e) {}
+}
+function _getUnsyncedTs() {
+  try { return parseInt(localStorage.getItem(UNSYNCED_KEY) || "0", 10) || 0; } catch (e) { return 0; }
+}
+function _isUnsynced() { return _getUnsyncedTs() > 0; }
+/* لا تمسح العلامة إن حدث تعديل جديد أثناء الرفع */
+function _clearUnsyncedIfOlder(pushStartTs) {
+  try {
+    if (_getUnsyncedTs() <= pushStartTs) localStorage.removeItem(UNSYNCED_KEY);
+  } catch (e) {}
+}
+function _localStoreKey() { return window.STORE_KEY || "grades_v6"; }
+
 function listenForRemoteChanges() {
   _fbRef.on("value", function (snapshot) {
     var remote = snapshot.val();
-    if (!remote) return;
+    if (!remote) {
+      /* لا بيانات على السحابة بعد: ارفع ما لدينا إن كان فيه تعديلات لم تُرفع */
+      if (_isUnsynced()) setTimeout(pushToFirebase, 1000);
+      return;
+    }
 
     /* تجاهل التحديثات التي أرسلناها نحن */
     if (remote._ts && remote._ts === _lastSaveTS) return;
 
-    /* تجاهل لو البيانات المحلية أحدث */
-    var localDB = null;
-    try { localDB = JSON.parse(localStorage.getItem("grades_v6")); } catch(e) {}
-    if (localDB && localDB._ts && remote._ts && localDB._ts > remote._ts) return;
+    /* ⚠️ لدينا درجات/تعديلات على الجهاز لم تُرفع بعد (غالباً رُصدت بدون إنترنت):
+       لا تستبدلها بنسخة السحابة — ارفعها هي أولاً */
+    if (_isUnsynced()) {
+      console.warn("[Dalty Sync] تعديلات محلية لم تُرفع — تم تجاهل نسخة السحابة ورفع المحلية");
+      if (_isOnline) {
+        showSyncStatus("syncing", "⏫ رفع الدرجات المرصودة بدون إنترنت...");
+        if (_syncTimer) clearTimeout(_syncTimer);
+        _syncTimer = setTimeout(pushToFirebase, 1000);
+      } else {
+        _pendingSave = true;
+      }
+      return;
+    }
 
     /* حفظ البيانات الواردة محلياً */
     var clean = restoreKeys(Object.assign({}, remote));
@@ -176,7 +210,7 @@ function listenForRemoteChanges() {
     console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
 
     try {
-      localStorage.setItem("grades_v6", JSON.stringify(clean));
+      localStorage.setItem(_localStoreKey(), JSON.stringify(clean));
     } catch(e) {}
 
     /* تحديث DB في الذاكرة وإعادة الرسم */
@@ -209,6 +243,8 @@ function hookSaveDB() {
         /* _fbHooked — علامة لمنع التكرار */
         /* استدعاء الدالة الأصلية أولاً */
         _origSave.apply(this, arguments);
+        /* سجّل أن هناك تعديلاً لم يُرفع بعد (تُمسح عند نجاح الرفع) */
+        _markUnsynced();
         /* ثم إرسال لـ Firebase بعد تأخير */
         scheduleSyncToFirebase();
       };
@@ -297,6 +333,7 @@ function pushToFirebase() {
   _fbRef.set(payload)
     .then(function () {
       _isSyncing = false;
+      _clearUnsyncedIfOlder(ts);
       showSyncStatus("ok", "☁️ متزامن");
       console.log("[Dalty Sync] ✅ تم الحفظ على Firebase");
     })
@@ -314,7 +351,7 @@ function pushToFirebase() {
    ════════════════════════════════════════ */
 function onComeOnline() {
   showSyncStatus("ok", "🌐 عاد الاتصال");
-  if (_pendingSave) {
+  if (_pendingSave || _isUnsynced()) {
     _pendingSave = false;
     setTimeout(pushToFirebase, 1000);
   }
@@ -525,7 +562,8 @@ function pullFromFirebase() {
 
       if (!confirm("⚠️ سيتم استبدال بياناتك الحالية ببيانات السحابة. متأكد؟")) return;
 
-      localStorage.setItem("grades_v6", JSON.stringify(clean));
+      localStorage.setItem(_localStoreKey(), JSON.stringify(clean));
+      try { localStorage.removeItem(UNSYNCED_KEY); } catch (e) {} /* المستخدم اختار صراحةً نسخة السحابة */
       window.DB = clean;
 
       if (typeof window.renderGrades  === "function") window.renderGrades();
