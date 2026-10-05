@@ -4,53 +4,51 @@
 
 
 if('serviceWorker' in navigator){
-  window.addEventListener('load', function(){
-    setTimeout(function(){
-      /* ── استخراج مسار sw.js ديناميكياً بناءً على موقع التطبيق الفعلي ──
-         يحل مشكلة: مسار ثابت /grades-project/sw.js لا يتطابق مع
-         أسماء مستودعات مختلفة على GitHub Pages أو رفع مباشر ── */
-      /* sw.js بجوار index.html. نحسب مساره من رابط هذا السكريبت (js/app-10...) صعوداً مستوى واحداً.
-         كان الكود القديم لا يطابق المسار النسبي فيسجّل ملف app-10 نفسه كـ Service Worker،
-         ولذلك لم يكن التطبيق يعمل بدون إنترنت. */
-      var swPath = (function(){
-        try {
-          var scripts = document.querySelectorAll('script[src]');
-          for(var i=0; i<scripts.length; i++){
-            var src = scripts[i].getAttribute('src');
-            if(src && src.indexOf('app-10') !== -1){
-              return new URL('../sw.js', scripts[i].src).href;
-            }
+  /* سجّل الـ Service Worker فوراً (لا تنتظر load، لأن load قد يتأخر مع شبكة ضعيفة) */
+  (function(){
+    /* sw.js بجوار index.html. نحسب مساره من رابط هذا السكريبت (js/app-10...) صعوداً مستوى واحداً. */
+    var swPath = (function(){
+      try {
+        var scripts = document.querySelectorAll('script[src]');
+        for(var i=0; i<scripts.length; i++){
+          var src = scripts[i].getAttribute('src');
+          if(src && src.indexOf('app-10') !== -1){
+            return new URL('../sw.js', scripts[i].src).href;
           }
-        } catch(e){}
-        return new URL('sw.js', location.href).href;
-      })();
+        }
+      } catch(e){}
+      return new URL('sw.js', location.href).href;
+    })();
 
-      navigator.serviceWorker.register(swPath)
-        .then(function(reg){
-          console.log('[SW] مُسجَّل على:', reg.scope);
-          reg.update();
-          if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
-          reg.addEventListener('updatefound', function(){
-            var nw = reg.installing;
-            if(!nw) return;
-            nw.addEventListener('statechange', function(){
-              if(nw.state === 'installed' && navigator.serviceWorker.controller){
-                nw.postMessage({type:'SKIP_WAITING'});
-              }
-            });
+    /* هل الصفحة كانت تحت سيطرة SW قبل الآن؟ (أول تثبيت لا يحتاج إعادة تحميل) */
+    var hadController = !!navigator.serviceWorker.controller;
+
+    navigator.serviceWorker.register(swPath)
+      .then(function(reg){
+        console.log('[SW] مُسجَّل على:', reg.scope);
+        if(navigator.onLine){ try{ reg.update(); }catch(e){} }
+        if(reg.waiting){ reg.waiting.postMessage({type:'SKIP_WAITING'}); }
+        reg.addEventListener('updatefound', function(){
+          var nw = reg.installing;
+          if(!nw) return;
+          nw.addEventListener('statechange', function(){
+            if(nw.state === 'installed' && navigator.serviceWorker.controller){
+              nw.postMessage({type:'SKIP_WAITING'});
+            }
           });
-        })
-        .catch(function(err){ console.warn('[SW] فشل التسجيل:', err); });
+        });
+      })
+      .catch(function(err){ console.warn('[SW] فشل التسجيل:', err); });
 
-      /* إعادة تحميل عند تفعيل نسخة جديدة */
-      var _swRefreshed = false;
-      navigator.serviceWorker.addEventListener('controllerchange', function(){
-        if(_swRefreshed) return;
-        _swRefreshed = true;
-        location.reload();
-      });
-    }, 1000);
-  });
+    /* إعادة تحميل عند تفعيل نسخة جديدة (فقط إن كانت هناك نسخة سابقة) */
+    var _swRefreshed = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      if(!hadController){ hadController = true; return; }
+      if(_swRefreshed) return;
+      _swRefreshed = true;
+      location.reload();
+    });
+  })();
 }
 
 
