@@ -1,246 +1,286 @@
-/* ══════════════════════════════════════════════════════════════
-   Dalty Grades — Service Worker (النسخة 2: يعمل بدون إنترنت)
+/* ══════════════════════════════════════════
+   Dalty Grades — Service Worker
+   النسخة: v52 — عمل كامل بدون إنترنت (Offline-first)
 
-   المبادئ:
-   ١) كل ملفات التطبيق تُخزَّن مسبقاً عند التثبيت، وإن تعذّر تخزين أي ملف
-      أساسي يفشل التثبيت فتبقى النسخة القديمة الكاملة تعمل (لا نصف نسخة).
-   ٢) لا ننتظر شبكة ميتة: عند "واي فاي بدون إنترنت" نستخدم النسخة المخزنة
-      بعد مهلة قصيرة، ونتذكر أن الشبكة معطلة فلا نعيد الانتظار لكل ملف.
-   ٣) نمرّر طلبات Firebase (قاعدة البيانات/الدخول) كما هي بدون تدخل.
+   ما تغيّر عن v51:
+   1) تخزين مسبق لكل ملفات التطبيق (JS / CSS / auth / sync) وليس index.html فقط.
+   2) النسخة الجديدة تُبنى كاملة قبل حذف القديمة (لا يعود الكاش فارغاً بعد التحديث).
+   3) فتح الصفحات من الكاش فوراً ثم التحديث في الخلفية (لا انتظار للشبكة الضعيفة).
+   4) لا يتدخل في طلبات Firebase (قاعدة البيانات / الدخول) إطلاقاً.
+   ══════════════════════════════════════════ */
 
-   ⚠️ عند أي تعديل على ملفات التطبيق: غيّر رقم VERSION بالأسفل.
-   ══════════════════════════════════════════════════════════════ */
+const VERSION     = 'v52';
+const CACHE       = 'dalty-app-' + VERSION;   /* ملفات التطبيق + المكتبات */
+const MODEL_CACHE = 'dalty-models';           /* ملفات كبيرة (Whisper) — لا تُحذف عند التحديث */
 
-const VERSION       = 'v60';
-const STATIC_CACHE  = 'dalty-static-'  + VERSION;
-const DYNAMIC_CACHE = 'dalty-dynamic-' + VERSION;
-
-const NET_TIMEOUT_MS   = 3000;   /* مهلة انتظار الشبكة قبل استخدام النسخة المخزنة */
-const EXT_TIMEOUT_MS   = 6000;   /* مهلة المكتبات الخارجية غير المخزنة */
-const NET_DOWN_HOLD_MS = 20000;  /* مدة اعتبار الشبكة معطلة بعد أول مهلة */
-
-/* مسارات نسبية لمجلد التطبيق (تعمل على GitHub Pages داخل مجلد فرعي) */
-const rel = p => new URL(p, self.registration.scope).href;
-
-/* ── أساسي: إن فشل أي منها يفشل التثبيت ── */
+/* ── ملفات أساسية: بدونها لا يعمل التطبيق (فشل أي منها يُلغي التحديث ويُبقي النسخة القديمة) ── */
 const CORE = [
-  'index.html', 'style.css', 'manifest.json',
-  'auth.js', 'firebase-sync.js',
-  'js/app-01-core.js', 'js/app-02-schedule.js', 'js/app-03-grades.js',
-  'js/app-04-stats-sick.js', 'js/app-05-weekly.js', 'js/app-06-settings.js',
-  'js/app-07-notif.js', 'js/app-08-curric-report.js', 'js/app-09-backup-witness.js',
-  'js/app-10-report-tafrigh.js', 'js/app-11-numpad.js', 'js/app-12-ai.js',
+  './',
+  './index.html',
+  './style.css',
+  './auth.js',
+  './firebase-sync.js',
+  './js/app-01-core.js',
+  './js/app-02-schedule.js',
+  './js/app-03-grades.js',
+  './js/app-04-stats-sick.js',
+  './js/app-05-weekly.js',
+  './js/app-06-settings.js',
+  './js/app-07-notif.js',
+  './js/app-08-curric-report.js',
+  './js/app-09-backup-witness.js',
+  './js/app-10-report-tafrigh.js',
+  './js/app-11-numpad.js',
 ];
 
-/* ── اختياري: يُخزَّن إن أمكن ── */
-const OPTIONAL = [
-  './', 'favicon.ico', 'images/logo.jpg', '404.html',
-  'grades-viewer.html', 'supervisor-profile.html',
-  'icons/icon-72.png', 'icons/icon-96.png', 'icons/icon-128.png', 'icons/icon-144.png',
-  'icons/icon-152.png', 'icons/icon-192.png', 'icons/icon-384.png', 'icons/icon-512.png',
-  'sounds/success.wav', 'sounds/chime_long.wav', 'sounds/notification_ping.wav',
-  'sounds/alarm_beep.wav', 'sounds/alert_important.wav', 'sounds/gentle_alert.wav',
-  'sounds/phone_ring.wav', 'sounds/ding.wav', 'sounds/alert_double.wav',
-  'sounds/school_bell.wav', 'sounds/chime_short.wav', 'sounds/melody.wav',
+/* ── ملفات ثانوية: يُحاول تخزينها ولا يفشل التثبيت إن تعذّر أحدها ── */
+const NICE = [
+  './manifest.json',
+  './favicon.ico',
+  './images/logo.jpg',
+  './icons/icon-72.png',
+  './icons/icon-96.png',
+  './icons/icon-128.png',
+  './icons/icon-144.png',
+  './icons/icon-152.png',
+  './icons/icon-192.png',
+  './icons/icon-384.png',
+  './icons/icon-512.png',
+  './grades-viewer.html',
+  './supervisor-profile.html',
+  './sounds/alarm_beep.wav',
+  './sounds/alert_double.wav',
+  './sounds/alert_important.wav',
+  './sounds/chime_long.wav',
+  './sounds/chime_short.wav',
+  './sounds/ding.wav',
+  './sounds/gentle_alert.wav',
+  './sounds/melody.wav',
+  './sounds/notification_ping.wav',
+  './sounds/phone_ring.wav',
+  './sounds/school_bell.wav',
+  './sounds/success.wav',
 ];
 
 /* ── مكتبات خارجية يعتمد عليها التطبيق ── */
 const EXTERNAL = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-  'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
 ];
 
-/* نطاقات خارجية نخزّنها (ما عداها مثل Firebase يمر مباشرة للشبكة) */
-function isCacheableExternal(url) {
-  const h = url.hostname;
-  if (h === 'www.gstatic.com') return url.pathname.startsWith('/firebasejs/');
-  return h === 'cdnjs.cloudflare.com' || h === 'fonts.googleapis.com' ||
-         h === 'fonts.gstatic.com'    || h === 'cdn.jsdelivr.net' ||
-         h === 'huggingface.co'       || h.endsWith('.huggingface.co');
+/* ── خطوط Google: يُخزَّن ملف الـ CSS وملفات الخط المشار إليها بداخله ── */
+const FONT_CSS = [
+  'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap',
+  'https://fonts.googleapis.com/css2?family=Amiri:wght@400;700;900&display=swap',
+];
+
+/* ── نطاقات خارجية يُسمح للـ SW بالتعامل معها (غيرها لا يُمَس) ── */
+const EXTERNAL_HOSTS = [
+  'cdnjs.cloudflare.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'www.gstatic.com',
+];
+const MODEL_HOSTS = [
+  'cdn.jsdelivr.net',
+  'huggingface.co',
+  'cdn-lfs.huggingface.co',
+  'cdn-lfs-us-1.huggingface.co',
+];
+
+const NETWORK_TIMEOUT = 8000;  /* مهلة الشبكة عند غياب الملف من الكاش */
+
+/* ════════════════════════════════
+   أدوات مساعدة
+   ════════════════════════════════ */
+function fetchWithTimeout(input, init, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms || NETWORK_TIMEOUT);
+  return fetch(input, Object.assign({}, init || {}, { signal: ctrl.signal }))
+    .finally(() => clearTimeout(timer));
 }
 
-/* ───────────── أدوات ───────────── */
-function raceTimeout(promise, ms) {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('timeout')), ms);
-    promise.then(v => { clearTimeout(t); resolve(v); },
-                 e => { clearTimeout(t); reject(e); });
-  });
+/* يجلب ملفاً ويخزّنه؛ عند الفشل ينسخه من أي كاش قديم؛ يرجع true لو صار الملف متاحاً */
+async function addOne(cache, url, external) {
+  try {
+    const res = await fetchWithTimeout(
+      url,
+      external ? { mode: 'cors' } : { cache: 'reload' },
+      20000
+    );
+    if (res && res.ok) {
+      await cache.put(url, res.clone());
+      return res;
+    }
+  } catch (e) { /* تابع للنسخة القديمة */ }
+  try {
+    const old = await caches.match(url, { ignoreSearch: true });
+    if (old) { await cache.put(url, old.clone()); return old; }
+  } catch (e) {}
+  return null;
 }
 
-let netDownUntil = 0;
-const netLooksDown = () => Date.now() < netDownUntil;
-const markNetDown  = () => { netDownUntil = Date.now() + NET_DOWN_HOLD_MS; };
-const markNetUp    = () => { netDownUntil = 0; };
-
-async function fetchAndStore(url, cacheName, mode) {
-  const res = await fetch(new Request(url, { cache: 'reload', mode: mode || 'same-origin' }));
-  if (!res || !res.ok) throw new Error('bad status ' + (res && res.status) + ' for ' + url);
-  const cache = await caches.open(cacheName);
-  await cache.put(url, res);
+/* يقرأ CSS الخط ويخزّن ملفات woff2 المذكورة فيه */
+async function cacheFont(cache, cssUrl) {
+  const res = await addOne(cache, cssUrl, true);
+  if (!res) return;
+  try {
+    const text = await res.clone().text();
+    const files = Array.from(new Set((text.match(/https:\/\/fonts\.gstatic\.com[^)'"\s]+/g) || [])));
+    await Promise.all(files.map(f => addOne(cache, f, true)));
+  } catch (e) {}
 }
 
-/* استجابة جزئية 206 للملفات الصوتية (المتصفح يطلب Range) */
-async function withRange(request, response) {
-  const range = request.headers.get('range');
-  if (!range || !response || response.status !== 200) return response;
-  const m = /bytes=(\d*)-(\d*)/.exec(range);
-  if (!m) return response;
-  const buf = await response.arrayBuffer();
-  const total = buf.byteLength;
-  let start = m[1] === '' ? Math.max(0, total - Number(m[2])) : Number(m[1]);
-  let end   = (m[1] === '' || m[2] === '') ? total - 1 : Math.min(Number(m[2]), total - 1);
-  if (start > end || start >= total) {
-    return new Response(null, { status: 416, headers: { 'Content-Range': 'bytes */' + total } });
-  }
-  return new Response(buf.slice(start, end + 1), {
-    status: 206, statusText: 'Partial Content',
-    headers: {
-      'Content-Type':   response.headers.get('Content-Type') || 'audio/wav',
-      'Content-Range':  'bytes ' + start + '-' + end + '/' + total,
-      'Content-Length': String(end - start + 1),
-    },
-  });
-}
-
-/* ════════════════ التثبيت ════════════════ */
+/* ════════════════════════════════
+   التثبيت — Install
+   ════════════════════════════════ */
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
-    /* ١) الأساسي: يجب أن ينجح كله */
-    await Promise.all(CORE.map(p => fetchAndStore(rel(p), STATIC_CACHE)));
+    const cache = await caches.open(CACHE);
 
-    /* ٢) الاختياري والخارجي: بأفضل جهد دون إفشال التثبيت */
+    /* 1) الملفات الأساسية — لازم تكتمل */
+    const coreResults = await Promise.all(CORE.map(u => addOne(cache, u, false)));
+    const missing = CORE.filter((u, i) => !coreResults[i]);
+    if (missing.length) {
+      console.warn('[SW] ملفات أساسية ناقصة — إلغاء التحديث:', missing);
+      await caches.delete(CACHE);
+      throw new Error('core files missing: ' + missing.join(', '));
+    }
+
+    /* 2) المكتبات الخارجية + الخطوط + الملفات الثانوية — أفضل جهد */
     await Promise.all([
-      ...OPTIONAL.map(p => fetchAndStore(rel(p), STATIC_CACHE).catch(() => {})),
-      ...EXTERNAL.map(u => fetchAndStore(u, DYNAMIC_CACHE, 'cors').catch(() => {})),
+      ...EXTERNAL.map(u => addOne(cache, u, true)),
+      ...FONT_CSS.map(u => cacheFont(cache, u)),
+      ...NICE.map(u => addOne(cache, u, false)),
     ]);
+
+    console.log('[SW] ✅ اكتمل التخزين المسبق', VERSION);
     await self.skipWaiting();
   })());
 });
 
-/* ════════════════ التفعيل ════════════════ */
+/* ════════════════════════════════
+   التفعيل — Activate
+   (لا تُحذف النسخ القديمة إلا بعد اكتمال الجديدة، لأن التفعيل يأتي بعد نجاح التثبيت)
+   ════════════════════════════════ */
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys
-      .filter(k => k !== STATIC_CACHE && k !== DYNAMIC_CACHE)
-      .map(k => caches.delete(k)));
+    await Promise.all(
+      keys
+        .filter(k => k.startsWith('dalty-') && k !== CACHE && k !== MODEL_CACHE)
+        .map(k => caches.delete(k))
+    );
     await self.clients.claim();
   })());
 });
 
-/* ════════════════ الطلبات ════════════════ */
+/* ════════════════════════════════
+   الطلبات — Fetch
+   ════════════════════════════════ */
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
-  const url = new URL(req.url);
+
+  let url;
+  try { url = new URL(req.url); } catch (e) { return; }
   if (!url.protocol.startsWith('http')) return;
 
+  /* ملفات التطبيق نفسه */
   if (url.origin === self.location.origin) {
-    const accept = req.headers.get('accept') || '';
-    if (req.mode === 'navigate' || accept.includes('text/html')) {
-      event.respondWith(networkFirst(event, STATIC_CACHE, true));
-    } else if (/\.(js|css|json|html)$/i.test(url.pathname)) {
-      event.respondWith(networkFirst(event, STATIC_CACHE, false));   /* الكود: الأحدث إن توفر النت */
-    } else {
-      event.respondWith(cacheFirstMedia(event));                      /* صور/أصوات/أيقونات */
-    }
+    event.respondWith(handleLocal(event, req, url));
     return;
   }
 
-  if (isCacheableExternal(url)) {
-    event.respondWith(cacheFirstExternal(event));
+  /* مكتبات وخطوط معروفة */
+  if (EXTERNAL_HOSTS.includes(url.hostname)) {
+    event.respondWith(handleExternal(req, CACHE));
+    return;
   }
-  /* غير ذلك (Firebase وغيره): لا تدخّل */
+  if (MODEL_HOSTS.some(h => url.hostname.includes(h))) {
+    event.respondWith(handleExternal(req, MODEL_CACHE));
+    return;
+  }
+
+  /* أي شيء آخر (Firebase وقاعدة البيانات والدخول وAPI...) لا نتدخل فيه */
 });
 
-/* شبكة أولاً مع مهلة، ثم النسخة المخزنة */
-async function networkFirst(event, cacheName, isNavigation) {
-  const req   = event.request;
+/* ── ملفات التطبيق: من الكاش فوراً + تحديث في الخلفية ── */
+async function handleLocal(event, req, url) {
+  const isNav = req.mode === 'navigate';
+  const cache = await caches.open(CACHE);
+
+  let cached = await cache.match(req.url, { ignoreSearch: true });
+  if (!cached) cached = await caches.match(req.url, { ignoreSearch: true });
+
+  /* تحديث الملف في الخلفية (لا يعطّل الفتح) */
+  const revalidate = fetchWithTimeout(req.url, { cache: 'no-cache' }, isNav ? NETWORK_TIMEOUT : 15000)
+    .then(async res => {
+      if (res && res.ok && !res.redirected) {
+        await cache.put(req.url, res.clone());
+        /* حافظ على تطابق './' و './index.html' */
+        if (/\/$/.test(url.pathname)) await cache.put(new URL('index.html', req.url).href, res.clone());
+        else if (/\/index\.html$/.test(url.pathname)) await cache.put(new URL('./', req.url).href, res.clone());
+      }
+      return res;
+    });
+
+  if (cached) {
+    event.waitUntil(revalidate.catch(() => {}));
+    return cached;
+  }
+
+  /* غير موجود بالكاش: جرّب الشبكة */
+  try {
+    const res = await revalidate;
+    if (res && !res.redirected) return res;
+    if (res) return res;
+  } catch (e) { /* لا شبكة */ }
+
+  if (isNav) {
+    const home = (await cache.match('./index.html')) || (await caches.match('./index.html', { ignoreSearch: true }));
+    if (home) return home;
+  }
+  return new Response('', { status: 503, statusText: 'Service Unavailable' });
+}
+
+/* ── مكتبات وخطوط خارجية: الكاش أولاً ── */
+async function handleExternal(req, cacheName) {
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(req, { ignoreSearch: true });
-
-  const update = fetch(req).then(res => {
-    markNetUp();
-    if (res && res.ok && res.status === 200) cache.put(req, res.clone());
-    return res;
-  });
-
-  /* لا توجد نسخة مخزنة: لا خيار سوى انتظار الشبكة */
-  if (!cached) {
-    try { return await update; }
-    catch (e) { return isNavigation ? offlinePage(cache) : new Response('', { status: 503 }); }
-  }
-
-  /* الشبكة معروفة أنها معطلة: استخدم المخزن فوراً وحدّث في الخلفية إن أمكن */
-  if (netLooksDown()) {
-    event.waitUntil(update.catch(() => {}));
-    return cached;
-  }
-
-  try {
-    const res = await raceTimeout(update, NET_TIMEOUT_MS);
-    if (res && res.ok) return res;
-    return cached;                      /* خطأ من الخادم (404/5xx): الأفضل المخزن */
-  } catch (e) {
-    markNetDown();
-    event.waitUntil(update.catch(() => {}));   /* أكمل التحديث بالخلفية إن عادت الشبكة */
-    return cached;
-  }
-}
-
-/* صور/أصوات: المخزن أولاً */
-async function cacheFirstMedia(event) {
-  const req   = event.request;
-  const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(req, { ignoreSearch: true });
-  if (cached) return withRange(req, cached);
-  try {
-    const res = await raceTimeout(fetch(new Request(req.url)), EXT_TIMEOUT_MS);
-    if (res && res.ok && res.status === 200) {
-      cache.put(req.url, res.clone());
-      return withRange(req, res);
-    }
-    return res;
-  } catch (e) {
-    return new Response('', { status: 503 });
-  }
-}
-
-/* مكتبات خارجية: المخزن أولاً، وإن لم توجد فمهلة قصيرة حتى لا تعلّق الصفحة */
-async function cacheFirstExternal(event) {
-  const req   = event.request;
-  const cache = await caches.open(DYNAMIC_CACHE);
-  const cached = await cache.match(req);
+  let cached = await cache.match(req.url, { ignoreVary: true });
+  if (!cached) cached = await caches.match(req.url, { ignoreVary: true });
   if (cached) return cached;
+
   try {
-    const res = await raceTimeout(fetch(req), EXT_TIMEOUT_MS);
-    if (res && (res.ok || res.type === 'opaque')) cache.put(req, res.clone());
-    return res;
+    /* طلب CORS حتى تكون الاستجابة قابلة للتخزين (no-cors يعطي استجابة معتمة لا تُخزَّن) */
+    const res = await fetchWithTimeout(req.url, { mode: 'cors' }, NETWORK_TIMEOUT);
+    if (res && res.ok) {
+      await cache.put(req.url, res.clone());
+      return res;
+    }
+  } catch (e) { /* جرّب الطلب الأصلي */ }
+
+  try {
+    return await fetchWithTimeout(req, undefined, NETWORK_TIMEOUT);
   } catch (e) {
-    return new Response('', { status: 503, statusText: 'Offline' });
+    return new Response('', { status: 503, statusText: 'Service Unavailable' });
   }
 }
 
-/* آخر ملاذ: صفحة التطبيق الرئيسية أو رسالة بسيطة */
-async function offlinePage(cache) {
-  const home = (await cache.match(rel('index.html'))) || (await cache.match(rel('./')));
-  if (home) return home;
-  return new Response(
-    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<body dir="rtl" style="font-family:sans-serif;background:#0a0f1e;color:#f1f5f9;text-align:center;padding:40px">' +
-    '<h2>📴 لا يوجد اتصال</h2><p>افتح التطبيق مرة واحدة وأنت متصل بالإنترنت ليعمل بعدها بدون نت.</p></body>',
-    { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-}
-
-/* ════════════════ رسائل من التطبيق ════════════════ */
+/* ════════════════════════════════
+   رسائل من التطبيق — Message
+   ════════════════════════════════ */
 self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
-  if (event.data && event.data.type === 'CLEAR_CACHE') {
-    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
-      .then(() => { if (event.source) event.source.postMessage({ type: 'CACHE_CLEARED' }); });
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data?.type === 'CLEAR_CACHE') {
+    caches.keys().then(keys =>
+      Promise.all(keys.map(k => caches.delete(k)))
+    ).then(() => {
+      event.source?.postMessage({ type: 'CACHE_CLEARED' });
+    });
   }
 });
