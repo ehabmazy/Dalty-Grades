@@ -9,7 +9,7 @@
    4) لا يتدخل في طلبات Firebase (قاعدة البيانات / الدخول) إطلاقاً.
    ══════════════════════════════════════════ */
 
-const VERSION     = 'v52';
+const VERSION     = 'v53';
 const CACHE       = 'dalty-app-' + VERSION;   /* ملفات التطبيق + المكتبات */
 const MODEL_CACHE = 'dalty-models';           /* ملفات كبيرة (Whisper) — لا تُحذف عند التحديث */
 

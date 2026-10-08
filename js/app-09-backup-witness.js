@@ -4,7 +4,7 @@
 // ══════════════════════════════════════════════════════
 var BKP_KEY      = 'grades_v6_backups';
 var BKP_FOLDER   = 'grades_v6_folder_handle'; // اسم المفتاح للإشارة فقط
-var BKP_MAX      = 20;
+var BKP_MAX      = 8;
 var _bkpLastSnap = 0;
 var _bkpLastSync = 0;
 var _folderHandle= null; // FileSystemDirectoryHandle
@@ -56,7 +56,11 @@ function bkpLoad(){
   try{ var s=localStorage.getItem(BKP_KEY); return s?JSON.parse(s):[]; }catch(e){ return []; }
 }
 function _bkpSaveList(list){
-  try{ localStorage.setItem(BKP_KEY, JSON.stringify(list)); }catch(e){}
+  // عند امتلاء الذاكرة نحذف الأقدم بدل أن نفشل بصمت — ولا نسمح للنسخ بأن تُزاحم البيانات الأساسية
+  while(true){
+    try{ localStorage.setItem(BKP_KEY, JSON.stringify(list)); return; }
+    catch(e){ if(list.length<=1){ try{localStorage.removeItem(BKP_KEY);}catch(e2){} return; } list.pop(); }
+  }
 }
 
 // ── عد الطلاب ────────────────────────────────────────
@@ -77,7 +81,13 @@ function _bkpCreate(label){
     timestamp: Date.now(),
     classes: (window.DB.classes||[]).length,
     students: _bkpCountStudents(),
-    data: JSON.stringify(window.DB)
+    data: (function(){
+      try{
+        var c=JSON.parse(JSON.stringify(window.DB));
+        if(c.meta){ c.meta.defaultStudentPhoto=''; c.meta.teacherPhoto=''; c._photosStripped=true; }
+        return JSON.stringify(c);
+      }catch(e){ return JSON.stringify(window.DB); }
+    })()
   };
   list.unshift(snap);
   if(list.length > BKP_MAX) list = list.slice(0, BKP_MAX);
@@ -195,7 +205,13 @@ function __bkpRestore(id){
   if(!confirm('⚠️ استعادة هذه النسخة؟\nسيتم استبدال جميع البيانات الحالية!\n\n'+snap.label+' — '+snap.time)) return;
   try{
     _bkpCreate('قبل الاستعادة — احتياطي');
+    var _cur=window.DB&&window.DB.meta?window.DB.meta:{};
     window.DB = JSON.parse(snap.data);
+    if(window.DB.meta&&window.DB._photosStripped){
+      if(!window.DB.meta.defaultStudentPhoto)window.DB.meta.defaultStudentPhoto=_cur.defaultStudentPhoto||'';
+      if(!window.DB.meta.teacherPhoto)window.DB.meta.teacherPhoto=_cur.teacherPhoto||'';
+      delete window.DB._photosStripped;
+    }
     if(typeof saveDB==='function') saveDB();
     showSnack('✅ تم الاستعادة بنجاح');
     __renderBackupPage();
@@ -412,19 +428,34 @@ window.bkpSyncNow        = __bkpSyncNow;
 window.bkpClearFolder    = __bkpClearFolder;
 window.renderBackupPage  = __renderBackupPage;
 
-// ── استعادة مقبض المجلد عند التحميل ─────────────────
-_bkpLoadFolderHandle(function(){
-  // override saveDB لإضافة auto-snapshot + auto-sync
+// ── ربط النسخ التلقائي فوراً (لا يعتمد على IndexedDB/مجلد المزامنة) ──
+(function(){
   var _orig = window.saveDB;
   window.saveDB = function(){
-    if(typeof _orig==='function') _orig();
-    _bkpAutoSnapshot();
+    var r;
+    if(typeof _orig==='function') r = _orig.apply(this, arguments);
+    try{ _bkpAutoSnapshot(); }catch(e){}
+    return r;
   };
   // أول نسخة عند الفتح
-  setTimeout(function(){
-    if(window.DB) _bkpCreate('عند فتح التطبيق');
-  }, 1500);
-});
+  setTimeout(function(){ try{ if(window.DB) _bkpCreate('عند فتح التطبيق'); }catch(e){} }, 1500);
+  // شبكة أمان: نسخة كل 5 دقائق إذا تغيّرت البيانات، حتى لو لم يُستدعَ الحفظ
+  var _lastSig = '';
+  setInterval(function(){
+    try{
+      if(!window.DB) return;
+      var sig = JSON.stringify(window.DB.data||{});
+      sig = sig.length + ':' + sig.slice(-200);
+      if(sig === _lastSig) return;
+      _lastSig = sig;
+      _bkpLastSnap = 0;
+      _bkpAutoSnapshot();
+    }catch(e){}
+  }, 300000);
+})();
+
+// ── استعادة مقبض المجلد عند التحميل (اختياري، لا يمنع شيئاً إن فشل) ──
+try{ _bkpLoadFolderHandle(function(){}); }catch(e){}
 
 })(); // end IIFE
 

@@ -877,43 +877,73 @@ function gradeWeeksBarClose(){
   if(bar)bar.classList.remove('open');
   if(btn)btn.classList.remove('active');
 }
+function _gwVis(w){
+  var pg=(DB.colPages||[]).find(function(p){return p.id==='pg_assess';});
+  var col=pg&&(pg.cols||[]).find(function(c){return c.id==='a'+w;});
+  return col?col.visible:true;
+}
+function _gwSetWeek(w,vis){
+  colToggleVisNoRender('pg_assess','a'+w,vis);
+  colToggleVisNoRender('pg_hw','h'+w,vis);
+  colToggleVisNoRender('pg_beh','bw'+w,vis);
+}
+function _gwActiveWeeks(){
+  var aw=Math.min(Math.max(1,Number(DB.meta&&DB.meta.activeWeeks)||14),ALL_WEEKS.length);
+  return ALL_WEEKS.slice(0,aw);
+}
+function gradeWeeksApplySync(){
+  var cur=(typeof _calcCurrentWeek==='function')?_calcCurrentWeek():1;
+  _gwActiveWeeks().forEach(function(w){_gwSetWeek(w,w<=cur);});
+}
 function renderGradeWeeksBar(){
   var bar=document.getElementById('gradeWeeksBar');
   if(!bar||!DB)return;
-  var aw=Math.min(Math.max(1,Number(DB.meta&&DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  var weeks=ALL_WEEKS.slice(0,aw);
-  var assessPg=(DB.colPages||[]).find(function(p){return p.id==='pg_assess';});
+  if(typeof _ensureWeekCols==='function')_ensureWeekCols();
+  var weeks=_gwActiveWeeks();
+  var sync=!!(DB.meta&&DB.meta.gwSyncCurrent);
   var h='<span class="gw-bar-lbl">الأسابيع:</span>';
   weeks.forEach(function(w){
-    var col=assessPg&&(assessPg.cols||[]).find(function(c){return c.id==='a'+w;});
-    var vis=col?col.visible:true;
+    var vis=_gwVis(w);
     var cls='gw-circle'+(vis?' active':' hidden');
     h+='<button class="'+cls+'" onclick="gradeWeekToggle('+w+')" title="أسبوع '+w+(vis?'  — اضغط للإخفاء':'  — اضغط للإظهار')+'">'+w+'</button>';
   });
-  var allVis=weeks.every(function(w){var c=assessPg&&(assessPg.cols||[]).find(function(cc){return cc.id==='a'+w;});return c?c.visible:true;});
-  h+='<button style="background:#2d0020;border:1.5px solid #831843;color:#f9a8d4;border-radius:7px;padding:3px 10px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;margin-right:4px;" onclick="gradeWeeksToggleAll('+(allVis?'false':'true')+')">'+(allVis?'إخفاء الكل':'إظهار الكل')+'</button>';
+  var allVis=weeks.every(_gwVis);
+  var bs='border-radius:7px;padding:3px 10px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;margin-right:4px;';
+  h+='<button style="background:#2d0020;border:1.5px solid #831843;color:#f9a8d4;'+bs+'" onclick="gradeWeeksToggleAll('+(allVis?'false':'true')+')">'+(allVis?'إخفاء الكل':'إظهار الكل')+'</button>';
+  h+='<button style="background:#2d0020;border:1.5px solid #831843;color:#fca5a5;'+bs+'" onclick="gradeWeeksClearAll()">🧹 مسح الكل</button>';
+  h+='<button style="background:'+(sync?'#831843':'#2d0020')+';border:1.5px solid '+(sync?'#ec4899':'#831843')+';color:'+(sync?'white':'#f9a8d4')+';'+bs+'" onclick="gradeWeeksToggleSync()" title="عرض الأسابيع من 1 حتى الأسبوع الحالي فقط، ويتحدث تلقائياً">🔄 متزامن مع الأسبوع الحالي'+(sync?' ✓':'')+'</button>';
   bar.innerHTML=h;
 }
 function gradeWeekToggle(w){
-  var pgIds=['pg_assess','pg_hw','pg_beh'];
-  var colIds={'pg_assess':'a'+w,'pg_hw':'h'+w,'pg_beh':'bw'+w};
-  var assessPg=(DB.colPages||[]).find(function(p){return p.id==='pg_assess';});
-  var col=assessPg&&(assessPg.cols||[]).find(function(c){return c.id==='a'+w;});
-  var newVis=col?!col.visible:false;
-  pgIds.forEach(function(pgId){colToggleVisNoRender(pgId,colIds[pgId],newVis);});
+  _ensureWeekCols();
+  var newVis=!_gwVis(w);
+  _gwSetWeek(w,newVis);
+  if(DB.meta)DB.meta.gwSyncCurrent=false;
   saveDB();renderGrades();
   renderGradeWeeksBar();
 }
 function gradeWeeksToggleAll(vis){
-  var aw=Math.min(Math.max(1,Number(DB.meta&&DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  var weeks=ALL_WEEKS.slice(0,aw);
-  var pgIds=['pg_assess','pg_hw','pg_beh'];
-  weeks.forEach(function(w){
-    pgIds.forEach(function(pgId){
-      var colId=pgId==='pg_assess'?'a'+w:pgId==='pg_hw'?'h'+w:'bw'+w;
-      colToggleVisNoRender(pgId,colId,vis);
-    });
-  });
+  _ensureWeekCols();
+  _gwActiveWeeks().forEach(function(w){_gwSetWeek(w,vis);});
+  if(DB.meta)DB.meta.gwSyncCurrent=false;
+  saveDB();renderGrades();
+  renderGradeWeeksBar();
+}
+// مسح الكل: إخفاء كل الأسابيع وإلغاء وضع التزامن
+function gradeWeeksClearAll(){
+  _ensureWeekCols();
+  _gwActiveWeeks().forEach(function(w){_gwSetWeek(w,false);});
+  if(DB.meta)DB.meta.gwSyncCurrent=false;
+  saveDB();renderGrades();
+  renderGradeWeeksBar();
+}
+// عرض متزامن مع الأسبوع الحالي (تشغيل/إيقاف)
+function gradeWeeksToggleSync(){
+  _ensureWeekCols();
+  var on=!(DB.meta&&DB.meta.gwSyncCurrent);
+  DB.meta.gwSyncCurrent=on;
+  if(on)gradeWeeksApplySync();
+  else _gwActiveWeeks().forEach(function(w){_gwSetWeek(w,true);});
   saveDB();renderGrades();
   renderGradeWeeksBar();
 }

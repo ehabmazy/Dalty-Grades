@@ -9,6 +9,8 @@ function renderGrades(){
   var root=document.getElementById("gradesRoot");
   if(!root)return;
   if(!GS.activeClass&&DB.classes.length)GS.activeClass=DB.classes[0];
+  // وضع العرض المتزامن مع الأسبوع الحالي: يتحدث تلقائياً مع تغيّر التاريخ
+  if(DB.meta&&DB.meta.gwSyncCurrent&&typeof gradeWeeksApplySync==='function')gradeWeeksApplySync();
   var cls=GS.activeClass;
   var students=DB.data[cls]||[];
   var search=GS.search.trim();

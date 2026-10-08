@@ -207,6 +207,21 @@ function defaultColPages(){
   ];
 }
 
+
+function _ensureWeekCols(){
+  if(!DB||!DB.colPages)return;
+  var defs={pg_assess:{p:"a",l:"تقييم أسبوع ",m:20},pg_hw:{p:"h",l:"واجب أسبوع ",m:10},pg_beh:{p:"bw",l:"سلوك ومواظبة أسبوع ",m:10}};
+  DB.colPages.forEach(function(pg){
+    var d=defs[pg.id];if(!d)return;
+    if(!pg.cols)pg.cols=[];
+    var have={};pg.cols.forEach(function(c){have[c.id]=true;});
+    var maxOrd=-1;pg.cols.forEach(function(c){if(typeof c.order==="number"&&c.order>maxOrd)maxOrd=c.order;});
+    ALL_WEEKS.forEach(function(w,i){
+      if(!have[d.p+w]){pg.cols.push({id:d.p+w,field:d.p+w,label:d.l+w,max:d.m,visible:true,order:++maxOrd});}
+    });
+  });
+}
+
 function defaultSchedule(){return{periods:[],slots:{}};}
 
 function freshDB(){
@@ -225,8 +240,27 @@ function loadDB(){
   try{var s=localStorage.getItem(STORE_KEY);if(s)return JSON.parse(s);}catch(e){}
   return null;
 }
+var _saveFailWarned=0;
 function saveDB(){
-  try{localStorage.setItem(STORE_KEY,JSON.stringify(DB));}catch(e){}
+  var str;
+  try{str=JSON.stringify(DB);}catch(e){return false;}
+  try{localStorage.setItem(STORE_KEY,str);return true;}catch(e){}
+  // الذاكرة ممتلئة: الأولوية للبيانات الأساسية — نحذف أقدم النسخ الاحتياطية المحلية ونعيد المحاولة
+  try{
+    var bk=JSON.parse(localStorage.getItem('grades_v6_backups')||'[]');
+    while(bk.length>0){
+      bk.pop();
+      try{localStorage.setItem('grades_v6_backups',JSON.stringify(bk));}catch(e2){}
+      try{localStorage.setItem(STORE_KEY,str);return true;}catch(e3){}
+    }
+    try{localStorage.removeItem('grades_v6_backups');}catch(e4){}
+    localStorage.setItem(STORE_KEY,str);return true;
+  }catch(e5){}
+  if(Date.now()-_saveFailWarned>15000){
+    _saveFailWarned=Date.now();
+    try{alert("⚠️ تعذّر حفظ البيانات: ذاكرة المتصفح ممتلئة!\nصدّر نسخة احتياطية (ملف JSON) فوراً من صفحة النسخ الاحتياطي ولا تغلق الصفحة.");}catch(e6){}
+  }
+  return false;
 }
 function initDB(){
   var saved=loadDB();
@@ -279,6 +313,8 @@ function initDB(){
     var hwIdx=DB.colPages.findIndex?DB.colPages.findIndex(function(p){return p.id==="pg_hw";}):1;
     DB.colPages.splice(hwIdx+1,0,{id:"pg_beh",name:"السلوك والمواظبة /10",cols:behColsMig});
   }
+  // migration: تأكد من وجود أعمدة كل الأسابيع (حتى 30) في صفحات التقييم/الواجب/السلوك — النسخ القديمة كانت 14 فقط
+  _ensureWeekCols();
   // migration: update pg_beh name
   var _pb=DB.colPages&&DB.colPages.find(function(p){return p.id==="pg_beh";});
   if(_pb&&_pb.name!=="السلوك والمواظبة /10")_pb.name="السلوك والمواظبة /10";
