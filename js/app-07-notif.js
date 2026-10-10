@@ -3124,7 +3124,7 @@ function filterGeneralTable(q){
   var rows=document.querySelectorAll('#generalTable tbody tr');
   rows.forEach(function(r){
     var name=(r.getAttribute('data-name')||'').toLowerCase();
-    var matchQ=!q||name.indexOf(q)>=0;
+    var matchQ=!q||nameMatch(name,q);
     var filter=window._generalFilter||'all';
     var pct=parseInt(r.getAttribute('data-pct')||0);
     var abs=parseInt(r.getAttribute('data-abs')||0);

@@ -14,7 +14,7 @@ function renderGrades(){
   var cls=GS.activeClass;
   var students=DB.data[cls]||[];
   var search=GS.search.trim();
-  var filtered=search?students.filter(function(s,i){return s.name.indexOf(search)>=0||String(i+1)===search;}):students;
+  var filtered=search?students.filter(function(s,i){return nameMatch(s.name,search)||String(i+1)===search;}):students;
   var tmax=totalMax();
   var rmax=GS.distRange.max!==null?GS.distRange.max:tmax;
   var namesLocked=!!(DB.meta&&DB.meta.namesLocked);
@@ -285,7 +285,7 @@ function renderGrades(){
   }
 
   html+='<div class="tw"><table><thead><tr>';
-  html+='<th>م</th><th class="td-photo">صورة</th><th class="td-name">الاسم</th>';
+  html+='<th>م</th><th class="td-photo">صورة</th><th class="td-name" style="position:relative;">الاسم<span class="nm-rz" title="اسحب لتغيير عرض عمود الاسم — دبل كليك للرجوع للافتراضي" onpointerdown="gradesNameResizeStart(event)" ondblclick="gradesNameResizeReset()"></span></th>';
   pageCols.forEach(function(c){
     html+='<th>'+esc(c.label)+'<span class="ml">/'+c.max+'</span>';
     html+='<div style="display:flex;gap:2px;justify-content:center;margin-top:2px;">';
@@ -2130,3 +2130,36 @@ function sgCopy(){
 window.copyViewerLink = copyViewerLink;
 window.sgCopy = sgCopy;
 window._sgUpdateUrl = _sgUpdateUrl;
+
+// ══ تغيير عرض عمود الاسم بالسحب (يُحفظ على هذا الجهاز) ══
+(function(){
+  var KEY='grades_name_col_w',MIN=60,MAX=420;
+  function apply(w){
+    var r=document.documentElement;
+    if(w)r.style.setProperty('--nmw',w+'px');else r.style.removeProperty('--nmw');
+  }
+  try{var sv=Number(localStorage.getItem(KEY));if(sv>=MIN&&sv<=MAX)apply(sv);}catch(e){}
+  window.gradesNameResizeReset=function(){
+    apply(0);try{localStorage.removeItem(KEY);}catch(e){}
+  };
+  window.gradesNameResizeStart=function(ev){
+    ev.preventDefault();ev.stopPropagation();
+    var th=ev.target.parentNode,startX=ev.clientX,startW=th.getBoundingClientRect().width;
+    var rtl=getComputedStyle(document.body).direction==='rtl'||getComputedStyle(document.documentElement).direction==='rtl';
+    var cur=startW;
+    function mv(e){
+      var dx=e.clientX-startX;
+      cur=Math.min(MAX,Math.max(MIN,Math.round(startW+(rtl?-dx:dx))));
+      apply(cur);
+    }
+    function up(){
+      document.removeEventListener('pointermove',mv);
+      document.removeEventListener('pointerup',up);
+      document.removeEventListener('pointercancel',up);
+      try{localStorage.setItem(KEY,String(cur));}catch(e){}
+    }
+    document.addEventListener('pointermove',mv);
+    document.addEventListener('pointerup',up);
+    document.addEventListener('pointercancel',up);
+  };
+})();

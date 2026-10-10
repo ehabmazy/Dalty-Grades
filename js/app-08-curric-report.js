@@ -343,7 +343,7 @@ function frFilter(q){
   window._frSorted.forEach(function(s){
     var card=document.getElementById('frcard_'+s.id);
     var lbl=document.getElementById('frl_'+s.id);
-    var match=!q||s.name.indexOf(q)>=0;
+    var match=!q||nameMatch(s.name,q);
     if(card) card.style.display=match?'':'none';
     if(lbl) lbl.style.display=match?'':'none';
   });

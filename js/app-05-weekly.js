@@ -70,7 +70,7 @@ function renderWeekly(){
     var _srchNum=Number(_srch);
     displayStudents=students.filter(function(s,si){
       if(!isNaN(_srchNum)&&_srch!==''&&(si+1)===_srchNum)return true;
-      return s.name&&s.name.indexOf(_srch)>=0;
+      return s.name&&nameMatch(s.name,_srch);
     });
   }
 

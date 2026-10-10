@@ -280,13 +280,7 @@ function parseGradeStr(s){
 }
 function dnorm(s){
   if(!s)return"";
-  return String(s)
-    .replace(/[\u064B-\u065F\u0670]/g,"")
-    .replace(/[أإآ]/g,"ا")
-    .replace(/[ىئ]/g,"ي")
-    .replace(/ة/g,"ه")
-    .replace(/ؤ/g,"و")
-    .toLowerCase().trim();
+  return _nrmAr(s);
 }
 function dClsStudents(cls){return(DB.data[cls]||[]).map(function(s){return Object.assign({},s,{_cls:cls});});}
 function dPool(){return DS.scope==="all"?dAllStudents():dClsStudents(DS.activeClass);}

@@ -222,6 +222,28 @@ function _ensureWeekCols(){
   });
 }
 
+/* ── توحيد الحروف العربية للمطابقة (الإدخال الصوتي/البحث): ا أ إ آ ٱ | ي ى ئ | ة ه | ؤ و | ء | تشكيل | تطويل ── */
+function _nrmAr(s){
+  if(s===null||s===undefined)return"";
+  return String(s)
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g,"")
+    .replace(/[\u0623\u0625\u0622\u0671]/g,"\u0627")
+    .replace(/[\u0649\u0626\u06CC]/g,"\u064A")
+    .replace(/\u0629/g,"\u0647")
+    .replace(/\u0624/g,"\u0648")
+    .replace(/\u06A9/g,"\u0643")
+    .replace(/\u0621/g,"")
+    .replace(/[\u0660-\u0669]/g,function(d){return String(d.charCodeAt(0)-1632);})
+    .toLowerCase().replace(/\s+/g," ").trim();
+}
+/* هل يطابق الاسم نص البحث؟ — يتجاهل اختلاف الهمزات/الياء/التاء المربوطة والمسافات (عبد الله = عبدالله) */
+function nameMatch(name,q){
+  var nq=_nrmAr(q);if(!nq)return true;
+  var nn=_nrmAr(name);if(!nn)return false;
+  var cn=nn.replace(/\s/g,"");
+  return nq.split(" ").every(function(t){return t&&cn.indexOf(t)>=0;})||cn.indexOf(nq.replace(/\s/g,""))>=0;
+}
+
 function defaultSchedule(){return{periods:[],slots:{}};}
 
 function freshDB(){

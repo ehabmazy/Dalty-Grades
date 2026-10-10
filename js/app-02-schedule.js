@@ -1236,7 +1236,7 @@ function renderAbsence(){
   });
 
   // Filtered students
-  var filtered=AS.search?students.filter(function(s){return s.name.indexOf(AS.search)>=0;}):students;
+  var filtered=AS.search?students.filter(function(s){return nameMatch(s.name,AS.search);}):students;
 
   var html='<div class="abs-page">';
   html+='<div class="abs-header">';

@@ -2571,3 +2571,32 @@ tr.hl-abs td{background:#fff7ed!important;}
 
 /* قفل تعديل الأسماء */
 .ni[readonly]{background:transparent;border-color:transparent;cursor:default;}
+
+/* عرض عمود الاسم في صفحة الدرجات — قابل للسحب */
+.grades-page .tw .td-name{min-width:var(--nmw,145px);width:var(--nmw,145px);max-width:var(--nmw,145px);}
+.grades-page .tw .td-name .ni{width:100%;min-width:0;box-sizing:border-box;text-overflow:ellipsis;}
+.nm-rz{position:absolute;top:0;bottom:0;inset-inline-end:-3px;width:10px;cursor:col-resize;touch-action:none;z-index:2;}
+.nm-rz::after{content:"";position:absolute;top:20%;bottom:20%;left:4px;width:2px;border-radius:2px;background:#94a3b8;opacity:.7;}
+.nm-rz:hover::after{background:#7c3aed;opacity:1;}
+
+/* لوحة الأرقام العائمة: غائب/مرضي + تصغير */
+#floatingNumpad .fnp-row2 { grid-template-columns: repeat(2, 1fr); }
+#floatingNumpad .fnp-abs  { background: rgba(239,68,68,.15); border-color: #dc2626; color: #fca5a5; }
+#floatingNumpad .fnp-sick { background: rgba(168,85,247,.15); border-color: #9333ea; color: #d8b4fe; }
+#floatingNumpad .fnp-abs:active  { background: rgba(239,68,68,.35); }
+#floatingNumpad .fnp-sick:active { background: rgba(168,85,247,.35); }
+#floatingNumpad .fnp-abs small, #floatingNumpad .fnp-sick small { font-size: .5em; font-weight: 700; opacity: .85; }
+.fnp-min-btn { background: rgba(59,130,246,.15) !important; border-color: #3b82f6 !important; color: #93c5fd !important; margin-inline-end: 4px; }
+/* مستويات تصغير الحجم */
+#floatingNumpad.fnp-s1 { width: 230px !important; min-width: 200px !important; height: auto !important; min-height: 0 !important; }
+#floatingNumpad.fnp-s2 { width: 170px !important; min-width: 150px !important; height: auto !important; min-height: 0 !important; }
+#floatingNumpad.fnp-s1 .fnp-key { font-size: 15px; padding: 6px 0; border-radius: 7px; }
+#floatingNumpad.fnp-s2 .fnp-key { font-size: 12px; padding: 4px 0; border-radius: 6px; }
+#floatingNumpad.fnp-s1 .fnp-body { padding: 5px; gap: 4px; }
+#floatingNumpad.fnp-s2 .fnp-body { padding: 3px; gap: 3px; }
+#floatingNumpad.fnp-s1 .fnp-row, #floatingNumpad.fnp-s2 .fnp-row { gap: 3px; }
+#floatingNumpad.fnp-s1 .fnp-title { font-size: 10px; }
+#floatingNumpad.fnp-s2 .fnp-title { font-size: 8px; }
+#floatingNumpad.fnp-s1 .fnp-resize-handle, #floatingNumpad.fnp-s1 .fnp-resize-handle-r,
+#floatingNumpad.fnp-s2 .fnp-resize-handle, #floatingNumpad.fnp-s2 .fnp-resize-handle-r { display: none; }
+.fnp-min-btn { width: auto !important; padding: 0 5px; font-size: 10px !important; }
