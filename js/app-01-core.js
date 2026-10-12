@@ -408,6 +408,13 @@ function holdEnd(){
   clearInterval(_holdInterval);
   _holdTimer=null;_holdInterval=null;
 }
+// لون المجموع نسبةً إلى الدرجة العظمى المرصودة (نفس حدود gc عند 70: أخضر ≥ 60، كهرماني ≥ 40)
+function gcRel(t,max){
+  if(t==="غ")return"#b45309";
+  var m=Number(max)||totalMax();
+  var v=Number(t)*70/m;
+  return gc(v);
+}
 function gc(t){if(t==="غ")return"#b45309";if(t>=60)return"#10b981";if(t>=40)return"#f59e0b";return"#ef4444";}
 
 function showSnack(msg,undoFn,type){
