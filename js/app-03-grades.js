@@ -160,6 +160,7 @@ function renderGrades(){
       var idx=students.indexOf(s);
       var res=calcStudent(s,cls);
       var tot=res.total;
+      var _rm=recordedMax(cls);
       html+='<tr>';
       html+='<td class="td-rn">'+(idx+1)+'</td>';
       var _gPhoto=s.photo||(DB.meta&&DB.meta.defaultStudentPhoto?DB.meta.defaultStudentPhoto:'');
@@ -236,7 +237,7 @@ function renderGrades(){
       if(_showAvgHw)html+='<td class="avg-cell">'+res.avgHw+'</td>';
       if(_showAvgBeh)html+='<td class="avg-cell" style="color:#000000;">'+avgBeh+'</td>';
       html+='<td class="avg-cell gv-exam">'+res.exTotal+'</td>';
-      if(_showTotal)html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gc(tot)+'22;color:'+gc(tot)+';border:1.5px solid '+gc(tot)+'">'+tot+'</span></td>';
+      if(_showTotal)html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gcRel(tot,recordedMax(cls))+'22;color:'+gcRel(tot,recordedMax(cls))+';border:1.5px solid '+gcRel(tot,recordedMax(cls))+'">'+tot+'</span></td>';
       if(_showTotal){
         var _absDedHome=res.absenceDeduct||0;
         html+='<td>'+(_absDedHome>0?'<span style="color:#f97316;font-weight:700;font-size:11px;">−'+_absDedHome+'</span>':'<span style="color:#475569;">—</span>')+'</td>';
@@ -342,8 +343,9 @@ function renderGrades(){
     html+='<td class="avg-cell gv-exam">'+res.exTotal+'</td>';
     // Total
     var tot=res.total;
+    var _rm=recordedMax(cls);
     var _absDed=res.absenceDeduct||0;
-    html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gc(tot)+'22;color:'+gc(tot)+';border:1.5px solid '+gc(tot)+'" title="'+(_absDed>0?'خصم غياب: −'+_absDed:'')+'">';
+    html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gcRel(tot,recordedMax(cls))+'22;color:'+gcRel(tot,recordedMax(cls))+';border:1.5px solid '+gcRel(tot,recordedMax(cls))+'" title="'+(_absDed>0?'خصم غياب: −'+_absDed:'')+'">';
     html+=tot;
     if(_absDed>0)html+='<sup style="font-size:7px;color:#f97316;margin-right:1px;">−'+_absDed+'</sup>';
     html+='</span></td>';
@@ -468,10 +470,11 @@ function _gradesUpdateTotCell(cls,idx){
   var total=calcStudent(s,cls).total;
   var cell=document.getElementById('tot_'+idx);
   if(!cell)return;
-  var isFail=total<Math.round(tmax/2);
+  var _c=gcRel(total,tmax);
   cell.textContent=total;
-  cell.style.background=isFail?'#fee2e2':'#d1fae5';
-  cell.style.color=isFail?'#b91c1c':'#065f46';
+  cell.style.background=_c+'22';
+  cell.style.color=_c;
+  cell.style.border='1.5px solid '+_c;
 }
 function gradesPhotoChange(e,idx){
   var f=e.target.files[0];if(!f)return;
