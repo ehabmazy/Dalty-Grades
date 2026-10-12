@@ -1566,7 +1566,7 @@ function metricOf(s, cls, m) {
   }
   if (!hasAnyGrade(s)) return null;
   var cs = calcStudent(s, cls);
-  if (t === 'total') return { v: cs.total, max: totalMax() };
+  if (t === 'total') return { v: cs.total, max: recordedMax(cls) };
   if (t === 'avg_assess') return hasPrefix(s, 'a') ? { v: cs.avgAssess, max: maxFor('a1') } : null;
   if (t === 'avg_hw') return hasPrefix(s, 'h') ? { v: cs.avgHw, max: maxFor('h1') } : null;
   if (t === 'avg_beh') return (cs.avgBeh === '—' || !hasPrefix(s, 'bw')) ? null : { v: Number(cs.avgBeh), max: maxFor('bw1') };
@@ -1585,7 +1585,7 @@ function cmpOp(op, x, a, b) {
 /* ═════ تنظيف/اعتماد المعايير (من الذكاء أو من النماذج) ═════ */
 function normSpec(r) {
   r = r || {};
-  var kinds = ['missing', 'score', 'absences', 'summary'], aw = activeWeeks(), all = DB.classes || [];
+  var kinds = ['missing', 'score', 'absences', 'summary', 'student'], aw = activeWeeks(), all = DB.classes || [];
   var sp = { kind: kinds.indexOf(r.kind) >= 0 ? r.kind : 'score', title: String(r.title || '').slice(0, 100) };
   if (r.classes === 'all') sp.classes = all.slice();
   else if (Array.isArray(r.classes)) sp.classes = r.classes.filter(function (c) { return all.indexOf(c) >= 0; });
@@ -1615,6 +1615,8 @@ function normSpec(r) {
     sp.n = Math.max(0, Math.min(500, parseInt(r.n, 10) || 0));
   } else if (sp.kind === 'absences') {
     sp.min = Math.max(0, parseInt(r.min, 10)); if (isNaN(sp.min)) sp.min = 3;
+  } else if (sp.kind === 'student') {
+    sp.student = String(r.student || r.name || '').slice(0, 60);
   }
   return sp;
 }
@@ -1625,6 +1627,7 @@ function criteriaText(sp) {
   if (sp.kind === 'missing') return 'الفصول: ' + cl + ' — الخانات: ' + sp.fields.map(fieldLbl).join('، ') + ' — ' + wk + ' — الشرط: ناقص في ' + (sp.match === 'all' ? 'كل الخانات' : 'أي خانة');
   if (sp.kind === 'absences') return 'الفصول: ' + cl + ' — ' + wk + ' — الشرط: غياب ≥ ' + sp.min;
   if (sp.kind === 'summary') return 'الفصول: ' + cl;
+  if (sp.kind === 'student') return 'الفصول: ' + cl + ' — الطالب: ' + (sp.student || '—');
   var mname = ''; REP_METRICS.forEach(function (x) { if (x[0] === sp.metric.type) mname = x[1]; });
   if (sp.metric.type === 'cell') mname += ' (' + fieldLbl(sp.metric.field) + (/^ex/.test(sp.metric.field) ? '' : ' أسبوع ' + sp.metric.week) + ')';
   if (sp.metric.type === 'avg_range') mname += ' (' + fieldLbl(sp.metric.field) + ' — ' + wk + ')';
@@ -1633,11 +1636,143 @@ function criteriaText(sp) {
   return 'الفصول: ' + cl + ' — المقياس: ' + mname + ' — الشرط: ' + cond + (sp.n ? ' — أول ' + sp.n : '');
 }
 
+
+/* ═════ مستوى طالب معيّن ═════ */
+function studentNameScore(q, name) {
+  var qn = normAr(q), nn = normAr(name);
+  if (!qn || !nn) return 0;
+  var qt = qn.split(' ').filter(Boolean), nt = nn.split(' ').filter(Boolean);
+  var all = qt.every(function (x) { return nt.some(function (y) { return y === x || (x.length >= 2 && y.indexOf(x) === 0); }); });
+  if (all) return nn === qn ? 1 : 0.95;
+  return nameSim(q, name);
+}
+function absCountOf(cls, s) {
+  var ab = (DB.absences && DB.absences[cls] && DB.absences[cls][s.id]) || {}, a = 0, sk = 0, aw = activeWeeks();
+  Object.keys(ab).forEach(function (k) {
+    var m = /^w(\d+)_ci\d+$/.exec(k); if (!m) return;
+    var w = parseInt(m[1], 10); if (w < 1 || w > aw) return;
+    if (ab[k] === 'abs') a++; else if (ab[k] === 'sick') sk++;
+  });
+  return { a: a, sk: sk };
+}
+function weekPctOf(s, w) {
+  var sum = 0, c = 0;
+  ['assess', 'hw', 'beh'].forEach(function (f) {
+    var key = keyOf(f, w); if (!key) return;
+    var raw = s[key]; if (!recorded(raw)) return;
+    var n = raw === 'غ' ? 0 : Number(raw); if (isNaN(n)) return;
+    sum += n / maxFor(key) * 100; c++;
+  });
+  return c ? sum / c : null;
+}
+function studentTrend(s) {
+  var pts = [], aw = activeWeeks(), w, p;
+  for (w = 1; w <= aw; w++) { p = weekPctOf(s, w); if (p !== null) pts.push(p); }
+  if (pts.length < 4) return { txt: pts.length ? 'بيانات قليلة (' + pts.length + ' أسبوع مرصود)' : '—', dir: 0, n: pts.length };
+  var h = Math.floor(pts.length / 2);
+  var avg = function (a) { return a.reduce(function (x, y) { return x + y; }, 0) / a.length; };
+  var d = avg(pts.slice(pts.length - h)) - avg(pts.slice(0, h));
+  return { txt: d >= 5 ? 'تحسّن (+' + r1(d) + '٪)' : d <= -5 ? 'تراجع (' + r1(d) + '٪)' : 'مستقر', dir: d >= 5 ? 1 : d <= -5 ? -1 : 0, n: pts.length };
+}
+function relTxt(p, avgP) {
+  if (avgP === null || avgP === undefined) return '';
+  var d = p - avgP;
+  return d >= 5 ? 'أعلى من متوسط الفصل' : d <= -5 ? 'أقل من متوسط الفصل' : 'قريب من متوسط الفصل';
+}
+function runStudentReport(sp, res) {
+  var comps = [['total', 'المجموع الكلي', { type: 'total' }], ['avg_assess', 'متوسط التقييم', { type: 'avg_assess' }],
+    ['avg_hw', 'متوسط الواجب', { type: 'avg_hw' }], ['avg_beh', 'متوسط السلوك', { type: 'avg_beh' }], ['exams', 'الاختبارات', { type: 'exams' }]];
+  res.title = res.title || 'مستوى الطالب';
+  res.head = ['الطالب', 'البند', 'درجته', 'متوسط الفصل', 'التقدير'];
+  var found = [];
+  sp.classes.forEach(function (cls) {
+    namedStudents(cls).forEach(function (e) {
+      var sc = studentNameScore(sp.student, e.s.name);
+      if (sc >= 0.6) found.push({ cls: cls, e: e, sc: sc });
+    });
+  });
+  found.sort(function (a, b) { return b.sc - a.sc; });
+  var total = found.length;
+  if (total) { var top = found[0].sc; found = found.filter(function (f) { return f.sc >= Math.max(0.6, top - 0.15); }); }
+  var shown = found.slice(0, 4);
+  res.agg.matches = total;
+  if (!shown.length) {
+    res.foot.push('لم يُعثر على طالب بهذا الاسم. تأكد من كتابة الاسم أو اختر الفصل الصحيح.');
+    res.agg.found = false; res.agg.considered = 0; return 0;
+  }
+  var multi = sp.classes.length > 1;
+  shown.forEach(function (f, fi) {
+    var s = f.e.s, cls = f.cls, label = s.name + (multi ? ' (' + cls + ')' : '');
+    var list = namedStudents(cls);
+    if (!hasAnyGrade(s) || s._totalAbsent) {
+      res.data.push([label, 'لا توجد درجات مرصودة لهذا الطالب بعد', '—', '—', '—']);
+      return;
+    }
+    var stats = {};
+    comps.forEach(function (c) {
+      var mine = metricOf(s, cls, c[2]), pcts = [];
+      list.forEach(function (o) { var m = metricOf(o.s, cls, c[2]); if (m && m.max) pcts.push(m.v / m.max * 100); });
+      var avgP = pcts.length ? pcts.reduce(function (a, b) { return a + b; }, 0) / pcts.length : null;
+      stats[c[0]] = { m: mine, avgP: avgP, pcts: pcts, pct: mine && mine.max ? mine.v / mine.max * 100 : null };
+    });
+    comps.forEach(function (c) {
+      var st = stats[c[0]];
+      if (!st.m) { res.data.push([label, c[1], 'لم يُرصد', st.avgP === null ? '—' : r1(st.avgP) + '٪', '—']); return; }
+      var note = levelOf(st.pct) + (st.avgP === null ? '' : ' — ' + relTxt(st.pct, st.avgP));
+      if (c[0] === 'total') {
+        var rank = 1 + st.pcts.filter(function (x) { return x > st.pct + 1e-9; }).length;
+        note += ' — الترتيب ' + rank + ' من ' + st.pcts.length;
+        stats.rank = rank; stats.of = st.pcts.length;
+      }
+      res.data.push([label, c[1], r1(st.m.v) + '/' + r1(st.m.max) + ' (' + r1(st.pct) + '٪)', st.avgP === null ? '—' : r1(st.avgP) + '٪', note]);
+    });
+    var ab = absCountOf(cls, s), abAll = list.map(function (o) { var x = absCountOf(cls, o.s); return x.a; });
+    var abAvg = abAll.length ? abAll.reduce(function (a, b) { return a + b; }, 0) / abAll.length : 0;
+    res.data.push([label, 'الغياب', ab.a + ' فترة' + (ab.sk ? ' (+ مرض ' + ab.sk + ')' : ''), r1(abAvg) + ' فترة', ab.a > abAvg + 2 ? 'غيابه أكثر من المعتاد' : 'عادي']);
+    var tr = studentTrend(s);
+    res.data.push([label, 'الاتجاه خلال الأسابيع', tr.txt, '—', tr.dir > 0 ? 'يتحسن' : tr.dir < 0 ? 'يحتاج متابعة' : '—']);
+    /* درجات كل أسبوع: تقييم / واجب / سلوك */
+    var aw2 = activeWeeks(), wl = [['assess', 'تقييم'], ['hw', 'واجب'], ['beh', 'سلوك']];
+    for (var wk = 1; wk <= aw2; wk++) {
+      var any = false, cellsTxt = wl.map(function (f) {
+        var key = keyOf(f[0], wk), raw = key ? s[key] : undefined;
+        if (!recorded(raw)) return f[1] + ' —';
+        any = true;
+        return f[1] + ' ' + (raw === 'غ' ? 'غائب' : raw + '/' + maxFor(key));
+      });
+      if (!any) continue;
+      var wp = weekPctOf(s, wk), cps = [];
+      list.forEach(function (o) { var x = weekPctOf(o.s, wk); if (x !== null) cps.push(x); });
+      var cAvg = cps.length ? cps.reduce(function (a, b) { return a + b; }, 0) / cps.length : null;
+      res.data.push([label, 'أسبوع ' + wk, cellsTxt.join(' • '), cAvg === null ? '—' : r1(cAvg) + '٪', wp === null ? '—' : levelOf(wp) + ' (' + r1(wp) + '٪)']);
+    }
+    if (fi === 0) {
+      var parts = ['avg_assess', 'avg_hw', 'avg_beh'].filter(function (k) { return stats[k].pct !== null; });
+      var strong = null, weak = null;
+      parts.forEach(function (k) {
+        if (!strong || stats[k].pct > stats[strong].pct) strong = k;
+        if (!weak || stats[k].pct < stats[weak].pct) weak = k;
+      });
+      var nm = { avg_assess: 'التقييم', avg_hw: 'الواجب', avg_beh: 'السلوك' };
+      var t = stats.total;
+      res.agg.found = true; res.agg.recordedMax = recordedMax(cls);
+      if (t && t.m) { res.agg.totalPct = r1(t.pct); res.agg.level = levelOf(t.pct); res.agg.classAvgPct = t.avgP === null ? null : r1(t.avgP); res.agg.rank = stats.rank; res.agg.of = stats.of; }
+      if (parts.length > 1 && strong !== weak) { res.agg.strongest = nm[strong]; res.agg.weakest = nm[weak]; res.foot.push('أقوى بند: ' + nm[strong] + ' (' + r1(stats[strong].pct) + '٪) — أضعف بند: ' + nm[weak] + ' (' + r1(stats[weak].pct) + '٪).'); }
+      res.agg.absences = ab.a; res.agg.trend = tr.txt;
+      res.foot.push('المستوى محسوب على ما رُصد حتى الآن (الدرجة العظمى المرصودة ' + recordedMax(cls) + ').');
+    }
+  });
+  if (total > shown.length || found.length > 1) res.foot.push('تطابق أكثر من طالب مع هذا الاسم — اكتب الاسم كاملاً لتحديد الطالب.');
+  return shown.length;
+}
+
 /* ═════ المحرك ═════ */
 function runReport(sp) {
   var multi = sp.classes.length > 1, res = { kind: sp.kind, title: sp.title || '', criteria: criteriaText(sp), head: [], data: [], foot: [], agg: { kind: sp.kind, classes: sp.classes.slice() } };
   var considered = 0;
-  if (sp.kind === 'missing') {
+  if (sp.kind === 'student') {
+    considered = runStudentReport(sp, res);
+  } else if (sp.kind === 'missing') {
     var cells = [];
     sp.fields.forEach(function (f) {
       if (f === 'ex1' || f === 'ex2') cells.push({ key: f, lbl: fieldLbl(f) });
@@ -1683,6 +1818,7 @@ function runReport(sp) {
     res.head = ['الفصل', 'الطلاب', 'المتوسط', 'الأعلى', 'الأدنى', 'متفوقون (٨٥٪+)', 'ناجحون (≥' + PASS_RAW + ')', 'ضعاف (<٥٠٪)', 'بلا درجات'];
     var tmax = totalMax(), tot = { n: 0, sum: 0, c: 0, top: 0, pass: 0, weak: 0, none: 0 };
     sp.classes.forEach(function (cls) {
+      var tmax = recordedMax(cls);
       var list = namedStudents(cls), vals = [], none = 0;
       list.forEach(function (e) { var m = metricOf(e.s, cls, { type: 'total' }); if (m) vals.push(m.v); else none++; });
       var sum = vals.reduce(function (a, b) { return a + b; }, 0);
@@ -1788,13 +1924,13 @@ function repPrint(res, writeup) {
 
 /* ═════ الواجهة ═════ */
 var SYS_REP = 'You turn a teacher\'s Arabic request for a class report into a JSON report spec for a school gradebook app. You never see student data. ' +
-  'Output ONE JSON object only (no markdown): {"kind":"missing|score|absences|summary","title":"short Arabic title","classes":"selected"|"all"|["class name"],' +
+  'Output ONE JSON object only (no markdown): {"kind":"missing|score|absences|summary|student","title":"short Arabic title","classes":"selected"|"all"|["class name"],' +
   '"fields":["hw","assess","beh","ex1","ex2"],"from":1,"to":1,"match":"any|all","metric":"total|avg_assess|avg_hw|avg_beh|exams|cell|avg_range","field":"hw","week":3,' +
-  '"op":"lt|lte|gt|gte|between|none","value":50,"value2":100,"unit":"percent|raw","order":"asc|desc","n":0,"min":3,"clarification":""}. Include only keys relevant to the kind.\n' +
+  '"student":"student name as written","op":"lt|lte|gt|gte|between|none","value":50,"value2":100,"unit":"percent|raw","order":"asc|desc","n":0,"min":3,"clarification":""}. Include only keys relevant to the kind.\n' +
   'Rules:\n- missing = students whose grade cells are EMPTY (not recorded) in given fields (hw=الواجب, assess=التقييم, beh=السلوك, ex1/ex2=الاختبارات) for weeks from..to. match "any" unless the teacher says all.\n' +
   '- score = filter/rank students by a metric. "ضعاف/متعثرون/ضعيف" => metric total, op lt, value 50, unit percent, order asc. "متفوقون/متميزون/الأوائل" => op gte, value 85, unit percent, order desc. ' +
   '"ناجحون" => total gte 60 unit raw; "راسبون" => total lt 60 unit raw. If a number is given ("أقل من 5 في واجب أسبوع 3") use metric cell with field/week, unit raw. "أعلى 10 طلاب" => op none, order desc, n 10. "أضعف 5" => op none, order asc, n 5.\n' +
-  '- absences = students with many absences in weeks from..to (default all weeks); min = minimum absence periods.\n- summary = general overview of classes.\n' +
+  '- absences = students with many absences in weeks from..to (default all weeks); min = minimum absence periods.\n- summary = general overview of classes.\n- student = the level/status of ONE named student ("ما مستوى الطالب أحمد؟", "وضع محمد علي"); put the name in student.\n' +
   '- classes: "selected" unless the teacher mentions all classes ("كل الفصول") => "all", or names specific classes from the list.\n' +
   '- weeks default to the current week for missing; for absences default all weeks.\n- If the request cannot be understood as a report, set clarification in Arabic.';
 
@@ -1807,7 +1943,8 @@ var REP_EXAMPLES = [
   'أضعف 10 طلاب في المجموع',
   'المتفوقون في كل الفصول',
   'من حصل على أقل من 5 في تقييم الأسبوع 3؟',
-  'الطلاب الذين غابوا أكثر من 4 فترات'
+  'الطلاب الذين غابوا أكثر من 4 فترات',
+  'ما مستوى الطالب أحمد محمد؟'
 ];
 
 function viewRep() {
@@ -1844,6 +1981,7 @@ function buildPresets() {
     { t: '📭 لم يُرصد السلوك', s: function () { return { kind: 'missing', title: 'لم تُرصد درجات السلوك', fields: ['beh'] }; } },
     { t: '📭 ناقص في الثلاثة', s: function () { return { kind: 'missing', title: 'الطلاب الذين لم تكتمل درجاتهم', fields: ['hw', 'assess', 'beh'] }; } },
     { t: '🚫 الأكثر غياباً', s: function () { return { kind: 'absences', title: 'الطلاب الأكثر غياباً', from: 1, to: aw, min: 3 }; } },
+    { t: '👤 مستوى طالب', s: function () { var n = prompt('اكتب اسم الطالب (أو جزءاً منه):'); if (!n || !n.trim()) return null; return { kind: 'student', title: 'مستوى الطالب', student: n.trim() }; } },
     { t: '📊 ملخص الفصول', s: function () { return { kind: 'summary', title: 'ملخص الفصول' }; } }
   ];
 }
@@ -1874,6 +2012,8 @@ function controlsHtml(sp) {
   } else if (sp.kind === 'absences') {
     h += ctl('من أسبوع', selHtml('from', weekOpts(), sp.from) + ' إلى ' + selHtml('to', weekOpts(), sp.to));
     h += ctl('غياب لا يقل عن', numHtml('min', sp.min, 56) + ' فترة');
+  } else if (sp.kind === 'student') {
+    h += ctl('اسم الطالب', '<input type="text" value="' + esc(sp.student || '') + '" oninput="DAI.rs(\'student\',this.value,true)" placeholder="اكتب الاسم أو جزءاً منه" style="' + SEL + 'width:190px;">');
   } else if (sp.kind === 'score') {
     h += ctl('المقياس', selHtml('mtype', REP_METRICS, sp.metric.type));
     if (sp.metric.type === 'cell') h += ctl('الخانة', selHtml('mfield', REP_FIELDS.map(function (f) { return [f[0], f[1]]; }), sp.metric.field) + (/^ex/.test(sp.metric.field) ? '' : selHtml('mweek', weekOpts(), sp.metric.week)));
@@ -1971,6 +2111,7 @@ function repSet(k, v, quiet) {
   else if (k === 'from' || k === 'to') { sp[k] = parseInt(v, 10) || 1; if (sp.to < sp.from) { if (k === 'from') sp.to = sp.from; else sp.from = sp.to; redraw = true; } if (sp.metric) { sp.metric.from = sp.from; sp.metric.to = sp.to; } }
   else if (k === 'match') sp.match = v === 'all' ? 'all' : 'any';
   else if (k === 'min') sp.min = Math.max(0, parseInt(v, 10) || 0);
+  else if (k === 'student') sp.student = String(v || '').slice(0, 60);
   else if (k === 'mtype') { sp.metric.type = v; if (v === 'avg_range') sp.unit = 'percent'; redraw = true; }
   else if (k === 'mfield') { sp.metric.field = v; redraw = true; }
   else if (k === 'mweek') sp.metric.week = parseInt(v, 10) || 1;
@@ -2305,7 +2446,7 @@ window.DAI = {
   pasteKey: pasteKey,
   repScope: function (v) { ST.repAll = (v === '__all__'); if (!ST.repAll) ST.cls = v; },
   setWeekQuiet: function (v) { ST.week = parseInt(v, 10) || 1; },
-  repPreset: function (i) { showReport(ST.presets[i].s()); },
+  repPreset: function (i) { var sp = ST.presets[i].s(); if (sp) showReport(sp); },
   repText: function (v) { ST.repTxt = v; },
   repExample: function (i) { ST.repTxt = REP_EXAMPLES[i]; viewRep(); },
   repAnalyze: repAnalyze,
