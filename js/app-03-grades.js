@@ -120,7 +120,7 @@ function renderGrades(){
       if(_showAvgHw)html+='<th style="background:#0a1e35;">متوسط<br><small>واجب</small></th>';
       if(_showAvgBeh)html+='<th style="background:#1a0d3a;">متوسط<br><small>سلوك</small></th>';
       html+='<th style="background:#1c1400;">اختبارات<br><small>/30</small></th>';
-      if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+tmax+'</small></th>';
+      if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+recordedMax(cls)+'</small></th>';
       if(_showTotal)html+='<th title="عدد الدرجات المخصومة من المجموع بسبب الغياب">خصم<br><small style="color:#f97316;">الغياب</small></th>';
       if(_showDist)html+='<th>توزيع</th>';
       html+='<th>تحريك</th><th>حذف</th>';
@@ -139,7 +139,7 @@ function renderGrades(){
       if(_showAvgHw)html+='<th style="background:#0a1e35;">متوسط<br><small>واجب</small></th>';
       if(_showAvgBeh)html+='<th style="background:#1a0d3a;">متوسط<br><small>سلوك</small></th>';
       html+='<th style="background:#1c1400;">اختبارات<br><small>/30</small></th>';
-      if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+tmax+'</small></th>';
+      if(_showTotal)html+='<th style="background:#0a1e35;">مجموع<br><small>/'+recordedMax(cls)+'</small></th>';
       if(_showTotal)html+='<th title="عدد الدرجات المخصومة من المجموع بسبب الغياب">خصم<br><small style="color:#f97316;">الغياب</small></th>';
       if(_showDist)html+='<th>توزيع</th>';
       html+='<th>تحريك</th><th>حذف</th>';
@@ -297,7 +297,7 @@ function renderGrades(){
   html+='<th>متوسط<span class="ml">واجب/10</span></th>';
   html+='<th title="متوسط السلوك = مجموع درجات السلوك الأسبوعية ÷ عدد الأسابيع المُرصدة">متوسط سلوك<span class="ml">/10</span><br><span style="font-size:7px;color:#a78bfa;font-weight:400;">Σ سلوك ÷ ن</span></th>';
   html+='<th title="مجموع درجات الاختبارات">متوسط<br><span style="font-size:7px;color:#fbbf24;">اختبارات/30</span></th>';
-  html+='<th>مجموع<span class="ml">/'+tmax+'</span></th>';
+  html+='<th title="الدرجة العظمى بحسب ما رُصد حتى الآن">مجموع<span class="ml">/'+recordedMax(cls)+'</span></th>';
   html+='<th title="عدد الدرجات المخصومة من المجموع بسبب الغياب">خصم<br><span style="font-size:7px;color:#f97316;">الغياب</span></th>';
   html+='<th>غياب</th><th>توزيع</th><th>تحريك</th><th>حذف</th>';
   html+='</tr></thead><tbody>';
@@ -464,7 +464,7 @@ function gradesSetField(idx,field,val){
 function _gradesUpdateTotCell(cls,idx){
   var s=DB.data[cls]&&DB.data[cls][idx];
   if(!s)return;
-  var tmax=totalMax();
+  var tmax=recordedMax(cls);
   var total=calcStudent(s,cls).total;
   var cell=document.getElementById('tot_'+idx);
   if(!cell)return;
