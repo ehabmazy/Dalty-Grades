@@ -1905,8 +1905,8 @@ function repPrint(res, writeup) {
   var th = res.head.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
   var tr = res.data.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('');
   var html = '<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>' + esc(res.title) + '</title><style>' +
-    '@page{size:A4;margin:12mm}body{font-family:Cairo,Tahoma,Arial,sans-serif;color:#111}h2{margin:0 0 4px;font-size:18px}.c{color:#555;font-size:12px;margin-bottom:10px}' +
-    'table{border-collapse:collapse;width:100%}td,th{border:1px solid #555;padding:4px 6px;font-size:12px;text-align:center}th{background:#e5e7eb}td:nth-child(2){text-align:right}' +
+    '@page{size:A4;margin:12mm}html,body{background:#fff}body{font-family:Cairo,Tahoma,Arial,sans-serif;color:#111}h2{margin:0 0 4px;font-size:18px}.c{color:#555;font-size:12px;margin-bottom:10px}' +
+    'table{border-collapse:collapse;width:100%}td,th{border:1px solid #555;padding:4px 6px;font-size:12px;text-align:center;background:#fff;color:#111}th{background:#e5e7eb}td:nth-child(2){text-align:right}' +
     '.f{font-size:11px;color:#444;margin-top:8px}.w{margin:10px 0;font-size:13px;line-height:1.9;white-space:pre-wrap}</style></head><body>' +
     '<h2>' + esc(res.title) + '</h2><div class="c">' + esc(res.criteria) + ' — ' + esc(new Date().toLocaleDateString('ar-EG')) + '</div>' +
     (writeup ? '<div class="w">' + esc(writeup) + '</div>' : '') +
@@ -2025,14 +2025,17 @@ function controlsHtml(sp) {
   return h;
 }
 function tableHtml(res) {
-  var hd = res.head.map(function (h) { return '<th style="padding:5px 6px;background:#1e293b;color:#cbd5e1;font-size:10px;white-space:nowrap;">' + esc(h) + '</th>'; }).join('');
+  var BD = 'border:1px solid #1e293b;';
+  var hd = res.head.map(function (h) { return '<th style="padding:5px 6px;background:#1e293b;color:#cbd5e1;font-size:10px;white-space:nowrap;' + BD + '">' + esc(h) + '</th>'; }).join('');
   var body = res.data.map(function (r, ri) {
-    return '<tr style="background:' + (ri % 2 ? '#0b1220' : '#0f172a') + ';">' + r.map(function (c, ci) {
-      return '<td style="padding:5px 6px;font-size:11px;color:#e2e8f0;border-top:1px solid #1e293b;text-align:' + (ci === 1 && res.kind !== 'summary' ? 'right' : 'center') + ';">' + esc(c) + '</td>';
+    var bg = ri % 2 ? '#111a30' : '#0b1220';
+    return '<tr style="background:' + bg + ';">' + r.map(function (c, ci) {
+      return '<td style="padding:5px 6px;font-size:11px;background:' + bg + ';color:#e2e8f0;' + BD + 'text-align:' + (ci === 1 && res.kind !== 'summary' ? 'right' : 'center') + ';">' + esc(c) + '</td>';
     }).join('') + '</tr>';
   }).join('');
-  return '<div style="overflow-x:auto;border:1px solid #1e293b;border-radius:10px;"><table style="border-collapse:collapse;width:100%;"><thead><tr>' + hd + '</tr></thead><tbody>' +
-    (body || '<tr><td colspan="' + res.head.length + '" style="padding:14px;text-align:center;color:#6ee7b7;font-size:12px;">✅ لا يوجد طلاب مطابقون لهذه المعايير</td></tr>') + '</tbody></table></div>';
+  var empty = res.kind === 'student' ? '🔍 لم يُعثر على طالب بهذا الاسم' : '✅ لا يوجد طلاب مطابقون لهذه المعايير';
+  return '<div style="overflow-x:auto;background:#0b1220;border:1px solid #1e293b;border-radius:10px;"><table style="border-collapse:collapse;width:100%;background:#0b1220;color:#e2e8f0;"><thead><tr>' + hd + '</tr></thead><tbody>' +
+    (body || '<tr><td colspan="' + res.head.length + '" style="padding:14px;text-align:center;background:#0b1220;color:#6ee7b7;font-size:12px;' + BD + '">' + empty + '</td></tr>') + '</tbody></table></div>';
 }
 function updateRepRes() {
   var el = document.getElementById('daiRepRes'); if (!el || !ST.rep) return;
