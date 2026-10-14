@@ -68,7 +68,85 @@ function _tryRequestNotifPermission(){
   }
   window._notifPermAsked=true;
 }
+
+// ══════════════════════════════════════════════════════
+// إدارة القوائم العلوية (الأشرطة): قائمة واحدة مفتوحة فقط، وتُغلق عند
+// تغيير الصفحة أو الضغط خارجها أو بزر Esc
+// ══════════════════════════════════════════════════════
+var _TOP_BARS=[
+  ['editBar','tbEditBtn','editBarToggle','editBarClose'],
+  ['clsBar','tbClsBtn','clsBarToggle','clsBarClose'],
+  ['pagesBar','tbPagesBtn','pagesBarToggle','pagesBarClose'],
+  ['toolsBar','tbToolsBtn','toolsBarToggle','toolsBarClose'],
+  ['gradeWeeksBar','tbGWeeksBtn','gradeWeeksBarToggle','gradeWeeksBarClose'],
+  ['homeColsBar','tbHomeColsBtn','homeColsBarToggle','homeColsBarClose'],
+  ['weeksBar','tbWeeksBtn','weeksBarToggle',''],
+  ['viewBar','tbViewBtn','viewBarToggle',''],
+  ['devBar','tbDevBtn','devBarToggle',''],
+  ['absClsBar','tbAbsClsBtn','absClsBarToggle','absClsBarClose'],
+  ['absWeeksBar','tbAbsWeeksBtn','absWeeksBarToggle','absWeeksBarClose'],
+  ['dictClsBar','tbDictClsBarBtn','dictClsBarToggle','']
+];
+function closeAllTopBars(exceptBarId){
+  _TOP_BARS.forEach(function(b){
+    if(b[0]===exceptBarId)return;
+    var bar=document.getElementById(b[0]);
+    if(!bar||!bar.classList.contains('open'))return;
+    try{
+      if(b[3]&&typeof window[b[3]]==='function'){window[b[3]]();return;}
+      if(b[0]==='devBar'&&typeof window['__orig_devBarToggle']==='function'){window['__orig_devBarToggle']();return;}
+    }catch(e){}
+    bar.classList.remove('open');
+    if(b[0]==='devBar'&&typeof _devBarState!=='undefined')_devBarState.open=false;
+    var btn=document.getElementById(b[1]);
+    if(btn){
+      btn.classList.remove('active');
+      if(b[0]==='dictClsBar'){btn.style.background='rgba(251,191,36,.12)';btn.style.borderColor='#78350f';btn.style.color='#fbbf24';}
+    }
+  });
+  if(exceptBarId!=='__keepTfr'&&typeof tfrAllBarsClose==='function'){
+    var tfrOpen=['tfrClsBar','tfrWeeksBar','tfrColsBar','tfrMetaBar'].some(function(id){var e=document.getElementById(id);return e&&e.classList.contains('open');});
+    if(tfrOpen&&!(exceptBarId&&exceptBarId.indexOf('tfr')===0))tfrAllBarsClose();
+  }
+}
+function _anyTopBarOpen(){
+  var ids=_TOP_BARS.map(function(b){return b[0];}).concat(['tfrClsBar','tfrWeeksBar','tfrColsBar','tfrMetaBar']);
+  return ids.some(function(id){var e=document.getElementById(id);return e&&e.classList.contains('open');});
+}
+function _installTopBarExclusivity(){
+  _TOP_BARS.forEach(function(b){
+    var fn=b[2],orig=window[fn];
+    if(typeof orig!=='function'||orig.__wrapped)return;
+    window['__orig_'+fn]=orig;
+    var w=function(){
+      var bar=document.getElementById(b[0]);
+      if(bar&&!bar.classList.contains('open'))closeAllTopBars(b[0]);
+      return orig.apply(this,arguments);
+    };
+    w.__wrapped=true;
+    window[fn]=w;
+  });
+  ['tfrClsBarToggle','tfrWeeksBarToggle','tfrColsBarToggle','tfrMetaBarToggle'].forEach(function(fn){
+    var orig=window[fn];
+    if(typeof orig!=='function'||orig.__wrapped)return;
+    var w=function(){closeAllTopBars('tfr');return orig.apply(this,arguments);};
+    w.__wrapped=true;window[fn]=w;
+  });
+}
+window.addEventListener('load',_installTopBarExclusivity);
+document.addEventListener('click',function(e){
+  var t=e.target;
+  if(!t||!t.closest||!document.contains(t))return;
+  if(!_anyTopBarOpen())return;
+  if(t.closest('.tb-menu-wrap,.mo,[id$="Bar"],#tpRoot,#doRoot,.snack,#snack,#snackbar'))return;
+  closeAllTopBars();
+},false);
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&_anyTopBarOpen())closeAllTopBars();
+});
+
 function switchPage(p){
+  closeAllTopBars();
   _ALL_PAGES.forEach(function(x){
     var pg=document.getElementById("page_"+x);
     if(pg){pg.classList.remove("active");pg.style.display="none";}

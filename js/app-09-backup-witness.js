@@ -6,6 +6,10 @@ var BKP_KEY      = 'grades_v6_backups';
 var BKP_FOLDER   = 'grades_v6_folder_handle'; // اسم المفتاح للإشارة فقط
 var BKP_MAX      = 8;
 var _bkpLastSnap = 0;
+var _bkpLastCheck= 0;
+var BKP_SIG_KEY  = 'grades_v6_bkp_sig';   // بصمة آخر محتوى نُسخ احتياطياً
+var BKP_AUTO_GAP = 10*60*1000;            // أقل مدة بين نسختين تلقائيتين (عند وجود تغييرات)
+var _BKP_AUTO_LABELS = ['تلقائي','عند فتح التطبيق'];
 var _bkpLastSync = 0;
 var _folderHandle= null; // FileSystemDirectoryHandle
 
@@ -71,6 +75,20 @@ function _bkpCountStudents(){
   return t;
 }
 
+// ── بصمة المحتوى: تتغيّر فقط عند تغيّر الدرجات أو إعدادات التطبيق (الصور الكبيرة مستثناة) ──
+function _bkpSig(){
+  try{
+    if(!window.DB) return '';
+    var str = JSON.stringify(window.DB, function(k,v){
+      return (k==='defaultStudentPhoto' || k==='teacherPhoto') ? undefined : v;
+    });
+    var h = 2166136261;
+    for(var i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = (h + ((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24))) >>> 0; }
+    return str.length + ':' + h;
+  }catch(e){ return ''; }
+}
+function _bkpStoredSig(){ try{ return localStorage.getItem(BKP_SIG_KEY)||''; }catch(e){ return ''; } }
+
 // ── إنشاء نسخة ───────────────────────────────────────
 function _bkpCreate(label){
   if(!window.DB) return;
@@ -90,14 +108,29 @@ function _bkpCreate(label){
     })()
   };
   list.unshift(snap);
-  if(list.length > BKP_MAX) list = list.slice(0, BKP_MAX);
+  // عند تجاوز الحد: نحذف أقدم نسخة تلقائية أولاً حتى لا تضيع النسخ اليدوية
+  while(list.length > BKP_MAX){
+    var di = -1;
+    for(var k=list.length-1;k>0;k--){ if(_BKP_AUTO_LABELS.indexOf(list[k].label)>=0){ di=k; break; } }
+    if(di<0) di = list.length-1;
+    list.splice(di,1);
+  }
   _bkpSaveList(list);
+  try{ localStorage.setItem(BKP_SIG_KEY, _bkpSig()); }catch(e){}
 }
 
-// ── Auto snapshot (throttled 60s) ────────────────────
-function _bkpAutoSnapshot(){
+// ── نسخة تلقائية: فقط عند وجود تغيير فعلي في الدرجات/الإعدادات ──
+//  • لا نفحص أكثر من مرة في الدقيقة
+//  • لا نسخة إذا لم يتغير المحتوى منذ آخر نسخة
+//  • بين نسختين تلقائيتين 10 دقائق على الأقل (حتى لا تمتلئ القائمة بنسخ متقاربة)
+//  • force: عند مغادرة التطبيق نحفظ آخر التغييرات (بشرط مرور دقيقة على آخر نسخة)
+function _bkpAutoSnapshot(force){
   var now = Date.now();
-  if(now - _bkpLastSnap < 60000) return;
+  if(!force && now - _bkpLastCheck < 60000) return;
+  _bkpLastCheck = now;
+  if(now - _bkpLastSnap < (force ? 60000 : BKP_AUTO_GAP)) return;
+  var sig = _bkpSig();
+  if(!sig || sig === _bkpStoredSig()) return;   // لا تغييرات منذ آخر نسخة
   _bkpLastSnap = now;
   _bkpCreate('تلقائي');
   _bkpAutoFolderSync();
@@ -438,20 +471,13 @@ window.renderBackupPage  = __renderBackupPage;
     return r;
   };
   // أول نسخة عند الفتح
-  setTimeout(function(){ try{ if(window.DB) _bkpCreate('عند فتح التطبيق'); }catch(e){} }, 1500);
-  // شبكة أمان: نسخة كل 5 دقائق إذا تغيّرت البيانات، حتى لو لم يُستدعَ الحفظ
-  var _lastSig = '';
-  setInterval(function(){
-    try{
-      if(!window.DB) return;
-      var sig = JSON.stringify(window.DB.data||{});
-      sig = sig.length + ':' + sig.slice(-200);
-      if(sig === _lastSig) return;
-      _lastSig = sig;
-      _bkpLastSnap = 0;
-      _bkpAutoSnapshot();
-    }catch(e){}
-  }, 300000);
+  // عند الفتح: نسخة فقط إذا اختلف المحتوى عن آخر نسخة (مثلاً وصلت بيانات من مزامنة خارجية)
+  setTimeout(function(){ try{ if(window.DB){ var sg=_bkpSig(); if(sg && sg!==_bkpStoredSig()) _bkpCreate('عند فتح التطبيق'); } }catch(e){} }, 1500);
+  // حفظ آخر التغييرات عند مغادرة التطبيق أو إخفائه
+  document.addEventListener('visibilitychange', function(){ if(document.hidden){ try{ _bkpAutoSnapshot(true); }catch(e){} } });
+  window.addEventListener('pagehide', function(){ try{ _bkpAutoSnapshot(true); }catch(e){} });
+  // شبكة أمان: كل 5 دقائق نفحص التغييرات (حتى لو لم يُستدعَ الحفظ)
+  setInterval(function(){ try{ _bkpAutoSnapshot(); }catch(e){} }, 300000);
 })();
 
 // ── استعادة مقبض المجلد عند التحميل (اختياري، لا يمنع شيئاً إن فشل) ──
