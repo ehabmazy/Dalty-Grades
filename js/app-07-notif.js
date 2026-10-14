@@ -565,12 +565,14 @@ function _getAllScheduledPeriods(){
     var tb=b.per.time?b.per.time.split('-')[0].trim():'99:99';
     return ta.localeCompare(tb);
   });
-  return result;
+  return (typeof schedApplyDayOff==='function')?schedApplyDayOff(result):result;
 }
 
 // ── Parse "8:30" → minutes since midnight ────────────
 function _parseTimeStr(str){
   if(!str) return null;
+  var _n=(typeof normalizePeriodTime==='function')?normalizePeriodTime(str):null;
+  if(_n&&_n.ok&&_n.value){var _m=/^(\d{2}):(\d{2})/.exec(_n.value);if(_m)return parseInt(_m[1],10)*60+parseInt(_m[2],10);}
   var p=str.trim().split(':');
   return parseInt(p[0]||0)*60+parseInt(p[1]||0);
 }
@@ -1709,7 +1711,7 @@ function _homeGetAllPeriods(){
   });
   // Merge special periods
   _getSpecialPeriodItems().forEach(function(sp){res.push(sp);});
-  return res;
+  return (typeof schedApplyDayOff==='function')?schedApplyDayOff(res):res;
 }
 
 function _homeParseMins(s){

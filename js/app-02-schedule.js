@@ -403,6 +403,7 @@ function getSlotLabel(val){
 }
 // إرجاع كل عناصر اليوم (فصول + مهام) لفترة معينة عبر كل الأيام — يجمع من الجدول الموحّد
 function getTodaySchedule(dayIdx){
+  if(typeof schedDayIsOff==='function'&&schedDayIsOff(dayIdx))return [];
   var shared=(DB.schedule&&DB.schedule._shared)||{periods:[],slots:{}};
   var periods=shared.periods||[];
   var items=[];
@@ -498,6 +499,7 @@ function isSlotOnce(pid,di){
 }
 function _schedCleanupOnceSlots(){
   if(!DB.schedule._shared)return;
+  if(typeof _dayOffCleanup==='function')_dayOffCleanup();
   var once=_getOnceSlots();
   var slots=DB.schedule._shared.slots||{};
   var today=new Date();today.setHours(0,0,0,0);
@@ -643,9 +645,9 @@ function renderSched(){
     html+='<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">';
     html+='<span class="ph-name" style="color:#34d399;">🟢 طابور</span>';
     html+='<input value="'+esc(spAssembly.time||"")+'" placeholder="7:30-7:45" class="ph-time-inp" style="color:#34d399;"'
-      +' onchange="schedSetSpecialTime(\'assembly\',this.value)"'
-      +' oninput="schedSetSpecialTime(\'assembly\',this.value)"'
+      +' onchange="schedCommitSpecial(\'assembly\',this)"'
       +'/>';
+    html+='<button class="ph-del-btn" onclick="timePickerOpen(\'assembly\',0)" style="background:rgba(59,130,246,.2);border-color:rgba(59,130,246,.35);color:#93c5fd;">🕐 ضبط</button>';
     html+='<span style="font-size:8px;color:#6ee7b7;background:rgba(16,185,129,.2);padding:1px 6px;border-radius:8px;">تلقائي للأيام النشطة</span>';
     html+='<button class="ph-del-btn" onclick="schedToggleSpecial(\'assembly\')" style="background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.3);">✕ إخفاء</button>';
     html+='</div></th>';
@@ -663,9 +665,12 @@ function renderSched(){
       +' class="ph-time-inp" autocomplete="off"'
       +' onfocus="schedTimeDropOpen(\''+period.id+'\')"'
       +' onblur="setTimeout(function(){schedTimeDropClose(\''+period.id+'\')},150)"'
-      +' onchange="schedSetTimeUnified(\''+period.id+'\',this.value)"'
+      +' onchange="schedCommitTime(\''+period.id+'\',this)"'
       +' oninput="schedTimeFilter(\''+period.id+'\')"'
       +'/>';
+    var _l12=_tpLabel12(period.time);
+    if(_l12)html+='<span style="font-size:8px;color:#94a3b8;white-space:nowrap;">'+_l12+'</span>';
+    html+='<button class="ph-del-btn" onclick="timePickerOpen(\'period\',\''+period.id+'\')" style="background:rgba(59,130,246,.2);border-color:rgba(59,130,246,.35);color:#93c5fd;">🕐 ضبط الوقت</button>';
     html+='<button class="ph-del-btn" onclick="schedDelPeriodUnified(\''+period.id+'\')">✕ حذف</button>';
     html+='</div></th>';
   });
@@ -676,9 +681,9 @@ function renderSched(){
     html+='<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">';
     html+='<span class="ph-name" style="color:#fbbf24;">☕ فسحة</span>';
     html+='<input value="'+esc(spBreak.time||"")+'" placeholder="10:00-10:20" class="ph-time-inp" style="color:#fbbf24;"'
-      +' onchange="schedSetSpecialTime(\'break\',this.value)"'
-      +' oninput="schedSetSpecialTime(\'break\',this.value)"'
+      +' onchange="schedCommitSpecial(\'break\',this)"'
       +'/>';
+    html+='<button class="ph-del-btn" onclick="timePickerOpen(\'break\',0)" style="background:rgba(59,130,246,.2);border-color:rgba(59,130,246,.35);color:#93c5fd;">🕐 ضبط</button>';
     html+='<span style="font-size:8px;color:#fbbf24;background:rgba(251,191,36,.2);padding:1px 6px;border-radius:8px;">تلقائي للأيام النشطة</span>';
     html+='<button class="ph-del-btn" onclick="schedToggleSpecial(\'break\')" style="background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.3);">✕ إخفاء</button>';
     html+='</div></th>';
@@ -694,7 +699,20 @@ function renderSched(){
     var rowCls=di%2===0?"even-row":"odd-row";
     var dayIsActive=activeDays[di];
     html+='<tr>';
-    html+='<td class="day-lbl">'+dayName+'</td>';
+    var _off=schedDayOffInfo(di);
+    html+='<td class="day-lbl">'+dayName
+      +(_off?'<div style="font-size:8px;color:#fbbf24;margin-top:2px;">🏖 إجازة</div>'
+            :'<div><button onclick="schedDayOffOpen('+di+')" style="margin-top:3px;background:rgba(251,191,36,.15);border:1px solid #d97706;color:#fbbf24;border-radius:4px;font-size:8px;padding:1px 6px;cursor:pointer;font-family:inherit;">🏖 إجازة</button></div>')
+      +'</td>';
+    if(_off){
+      var _cols=periods.length+(spAssembly.enabled?1:0)+(spBreak.enabled?1:0);
+      html+='<td colspan="'+_cols+'" style="background:repeating-linear-gradient(45deg,#2a1f08,#2a1f08 10px,#33260a 10px,#33260a 20px);border:1.5px solid #d97706;text-align:center;padding:10px;">'
+        +'<span style="font-size:13px;font-weight:800;color:#fbbf24;">🏖 '+esc(_off.label)+'</span>'
+        +'<span style="font-size:9px;color:#d6a45b;margin:0 8px;">'+(_off.kind==='weekly'?'🔁 كل أسبوع':'📅 '+_off.date)+'</span>'
+        +'<button onclick="schedDayOffClear('+di+')" style="background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:5px;font-size:9px;padding:2px 9px;cursor:pointer;font-family:inherit;">✕ إلغاء الإجازة</button>'
+        +'</td></tr>';
+      return;
+    }
 
     // طابور cell
     if(spAssembly.enabled){
@@ -883,6 +901,277 @@ function schedRenamePeriod(pid,val){
   if(!shared)return;
   (shared.periods||[]).forEach(function(p){if(p.id===pid)p.label=val.trim()||p.label;});
   saveDB();
+}
+
+
+// ══════════════════════════════════════════════════════
+// إدخال الوقت بسهولة: فهم الصيغ المختلفة + نافذة اختيار
+// ══════════════════════════════════════════════════════
+// يقبل: 8:00-8:45 | ٨:٠٠ - ٨:٤٥ | 800-845 | 1-1:45 | 1:00م-1:45م | 8 ص إلى 8:45 ص | 13:00-13:45
+// ويحوّله دائماً إلى الصيغة القياسية 24 ساعة "HH:MM-HH:MM" التي يفهمها التطبيق
+function _tpDigits(x){
+  return String(x==null?'':x).replace(/[\u0660-\u0669]/g,function(d){return String(d.charCodeAt(0)-0x660);})
+    .replace(/[\u06F0-\u06F9]/g,function(d){return String(d.charCodeAt(0)-0x6F0);});
+}
+function _tpSide(txt){
+  var t=_tpDigits(txt).replace(/[\u064B-\u0652\u0640]/g,'').replace(/[\u066B.\u060C]/g,':').replace(/\s+/g,' ').trim().toLowerCase();
+  if(!t)return null;
+  var digits=t.replace(/[^0-9:]/g,'');
+  var letters=t.replace(/[0-9:\s]/g,'');
+  var mark='';
+  if(letters){
+    if(/^(ص|صباحا|صباح|am|a\.?m\.?)$/.test(letters))mark='am';
+    else if(/^(م|مساء|مساءا|ظهرا|ظهر|عصرا|عصر|pm|p\.?m\.?)$/.test(letters))mark='pm';
+    else return null;
+  }
+  var h,m,mm;
+  if((mm=/^(\d{1,2}):(\d{2})$/.exec(digits))){h=+mm[1];m=+mm[2];}
+  else if((mm=/^(\d{1,2})$/.exec(digits))){h=+mm[1];m=0;}
+  else if((mm=/^(\d{1,2})(\d{2})$/.exec(digits))){h=+mm[1];m=+mm[2];}
+  else return null;
+  if(h>24||m>59||(h===24&&m>0))return null;
+  return {h:h,m:m,mark:mark};
+}
+function _tpTo24(o){
+  // بلا علامة: 1–6 تُعتبر مساءً، 7–11 صباحاً (ساعات اليوم الدراسي)، 13+ تبقى كما هي
+  var h=o.h;
+  if(o.mark==='pm'){ if(h<12)h+=12; }
+  else if(o.mark==='am'){ if(h===12)h=0; }
+  else if(h>=1&&h<=6){ h+=12; o.guessed=true; }
+  return h*60+o.m;
+}
+function _tpPad(n){return (n<10?'0':'')+n;}
+function _tpHM(min){return _tpPad(Math.floor(min/60)%24)+':'+_tpPad(min%60);}
+function _tp12(min){
+  var h=Math.floor(min/60)%24,m=min%60;
+  return (h%12||12)+':'+_tpPad(m)+' '+(h<12?'ص':'م');
+}
+function normalizePeriodTime(str){
+  var raw=_tpDigits(str).trim();
+  if(!raw)return {ok:true,empty:true,value:'',label:''};
+  var parts=raw.replace(/\s+(الى|إلى|to|حتى)\s+/gi,'-').replace(/[\u2013\u2014\u2212~]/g,'-').split('-');
+  parts=parts.map(function(x){return x.trim();}).filter(function(x){return x!=='';});
+  if(!parts.length||parts.length>2)return {ok:false,err:'اكتب الوقت هكذا: 8:00-8:45 أو اختر من زر 🕐'};
+  var a=_tpSide(parts[0]);
+  if(!a)return {ok:false,err:'لم أفهم وقت البداية «'+parts[0]+'»'};
+  var sm=_tpTo24(a),note=a.guessed?' (اعتُبرت مساءً)':'';
+  if(parts.length===1)return {ok:true,value:_tpHM(sm),label:_tp12(sm),note:note};
+  var b=_tpSide(parts[1]);
+  if(!b)return {ok:false,err:'لم أفهم وقت النهاية «'+parts[1]+'»'};
+  var em;
+  if(!b.mark&&b.h>=1&&b.h<=12){
+    // بلا علامة: أقرب وقت بعد البداية (يحفظ الفترة نفسها صباحاً أو مساءً)
+    var c1=(b.h%12)*60+b.m,c2=c1+12*60;
+    em=c1>sm?c1:(c2>sm?c2:null);
+    if(em===null)return {ok:false,err:'وقت النهاية يجب أن يكون بعد البداية'};
+  }else{
+    em=_tpTo24(b);
+  }
+  if(em<=sm)return {ok:false,err:'وقت النهاية يجب أن يكون بعد البداية'};
+  if(em-sm>6*60)return {ok:false,err:(!b.mark?'وقت النهاية يجب أن يكون بعد البداية':'المدة أطول من المعتاد — راجع الوقت')};
+  return {ok:true,value:_tpHM(sm)+'-'+_tpHM(em),label:_tp12(sm)+' ← '+_tp12(em),note:note};
+}
+function _tpLabel12(str){
+  var n=normalizePeriodTime(str);
+  return (n&&n.ok&&n.label)?n.label:'';
+}
+function _tpCommit(inp,prev,save){
+  var n=normalizePeriodTime(inp.value);
+  if(!n.ok){showSnack('⚠️ '+n.err);inp.value=prev||'';return false;}
+  inp.value=n.value;
+  save(n.value);
+  if(n.value)showSnack('🕐 '+n.label+(n.note||''));
+  return true;
+}
+function schedCommitTime(pid,inp){
+  var prev='';
+  ((DB.schedule._shared||{}).periods||[]).forEach(function(p){if(p.id===pid)prev=p.time||'';});
+  _tpCommit(inp,prev,function(v){schedSetTimeUnified(pid,v);});
+}
+function schedCommitSpecial(type,inp){
+  var prev=_schedGetSP(type).time||'';
+  _tpCommit(inp,prev,function(v){schedSetSpecialTime(type,v);renderSched();});
+}
+
+// ── نافذة اختيار الوقت ──
+var _TP=null;
+function timePickerOpen(kind,id){
+  var cur='';
+  if(kind==='period'){((DB.schedule._shared||{}).periods||[]).forEach(function(p){if(p.id===id)cur=p.time||'';});}
+  else if(kind==='assembly'||kind==='break'){cur=_schedGetSP(kind).time||'';}
+  var h12=8,min=0,pm=false,dur=45;
+  var n=normalizePeriodTime(cur);
+  if(n.ok&&n.value){
+    var m=/^(\d{2}):(\d{2})(?:-(\d{2}):(\d{2}))?$/.exec(n.value);
+    if(m){
+      var h=+m[1];min=+m[2];pm=h>=12;h12=h%12||12;
+      if(m[3]){var d=(+m[3]*60+ +m[4])-(h*60+min);if(d>0)dur=d;}
+    }
+  }
+  _TP={kind:kind,id:id,h12:h12,min:min,pm:pm,dur:dur};
+  _tpRender();
+}
+function _tpCalc(){
+  var h=_TP.h12%12+(_TP.pm?12:0);
+  var s=h*60+_TP.min,e=s+_TP.dur;
+  return {s:s,e:e,value:_tpHM(s)+'-'+_tpHM(e),label:_tp12(s)+' ← '+_tp12(e)};
+}
+function tpSet(k,v){
+  if(!_TP)return;
+  if(k==='pm')_TP.pm=(v===true||v==='true');
+  else _TP[k]=parseInt(v,10);
+  _tpRender();
+}
+function _tpRender(){
+  if(!_TP)return;
+  var root=document.getElementById('tpRoot');
+  if(!root){root=document.createElement('div');root.id='tpRoot';document.body.appendChild(root);}
+  var c=_tpCalc();
+  var sel=function(k,from,to,step,val,fmt){
+    var o='<select onchange="tpSet(\''+k+'\',this.value)" style="font-size:15px;font-family:inherit;padding:6px 8px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f2a5e;font-weight:700;">';
+    var seen=false;
+    for(var v=from;v<=to;v+=step){o+='<option value="'+v+'"'+(v===val?' selected':'')+'>'+(fmt?fmt(v):v)+'</option>';if(v===val)seen=true;}
+    if(!seen)o+='<option value="'+val+'" selected>'+(fmt?fmt(val):val)+'</option>';
+    return o+'</select>';
+  };
+  var seg=function(isPm,label){
+    var on=_TP.pm===isPm;
+    return '<button type="button" onclick="tpSet(\'pm\','+isPm+')" style="flex:1;padding:9px 0;border:2px solid '+(on?'#1d4ed8':'#e2e8f0')+';background:'+(on?'#1d4ed8':'#f8fafc')+';color:'+(on?'#fff':'#475569')+';border-radius:9px;font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;">'+label+'</button>';
+  };
+  var chips=[30,35,40,45,50,55,60].map(function(d){var on=_TP.dur===d;return '<button type="button" onclick="tpSet(\'dur\','+d+')" style="padding:6px 11px;border:1.5px solid '+(on?'#059669':'#e2e8f0')+';background:'+(on?'#059669':'#f8fafc')+';color:'+(on?'#fff':'#475569')+';border-radius:16px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;">'+d+'</button>';}).join('');
+  var h='<div class="mo" onclick="timePickerClose()"><div class="md" style="max-width:360px" onclick="event.stopPropagation()">';
+  h+='<div class="mh"><h2>🕐 ضبط وقت الحصة</h2><button class="xbtn" onclick="timePickerClose()">✕</button></div>';
+  h+='<div class="mb" style="display:flex;flex-direction:column;gap:12px;">';
+  h+='<div><div style="font-size:10px;font-weight:700;color:#0f2a5e;margin-bottom:5px;">بداية الحصة</div>';
+  h+='<div style="display:flex;align-items:center;gap:6px;justify-content:center;direction:ltr;">'+sel('h12',1,12,1,_TP.h12)+'<b style="font-size:16px;color:#0f2a5e;">:</b>'+sel('min',0,55,5,_TP.min,_tpPad)+'</div>';
+  h+='<div style="display:flex;gap:8px;margin-top:8px;">'+seg(false,'☀️ صباحاً (ص)')+seg(true,'🌙 ظهراً / مساءً (م)')+'</div></div>';
+  h+='<div><div style="font-size:10px;font-weight:700;color:#0f2a5e;margin-bottom:5px;">مدة الحصة (دقيقة)</div><div style="display:flex;gap:5px;flex-wrap:wrap;">'+chips+'</div></div>';
+  h+='<div style="background:#ecfdf5;border:1.5px solid #6ee7b7;border-radius:10px;padding:10px;text-align:center;">';
+  h+='<div style="font-size:15px;font-weight:800;color:#065f46;">'+c.label+'</div>';
+  h+='<div style="font-size:10px;color:#047857;margin-top:3px;direction:ltr;">'+c.value+'</div></div>';
+  h+='</div><div class="mf"><button class="btn btn-sm" onclick="timePickerClose()" style="background:#e2e8f0;color:#334155;">إلغاء</button><button class="btn btn-success btn-sm" onclick="timePickerSave()">✔ حفظ</button></div>';
+  h+='</div></div>';
+  root.innerHTML=h;
+}
+function timePickerClose(){
+  var r=document.getElementById('tpRoot');if(r)r.innerHTML='';
+  _TP=null;
+}
+function timePickerSave(){
+  if(!_TP)return;
+  var c=_tpCalc(),k=_TP.kind,id=_TP.id;
+  timePickerClose();
+  if(k==='period'){schedSetTimeUnified(id,c.value);}
+  else if(k==='assembly'||k==='break'){schedSetSpecialTime(k,c.value);renderSched();}
+  else if(k==='settings'){
+    var inp=document.getElementById('sNewPeriodTime');
+    if(inp){inp.value=c.value;if(typeof settingsAddPeriodTime==='function')settingsAddPeriodTime();}
+  }
+  showSnack('🕐 '+c.label);
+}
+
+
+// ══════════════════════════════════════════════════════
+// إجازة يوم كامل في الجدول
+//   weekly: إجازة دائمة كل أسبوع لهذا اليوم   — dayOff.weekly[di] = "اسم"
+//   dates : إجازة ليوم محدد بتاريخه فقط       — dayOff.dates["YYYY-MM-DD"] = "اسم"
+// ══════════════════════════════════════════════════════
+function _dayOffStore(){
+  if(!DB.schedule._shared)DB.schedule._shared={periods:[],slots:{},notes:""};
+  var sh=DB.schedule._shared;
+  if(!sh.dayOff)sh.dayOff={};
+  if(!sh.dayOff.weekly)sh.dayOff.weekly={};
+  if(!sh.dayOff.dates)sh.dayOff.dates={};
+  return sh.dayOff;
+}
+// معلومات الإجازة لليوم (للعرض في الجدول): الدائمة أو التاريخ القادم لهذا اليوم
+function schedDayOffInfo(di){
+  if(!DB||!DB.schedule||!DB.schedule._shared||!DB.schedule._shared.dayOff)return null;
+  var st=_dayOffStore();
+  if(st.weekly[di]!==undefined)return {kind:'weekly',label:st.weekly[di]||'إجازة'};
+  var ds=dateToStr(_nextOccurrenceDate(di));
+  if(st.dates[ds]!==undefined)return {kind:'date',date:ds,label:st.dates[ds]||'إجازة'};
+  return null;
+}
+// هل اليوم (بحسب الواقع الآن) إجازة؟ — يستخدمه التنبيهات والصفحة الرئيسية
+function schedDayIsOff(di){
+  if(!DB||!DB.schedule||!DB.schedule._shared||!DB.schedule._shared.dayOff)return false;
+  var st=_dayOffStore();
+  if(st.weekly[di]!==undefined)return true;
+  if(di===_todayDayIdx()&&st.dates[dateToStr(new Date())]!==undefined)return true;
+  return false;
+}
+// يحذف أيام الإجازة من قوائم الحصص (item.days) ويستبعد العناصر التي لم يبق لها أيام
+function schedApplyDayOff(items){
+  if(!DB||!DB.schedule||!DB.schedule._shared||!DB.schedule._shared.dayOff)return items;
+  var out=[];
+  items.forEach(function(it){
+    var days=(it.days||[]).filter(function(d){return !schedDayIsOff(d);});
+    if(!days.length)return;
+    if(days.length===it.days.length){out.push(it);return;}
+    var c={};Object.keys(it).forEach(function(k){c[k]=it[k];});c.days=days;out.push(c);
+  });
+  return out;
+}
+function _dayOffCleanup(){
+  if(!DB||!DB.schedule||!DB.schedule._shared||!DB.schedule._shared.dayOff)return;
+  var st=_dayOffStore(),today=dateToStr(new Date()),ch=false;
+  Object.keys(st.dates).forEach(function(d){if(d<today){delete st.dates[d];ch=true;}});
+  if(ch)saveDB();
+}
+var _DO=null;
+function schedDayOffOpen(di){
+  var nxt=dateToStr(_nextOccurrenceDate(di));
+  _DO={di:di,date:nxt,label:'إجازة',mode:'date'};
+  _doRender();
+}
+function _doSet(k,v){if(!_DO)return;_DO[k]=v;if(k==='mode')_doRender();}
+function _doRender(){
+  if(!_DO)return;
+  var root=document.getElementById('doRoot');
+  if(!root){root=document.createElement('div');root.id='doRoot';document.body.appendChild(root);}
+  var m=_DO.mode;
+  var box=function(on){return 'border:2px solid '+(on?'#d97706':'#e2e8f0')+';background:'+(on?'#fffbeb':'#f8fafc')+';border-radius:10px;padding:10px;cursor:pointer;';};
+  var h='<div class="mo" onclick="schedDayOffClose()"><div class="md" style="max-width:360px" onclick="event.stopPropagation()">';
+  h+='<div class="mh"><h2>🏖 إجازة يوم '+DAYS_AR[_DO.di]+'</h2><button class="xbtn" onclick="schedDayOffClose()">✕</button></div>';
+  h+='<div class="mb" style="display:flex;flex-direction:column;gap:10px;">';
+  h+='<div><div style="font-size:10px;font-weight:700;color:#0f2a5e;margin-bottom:4px;">اسم الإجازة (اختياري)</div>';
+  h+='<input value="'+esc(_DO.label)+'" oninput="_DO.label=this.value" style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #cbd5e1;border-radius:8px;font-family:inherit;font-size:12px;"/></div>';
+  h+='<div style="'+box(m==='date')+'" onclick="_doSet(\'mode\',\'date\')"><div style="font-size:12px;font-weight:800;color:#92400e;">📅 هذا اليوم فقط (بتاريخ محدد)</div>';
+  h+='<div style="font-size:10px;color:#78716c;margin:3px 0 6px;">إجازة مرة واحدة، وتنتهي تلقائياً بعدها</div>';
+  h+='<input type="date" value="'+_DO.date+'" onclick="event.stopPropagation()" onchange="_DO.date=this.value" style="padding:6px;border:1.5px solid #cbd5e1;border-radius:8px;font-family:inherit;font-size:12px;"/></div>';
+  h+='<div style="'+box(m==='weekly')+'" onclick="_doSet(\'mode\',\'weekly\')"><div style="font-size:12px;font-weight:800;color:#92400e;">🔁 كل أسبوع (يوم إجازة دائم)</div>';
+  h+='<div style="font-size:10px;color:#78716c;margin-top:3px;">يبقى يوم '+DAYS_AR[_DO.di]+' إجازة في كل أسبوع حتى تلغيه</div></div>';
+  h+='</div><div class="mf"><button class="btn btn-sm" onclick="schedDayOffClose()" style="background:#e2e8f0;color:#334155;">إلغاء</button><button class="btn btn-warn btn-sm" onclick="schedDayOffSave()">🏖 تسجيل الإجازة</button></div>';
+  h+='</div></div>';
+  root.innerHTML=h;
+}
+function schedDayOffClose(){var r=document.getElementById('doRoot');if(r)r.innerHTML='';_DO=null;}
+function schedDayOffSave(){
+  if(!_DO)return;
+  var st=_dayOffStore(),label=(_DO.label||'').trim()||'إجازة';
+  if(_DO.mode==='weekly'){
+    st.weekly[_DO.di]=label;
+  }else{
+    if(!_DO.date){showSnack('⚠️ اختر التاريخ');return;}
+    var d=new Date(_DO.date+'T00:00:00');
+    var jsDay=d.getDay(),ourDi=(jsDay+1)%7;
+    if(ourDi!==_DO.di){showSnack('⚠️ هذا التاريخ ليس يوم '+DAYS_AR[_DO.di]);return;}
+    st.dates[_DO.date]=label;
+  }
+  var di=_DO.di;
+  schedDayOffClose();
+  saveDB();renderSched();
+  var hr=document.getElementById('homeRoot');if(hr&&hr.offsetParent!==null&&typeof _homeTick==='function')_homeTick();
+  showSnack('🏖 تم تسجيل إجازة يوم '+DAYS_AR[di]);
+}
+function schedDayOffClear(di){
+  var st=_dayOffStore(),info=schedDayOffInfo(di);
+  if(!info)return;
+  if(info.kind==='weekly')delete st.weekly[di];else delete st.dates[info.date];
+  saveDB();renderSched();
+  var hr=document.getElementById('homeRoot');if(hr&&hr.offsetParent!==null&&typeof _homeTick==='function')_homeTick();
+  showSnack('✅ تم إلغاء الإجازة');
 }
 
 function schedSetTimeUnified(pid,val){
@@ -1106,6 +1395,9 @@ function settingsAddPeriodTime(){
   if(!inp)return;
   var val=inp.value.trim();
   if(!val){showSnack('⚠️ أدخل وقتاً أولاً');return;}
+  var _n=normalizePeriodTime(val);
+  if(!_n.ok){showSnack('⚠️ '+_n.err);return;}
+  val=_n.value;
   if(!DB.meta.periodTimes)DB.meta.periodTimes=[];
   if(DB.meta.periodTimes.indexOf(val)>=0){showSnack('⚠️ هذا الوقت موجود مسبقاً');return;}
   DB.meta.periodTimes.push(val);
