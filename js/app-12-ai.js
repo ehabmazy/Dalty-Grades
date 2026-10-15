@@ -380,6 +380,11 @@ function applyPlan(cls, plan, label) {
     if (!arr[c.idx] || String(arr[c.idx].id) !== String(c.id)) bad = true;
   });
   if (bad) return { ok: false, msg: 'تغيّرت بيانات الفصل أثناء المراجعة. أعد التحليل.' };
+  /* نسخة احتياطية محلية قبل تعديلات الذكاء الاصطناعي (مرة كل 30 دقيقة) — تبقى متاحة من صفحة النسخ الاحتياطي حتى بعد إعادة فتح التطبيق */
+  try {
+    var lb = parseInt(localStorage.getItem('dalty_ai_lastbkp') || '0', 10) || 0;
+    if (typeof _bkpCreate === 'function' && Date.now() - lb > 30 * 60 * 1000) { _bkpCreate('قبل تعديلات المساعد الذكي'); localStorage.setItem('dalty_ai_lastbkp', String(Date.now())); }
+  } catch (e) {}
 
   var snap = {}, addedIds = [];
   function snapStu(i) {
@@ -409,6 +414,7 @@ function applyPlan(cls, plan, label) {
   refreshPages();
 
   var entryT = Date.now();
+  if (undoStack.length && undoStack[undoStack.length - 1].t >= entryT) entryT = undoStack[undoStack.length - 1].t + 1;
   undoStack.push({
     label: label, t: entryT,
     fn: function () {
@@ -935,13 +941,15 @@ function open(mode) {
   if (o) o.remove();
   o = document.createElement('div');
   o.id = 'daiOverlay';
-  o.style.cssText = 'position:fixed;inset:0;z-index:100050;background:rgba(2,6,23,.78);display:flex;align-items:flex-end;justify-content:center;direction:rtl;font-family:inherit;';
-  o.onclick = function (e) { if (e.target === o) closeAI(); };
-  o.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:18px 18px 0 0;width:min(620px,100%);height:min(94vh,900px);display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.5);">' +
+  var dk = document.getElementById('mobileDock'), dh = (dk && dk.offsetHeight) ? dk.offsetHeight : 0;
+  o.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:' + dh + 'px;z-index:100050;background:rgba(2,6,23,.78);display:flex;align-items:flex-end;justify-content:center;direction:rtl;font-family:inherit;';
+  o.onclick = function (e) { if (e.target === o) minimizeAI(); };
+  o.innerHTML = '<div style="background:#0f172a;border:1px solid #334155;border-radius:18px 18px 0 0;width:min(620px,100%);height:min(94%,900px);display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.5);">' +
     '<div id="daiHead" style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #1e293b;flex-shrink:0;"></div>' +
     '<div id="daiBody" style="flex:1;overflow-y:auto;padding:12px 14px 18px;-webkit-overflow-scrolling:touch;"></div></div>';
   document.body.appendChild(o);
   ST.presets = buildPresets();
+  hideMini(); AI_OPEN = true; chatSave();
   render();
   if (mode) pickMode(mode);
 }
@@ -949,6 +957,7 @@ function closeAI() {
   if (_abort) { try { _abort.abort(); } catch (e) {} }
   var o = ov(); if (o) o.remove();
   ST = null;
+  hideMini(); AI_OPEN = false; chatSave();
 }
 
 function head(title, back) {
@@ -957,6 +966,8 @@ function head(title, back) {
   h.innerHTML = (back ? '<button onclick="DAI.go(\'' + bt + '\')" style="' + BTN + 'background:#1e293b;color:#93c5fd;padding:6px 10px;font-size:13px;">→</button>' : '<span style="font-size:20px;">🤖</span>') +
     '<span style="flex:1;font-weight:900;color:#e2e8f0;font-size:14px;">' + title + '</span>' +
     (ST.view === 'home' ? '<button onclick="DAI.go(\'settings\')" style="' + BTN + 'background:none;color:#94a3b8;font-size:16px;padding:4px 8px;" title="الإعدادات">⚙️</button>' : '') +
+    (undoStack.length ? '<button onclick="DAI.undoBar()" title="تراجع عن آخر تعديل" style="' + BTN + 'background:rgba(251,191,36,.15);color:#fcd34d;font-size:13px;padding:5px 9px;">↩</button>' : '') +
+    '<button onclick="DAI.minimize()" title="تصغير لمتابعة التطبيق" style="' + BTN + 'background:none;color:#93c5fd;font-size:18px;padding:4px 8px;">➖</button>' +
     '<button onclick="DAI.close()" style="' + BTN + 'background:none;color:#f87171;font-size:18px;padding:4px 8px;">✕</button>';
 }
 
@@ -2186,10 +2197,11 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   'Output ONE JSON object only (no markdown fences): {"reply":"Arabic answer","summary":"","ops":[],"clarification":"","lookup":null,"navigate":""}.\n' +
   '- "reply": your answer. You may use **bold** and lines starting with "- " for lists. Keep it focused; never pad.\n' +
   '- Numbers and statistics: use ONLY the SETTINGS / OVERVIEW / DATA DIGEST in CONTEXT. Never invent students, grades or statistics. Refer to students as «number. name» (names may be replaced by «طالب N» when the teacher turned off name sharing). If the data does not contain the answer, say so.\n' +
+  '- You CAN see every class: the selected class in full and all the other classes in compact form (section OTHER CLASSES). NEVER tell the teacher that you cannot access other classes — use that section, or "lookup" for a full digest.\n' +
   '- "lookup": when you need the full digest of ANOTHER class (or another week) to answer, set {"class":"exact class name","week":N}, leave "reply" empty and the app will call you again with that data (max 2 lookups per question). Do not use it when the selected class is enough.\n' +
   '- "navigate": one page id from the APP GUIDE (or "") when opening that page would help; the teacher decides whether to tap the button. Never claim you opened it.\n' +
   '- Recommendations should be concrete and short. Parent messages: polite, specific to that student\'s digest numbers, constructive; never mention other students.\n' +
-  '- "ops": [] unless the teacher asks to CHANGE data. Ops always apply to the SELECTED class only (if the teacher wants to edit another class, tell them to pick it from the class selector, or use move_student/transfer where allowed). ' +
+  '- "ops": [] unless the teacher asks to CHANGE data. Each op may carry an optional "class":"exact class name" — without it the op applies to the SELECTED class; student numbers always refer to the roster of the class the op targets (see the digests). Global ops (add_class, rename_class, set_active_weeks, set_column_max, set_weeks_visibility) need no class. ' +
   'Never claim an edit is done: the teacher reviews and presses apply. When you give ops, "summary" is a short Arabic description and "reply" briefly says what will change.\n' +
   '- If a request is ambiguous (which student/week/column?), set "clarification" to a short Arabic question and ops [].\n' +
   '- Use the conversation history to resolve references like "the same", "them", "the previous week".\n' +
@@ -2285,6 +2297,20 @@ function schoolContext(cls, week) {
   } catch (e) {}
   return out.join('\n');
 }
+function compactDigest(cls, week) {
+  return classDigest(cls, week).split('\n').map(function (ln) {
+    if (!/^\d+\|/.test(ln)) return ln;
+    return ln.split('|').filter(function (x, k) { return k < 2 || /^(total|absent_periods|missing_cells|trend)/.test(x); }).join('|');
+  }).join('\n');
+}
+function otherDigests(cls, week) {
+  var cs = (DB.classes || []).filter(function (c) { return c !== cls; }), n = 0;
+  if (!cs.length) return '';
+  cs.forEach(function (c) { n += (DB.data[c] || []).length; });
+  if (n > 260) return 'OTHER CLASSES are large — use \"lookup\" to get the digest of the one you need.';
+  return 'OTHER CLASSES — compact digests (use \"lookup\" for the full digest; ops may target them with \"class\"):\n' +
+    cs.map(function (c) { return compactDigest(c, week); }).join('\n\n');
+}
 function clampWeek(w, dflt) { w = parseInt(w, 10); if (!w) w = dflt; return Math.min(Math.max(1, w), activeWeeks()); }
 function validPage(p) { return typeof p === 'string' && Object.prototype.hasOwnProperty.call(APP_PAGES, p) ? p : ''; }
 function chatHistory() {
@@ -2339,19 +2365,30 @@ function chatRenderList() {
       return;
     }
     var card = '';
-    if (m.plan) {
-      var p = m.plan, n = p.cells.length + p.abs.length + p.add.length + (p.extra || []).length;
+    if (m.groups) {
+      var n = planCount(m);
+      var undoable = m.state === 'applied' && (m.undoTs || []).length && m.undoTs.every(function (t) { return undoStack.some(function (u) { return u.t === t; }); });
       card = '<div style="margin-top:8px;border-top:1px dashed #334155;padding-top:8px;">' +
         (m.summary ? '<div style="font-size:11px;color:#c7d2fe;margin-bottom:5px;">🧾 ' + esc(m.summary) + '</div>' : '') +
-        (p.warn.length ? '<div style="font-size:10px;color:#fbbf24;line-height:1.8;margin-bottom:5px;">' + p.warn.map(esc).join('<br>') + '</div>' : '') +
-        planTable(p, m.cls) +
-        (p.over ? '<div style="font-size:10px;color:#fbbf24;margin-top:4px;">⚠️ سيُستبدل ' + p.over + ' درجة موجودة.</div>' : '') +
+        m.groups.map(function (g) {
+          var p = g.plan;
+          return (m.groups.length > 1 ? '<div style="font-size:11px;color:#a5b4fc;font-weight:800;margin:6px 0 3px;">📌 ' + esc(g.cls) + '</div>' : '') +
+            (p.warn.length ? '<div style="font-size:10px;color:#fbbf24;line-height:1.8;margin-bottom:5px;">' + p.warn.map(esc).join('<br>') + '</div>' : '') +
+            planTable(p, g.cls) +
+            (p.over ? '<div style="font-size:10px;color:#fbbf24;margin-top:4px;">⚠️ سيُستبدل ' + p.over + ' درجة موجودة.</div>' : '');
+        }).join('') +
         '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">' +
-        (m.state === 'applied' ? '<span style="color:#4ade80;font-size:11px;font-weight:800;padding:6px 0;">✅ طُبِّق</span>' + btn('↩ تراجع', 'DAI.chatUndo(' + i + ')', 'background:rgba(251,191,36,.12);border:1px solid #d97706;color:#fcd34d;padding:6px 10px;font-size:11px;') :
+        (m.state === 'applied' ? '<span style="color:#4ade80;font-size:11px;font-weight:800;padding:6px 0;">✅ طُبِّق</span>' +
+            (undoable ? btn('↩ تراجع', 'DAI.chatUndo(' + i + ')', 'background:rgba(251,191,36,.12);border:1px solid #d97706;color:#fcd34d;padding:6px 10px;font-size:11px;') : '') :
           m.state === 'dismissed' ? '<span style="color:#94a3b8;font-size:11px;padding:6px 0;">تم التجاهل</span>' :
           m.state === 'undone' ? '<span style="color:#fbbf24;font-size:11px;padding:6px 0;">↩ تم التراجع</span>' :
           btn(n ? '✅ تطبيق (' + n + ')' : 'لا يوجد ما يُطبَّق', 'DAI.chatApply(' + i + ')', PRIMARY + 'padding:7px 12px;font-size:12px;' + (n ? '' : 'opacity:.45;'), n ? '' : 'disabled') +
           btn('✖ تجاهل', 'DAI.chatDismiss(' + i + ')', GHOST + 'padding:6px 10px;')) + '</div></div>';
+    } else if (m.hadPlan) {
+      card = '<div style="margin-top:8px;border-top:1px dashed #334155;padding-top:6px;font-size:11px;color:#94a3b8;line-height:1.8;">' +
+        (m.state === 'applied' ? '✅ طُبِّقت تعديلات هنا. (زر التراجع غير متاح بعد إعادة فتح التطبيق — لديك نسخة احتياطية قبل التعديل في صفحة 💾 النسخ الاحتياطي.)' :
+          m.state === 'undone' ? '↩ تم التراجع' : m.state === 'dismissed' ? 'تم التجاهل' :
+          'انتهت صلاحية معاينة التعديلات بعد إعادة فتح التطبيق. اطلب التعديل من جديد إن أردته.') + '</div>';
     }
     if (m.nav) card += '<div style="margin-top:8px;">' + btn('↗ افتح صفحة «' + esc(APP_PAGES[m.nav]) + '»', 'DAI.chatGo(' + i + ')', GHOST + 'padding:7px 12px;font-size:11px;') + '</div>';
     h += '<div style="display:flex;justify-content:flex-end;margin:8px 0;"><div style="background:' + (m.err ? '#450a0a' : '#111c33') + ';border:1px solid ' + (m.err ? '#7f1d1d' : '#1e3a5f') + ';color:' + (m.err ? '#fca5a5' : '#e2e8f0') + ';border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:12px;line-height:1.95;max-width:94%;">' +
@@ -2374,9 +2411,9 @@ function chatSend(textIn) {
   var hist = chatHistory();
   CHAT.msgs.push({ role: 'user', text: txt });
   CHAT.draft = ''; if (inp) inp.value = '';
-  CHAT.busy = true; CHAT.status = ''; chatRenderList();
+  CHAT.busy = true; CHAT.status = ''; chatSave(); chatRenderList();
   var cls = ST.cls, week = ST.week;
-  var ctx = chatCatalog(cls, week) + '\n' + otherClassesLine(cls) + '\n\n' + schoolContext(cls, week) + '\n\n' + classDigest(cls, week);
+  var ctx = chatCatalog(cls, week) + '\n' + otherClassesLine(cls) + '\n\n' + schoolContext(cls, week) + '\n\n' + classDigest(cls, week) + '\n\n' + otherDigests(cls, week);
   var extra = '';
   /* يستدعي النموذج؛ وإن طلب بيانات فصل آخر (lookup) نضيفها ونعيد الاستدعاء (حد أقصى مرتان) */
   var run = function (round) {
@@ -2396,7 +2433,7 @@ function chatSend(textIn) {
         if ((DB.classes || []).indexOf(lc) >= 0) {
           var lw = clampWeek(lk.week, week);
           CHAT.status = '🔍 أراجع بيانات ' + lc + '…'; chatRenderList();
-          extra += '\n\nEXTRA DATA requested by you — class ' + lc + ' (read-only; ops still apply to the selected class only):\n' + classDigest(lc, lw);
+          extra += '\n\nEXTRA DATA requested by you — class ' + lc + ' (you may target this class in ops with "class"):\n' + classDigest(lc, lw);
         } else {
           extra += '\n\n(lookup failed: there is no class named "' + lc + '". Exact names: ' + (DB.classes || []).join(' | ') + ')';
         }
@@ -2410,7 +2447,13 @@ function chatSend(textIn) {
     var ops = Array.isArray(j.ops) ? j.ops : [];
     var m = { role: 'assistant', text: String(j.reply || '').trim(), clar: String(j.clarification || '').trim(), cls: cls, nav: validPage(String(j.navigate || '').trim()) };
     if (ops.length) {
-      m.plan = planFromOps(cls, ops, { week: week });
+      var gm = {}, order = [];
+      ops.forEach(function (op) {
+        var oc = (op && typeof op['class'] === 'string' && (DB.classes || []).indexOf(op['class']) >= 0) ? op['class'] : cls;
+        if (!gm[oc]) { gm[oc] = []; order.push(oc); }
+        gm[oc].push(op);
+      });
+      m.groups = order.map(function (oc) { return { cls: oc, plan: planFromOps(oc, gm[oc], { week: week }) }; });
       m.summary = String(j.summary || '').trim() || '';
       m.state = 'pending';
       if (!m.text) m.text = 'جهّزتُ التعديلات التالية للمراجعة:';
@@ -2421,6 +2464,8 @@ function chatSend(textIn) {
     CHAT.msgs.push({ role: 'assistant', text: errMsg(e), err: true });
   }).then(function () {
     CHAT.busy = false; CHAT.status = '';
+    var oo = ov(); if (oo && oo.style.display === 'none') { CHAT.unread = true; if (miniEl()) showMini(); }
+    chatSave();
     if (ST && ST.view === 'chat') chatRenderList();
   });
 }
@@ -2430,24 +2475,45 @@ function chatGo(i) {
   closeAI();
   try { if (typeof switchPage === 'function') switchPage(pg); } catch (e) {}
 }
-function chatApply(i) {
-  var m = CHAT.msgs[i]; if (!m || !m.plan || m.state !== 'pending') return;
-  var r = applyPlan(m.cls, m.plan, m.summary || ('محادثة: ' + (CHAT.msgs[i - 1] ? CHAT.msgs[i - 1].text : '').slice(0, 40)));
-  if (!r.ok) { alert(r.msg); return; }
-  m.state = 'applied'; m.undoT = r.t;
-  if (typeof showSnack === 'function') showSnack('✅ تم تنفيذ التعديلات');
-  chatRenderList();
+function planCount(m) {
+  var n = 0;
+  (m.groups || []).forEach(function (g) { var p = g.plan; n += p.cells.length + p.abs.length + p.add.length + (p.extra || []).length; });
+  return n;
 }
-function chatDismiss(i) { var m = CHAT.msgs[i]; if (m && m.state === 'pending') { m.state = 'dismissed'; chatRenderList(); } }
+function refreshHead() { if (ST && ST.view === 'chat') head('🧠 المحادثة الذكية', true); }
+function chatApply(i) {
+  var m = CHAT.msgs[i]; if (!m || !m.groups || m.state !== 'pending') return;
+  var label0 = m.summary || ('محادثة: ' + (CHAT.msgs[i - 1] ? CHAT.msgs[i - 1].text : '').slice(0, 40));
+  var ts = [], failed = '';
+  m.groups.forEach(function (g) {
+    if (failed) return;
+    var r = applyPlan(g.cls, g.plan, m.groups.length > 1 ? label0 + ' (' + g.cls + ')' : label0);
+    if (!r.ok) failed = g.cls + ': ' + r.msg; else ts.push(r.t);
+  });
+  m.undoTs = ts;
+  if (failed) {
+    alert(failed + (ts.length ? '\nطُبِّق جزء من التعديلات قبل التوقف — يمكنك التراجع عنه.' : ''));
+    if (!ts.length) { chatRenderList(); return; }
+  }
+  m.state = 'applied';
+  if (typeof showSnack === 'function') showSnack('✅ تم تنفيذ التعديلات');
+  chatSave(); refreshHead(); chatRenderList();
+}
+function chatDismiss(i) { var m = CHAT.msgs[i]; if (m && m.state === 'pending') { m.state = 'dismissed'; chatSave(); chatRenderList(); } }
 function chatUndo(i) {
   var m = CHAT.msgs[i]; if (!m || m.state !== 'applied') return;
-  var top = undoStack[undoStack.length - 1];
-  if (!top || top.t !== m.undoT) { if (typeof showSnack === 'function') showSnack('⚠️ تراجع أولاً عن العمليات الأحدث'); return; }
-  var u = undoLast();
-  if (u) { m.state = 'undone'; if (typeof showSnack === 'function') showSnack('↩ تم التراجع'); chatRenderList(); }
+  var ts = (m.undoTs || []).slice().reverse();
+  for (var k = 0; k < ts.length; k++) {
+    var top = undoStack[undoStack.length - 1];
+    if (!top || top.t !== ts[k]) { if (typeof showSnack === 'function') showSnack('⚠️ تراجع أولاً عن العمليات الأحدث'); chatRenderList(); return; }
+    undoLast();
+  }
+  m.state = 'undone';
+  if (typeof showSnack === 'function') showSnack('↩ تم التراجع');
+  chatSave(); refreshHead(); chatRenderList();
 }
 function chatCopy(i) { var m = CHAT.msgs[i]; if (m) copyTextToClipboard(m.text + (m.clar ? '\n' + m.clar : '')); }
-function chatClear() { CHAT.msgs = []; CHAT.draft = ''; viewChat(); }
+function chatClear() { CHAT.msgs = []; CHAT.draft = ''; chatSave(); viewChat(); }
 function chatMic() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { if (typeof showSnack === 'function') showSnack('⚠️ المتصفح لا يدعم الإدخال الصوتي — استخدم Chrome'); return; }
@@ -2506,6 +2572,78 @@ function imgXform(i, kind) {
   img.src = im.dataUrl;
 }
 
+/* ═════════════ تصغير المساعد + حفظ المحادثة + تراجع سريع ═════════════ */
+var AI_OPEN = false;
+var CHAT_STORE = 'dalty_ai_chat_v1';
+function miniEl() { return document.getElementById('daiMini'); }
+function hideMini() { var e = miniEl(); if (e) e.remove(); }
+function showMini() {
+  hideMini();
+  var dk = document.getElementById('mobileDock'), dh = (dk && dk.offsetHeight) ? dk.offsetHeight : 0;
+  var u = undoStack[undoStack.length - 1];
+  var d = document.createElement('div');
+  d.id = 'daiMini';
+  d.style.cssText = 'position:fixed;right:10px;bottom:' + (dh + 10) + 'px;z-index:100040;display:flex;gap:6px;align-items:center;direction:rtl;font-family:inherit;background:#0f172a;border:1px solid #334155;border-radius:999px;padding:5px 6px;box-shadow:0 4px 18px rgba(0,0,0,.55);max-width:calc(100vw - 20px);';
+  d.innerHTML = '<button onclick="DAI.restore()" style="' + BTN + 'background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:8px 12px;font-size:12px;border-radius:999px;white-space:nowrap;">🧠 المساعد' + (CHAT.unread ? ' 🔴' : '') + '</button>' +
+    (u ? '<button onclick="DAI.undoBar()" title="تراجع عن آخر تعديل" style="' + BTN + 'background:rgba(251,191,36,.15);border:1px solid #d97706;color:#fcd34d;padding:7px 10px;font-size:11px;border-radius:999px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw;">↩ تراجع: ' + esc(String(u.label || '').slice(0, 22)) + '</button>' : '') +
+    '<button onclick="DAI.close()" title="إغلاق" style="' + BTN + 'background:none;color:#f87171;font-size:15px;padding:4px 7px;">✕</button>';
+  document.body.appendChild(d);
+}
+function minimizeAI() {
+  var o = ov(); if (!o || !ST) return;
+  if (CHAT.listening) { try { chatMic(); } catch (e) {} }
+  o.style.display = 'none';
+  showMini();
+}
+function restoreAI() {
+  var o = ov();
+  if (!o) { open('chat'); return; }
+  o.style.display = 'flex'; hideMini(); CHAT.unread = false; render();
+}
+function undoBar() {
+  var u = undoLast(); if (!u) return;
+  CHAT.msgs.forEach(function (m) {
+    if (m.state === 'applied' && m.undoTs && m.undoTs.length &&
+        m.undoTs.every(function (t) { return !undoStack.some(function (x) { return x.t === t; }); })) m.state = 'undone';
+  });
+  chatSave();
+  if (typeof showSnack === 'function') showSnack('↩ تم التراجع عن: ' + u.label);
+  var o = ov();
+  if (o && o.style.display !== 'none' && ST) render(); else if (miniEl()) showMini();
+}
+/* حفظ المحادثة على الجهاز ليستمر عملك بعد التنقل بين التطبيقات (تنتهي صلاحيتها بعد 24 ساعة) */
+function chatSave() {
+  try {
+    var keep = CHAT.msgs.slice(-40).map(function (m) {
+      var o = { role: m.role, text: m.text || '' };
+      if (m.clar) o.clar = m.clar;
+      if (m.err) o.err = 1;
+      if (m.nav) o.nav = m.nav;
+      if (m.cls) o.cls = m.cls;
+      if (m.summary) o.summary = m.summary;
+      if (m.groups || m.hadPlan) { o.hadPlan = 1; o.state = m.state; }
+      return o;
+    });
+    localStorage.setItem(CHAT_STORE, JSON.stringify({ t: Date.now(), open: AI_OPEN, draft: CHAT.draft || '', msgs: keep }));
+  } catch (e) {}
+}
+function chatRestore() {
+  try {
+    var o = JSON.parse(localStorage.getItem(CHAT_STORE) || 'null');
+    if (!o || !Array.isArray(o.msgs) || Date.now() - (o.t || 0) > 24 * 3600 * 1000) return false;
+    CHAT.msgs = o.msgs.map(function (m) { if (m.hadPlan && m.state === 'pending') m.state = 'expired'; return m; });
+    CHAT.draft = String(o.draft || '');
+    return !!o.open;
+  } catch (e) { return false; }
+}
+document.addEventListener('visibilitychange', function () { if (document.hidden) chatSave(); });
+window.addEventListener('pagehide', chatSave);
+/* الضغط على شريط الأيقونات السفلي أثناء فتح المساعد يصغّره لتتابع الصفحة */
+document.addEventListener('click', function (e) {
+  var o = ov(); if (!o || o.style.display === 'none') return;
+  if (e.target && e.target.closest && e.target.closest('#mobileDock')) minimizeAI();
+}, true);
+
 /* ═════════════ واجهة عامة ═════════════ */
 window.DAI = {
   open: open, close: closeAI, mode: pickMode, cancel: cancel,
@@ -2557,7 +2695,7 @@ window.DAI = {
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   chatSend: function () { chatSend(); }, chatChip: function (i) { chatSend(CHAT_CHIPS[i]); },
   chatDraft: function (v) { CHAT.draft = v; }, chatMic: chatMic, chatClear: chatClear,
-  chatGo: chatGo, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
+  chatGo: chatGo, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
   undo: function (fromDone) { doUndo(fromDone === true); }
 };
 
@@ -2576,8 +2714,9 @@ function mountButton() {
   return true;
 }
 document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape' && ov()) closeAI();
+  if (e.key === 'Escape' && ov() && ov().style.display !== 'none') minimizeAI();
 });
+(function () { if (chatRestore()) { AI_OPEN = true; setTimeout(function () { if (!ST) showMini(); }, 900); } })();
 var tries = 0;
 (function tryMount() { if (!mountButton() && tries++ < 40) setTimeout(tryMount, 500); })();
 
