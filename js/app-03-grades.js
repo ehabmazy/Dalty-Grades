@@ -130,9 +130,9 @@ function renderGrades(){
     html+='<th></th><th></th><th></th>';
     weeks.forEach(function(w){
       var _wc=_wkComplete[w];
-      if(_showHw)html+='<th style="background:'+(_wc.hw?'#0d9488':'#102060')+';font-size:8px;'+(_wc.hw?'color:#ffffff;':'')+_wkEdgeStyle('hw')+'">'+(_wc.hw?'✅ ':'')+'واجب<br>/10'+gradesColDateHtml('h'+w,7,_wc.hw?'#ccfbf1':'#fbbf24')+'</th>';
-      if(_showAssess)html+='<th style="background:'+(_wc.assess?'#0d9488':'#102060')+';font-size:8px;'+(_wc.assess?'color:#ffffff;':'')+_wkEdgeStyle('assess')+'">'+(_wc.assess?'✅ ':'')+'تقييم<br>/20'+gradesColDateHtml('a'+w,7,_wc.assess?'#ccfbf1':'#fbbf24')+'</th>';
-      if(_showBeh)html+='<th style="background:'+(_wc.beh?'#0d9488':'#1a0d3a')+';font-size:8px;color:'+(_wc.beh?'#ffffff':'#c4b5fd')+';'+_wkEdgeStyle('beh')+'">'+(_wc.beh?'✅ ':'')+'سلوك<br>/10'+gradesColDateHtml('bw'+w,7,_wc.beh?'#ccfbf1':'#c4b5fd')+'</th>';
+      if(_showHw)html+='<th style="background:'+(_wc.hw?'#0d9488':'#102060')+';font-size:8px;'+(_wc.hw?'color:#ffffff;':'')+_wkEdgeStyle('hw')+'">'+(_wc.hw?'✅ ':'')+'واجب<br>/10'+gradesColDateHtml('h'+w,cls,7,_wc.hw?'#ccfbf1':'#fbbf24')+'</th>';
+      if(_showAssess)html+='<th style="background:'+(_wc.assess?'#0d9488':'#102060')+';font-size:8px;'+(_wc.assess?'color:#ffffff;':'')+_wkEdgeStyle('assess')+'">'+(_wc.assess?'✅ ':'')+'تقييم<br>/20'+gradesColDateHtml('a'+w,cls,7,_wc.assess?'#ccfbf1':'#fbbf24')+'</th>';
+      if(_showBeh)html+='<th style="background:'+(_wc.beh?'#0d9488':'#1a0d3a')+';font-size:8px;color:'+(_wc.beh?'#ffffff':'#c4b5fd')+';'+_wkEdgeStyle('beh')+'">'+(_wc.beh?'✅ ':'')+'سلوك<br>/10'+gradesColDateHtml('bw'+w,cls,7,_wc.beh?'#ccfbf1':'#c4b5fd')+'</th>';
     });
     if(_wkSpan===0){
       if(_showAvgAssess)html+='<th style="background:#0a1e35;">متوسط<br><small>تقييم</small></th>';
@@ -288,7 +288,7 @@ function renderGrades(){
   html+='<div class="tw"><table><thead><tr>';
   html+='<th>م</th><th class="td-photo">صورة</th><th class="td-name" style="position:relative;">الاسم<span class="nm-rz" title="اسحب لتغيير عرض عمود الاسم — دبل كليك للرجوع للافتراضي" onpointerdown="gradesNameResizeStart(event)" ondblclick="gradesNameResizeReset()"></span></th>';
   pageCols.forEach(function(c){
-    html+='<th>'+esc(c.label)+'<span class="ml">/'+c.max+'</span>'+gradesColDateHtml(c.id,8,'#fbbf24');
+    html+='<th>'+esc(c.label)+'<span class="ml">/'+c.max+'</span>'+gradesColDateHtml(c.id,cls,8,'#fbbf24');
     html+='<div style="display:flex;gap:2px;justify-content:center;margin-top:2px;">';
     html+='<button style="background:#e2e8f0;border:1px solid #94a3b8;border-radius:3px;font-size:7px;color:#475569;cursor:pointer;padding:0 3px;" onclick="gradesSetColAll(\''+c.id+'\',\'\')">مسح</button>';
     html+='<button style="background:#ede9fe;border:1px solid #7c3aed;border-radius:3px;font-size:7px;color:#6d28d9;cursor:pointer;padding:0 4px;font-weight:700;" onclick="openPasteModal(\''+c.id+'\')">📋</button>';
@@ -501,18 +501,51 @@ function gradesSetAllAbsent(idx){
   }
   saveDB();renderGrades();
 }
-// تاريخ بداية الأسبوع (يوم/شهر) لعمود تقييم/واجب/سلوك — فارغ لو تاريخ بداية الفصل غير محدد أو العمود ليس أسبوعياً
-function gradesColDateStr(colId){
-  var m=/^(?:a|h|bw)(\d+)$/.exec(String(colId||''));
-  if(!m||!DB.meta||!DB.meta.startDate)return '';
-  var d=new Date(DB.meta.startDate);
-  if(isNaN(d.getTime()))return '';
-  d.setDate(d.getDate()+(Number(m[1])-1)*7);
-  return d.getDate()+'/'+(d.getMonth()+1);
+// يوم الحصة الفعلي للفصل في الجدول (أول يوم تظهر فيه حصة هذا الفصل في الأسبوع) — null لو الفصل غير موجود في الجدول
+function gradesClassLessonDay(cls){
+  var sh=(DB.schedule&&DB.schedule._shared)||null;
+  if(!sh||!sh.periods||!sh.slots||!cls)return null;
+  var best=null;
+  sh.periods.forEach(function(p){
+    for(var di=0;di<7;di++){
+      var v=sh.slots[p.id+'_d'+di];
+      if(v&&String(v).trim()===cls&&(best===null||di<best))best=di;
+    }
+  });
+  return best;
 }
-function gradesColDateHtml(colId,fs,clr){
-  var t=gradesColDateStr(colId);
-  return t?'<br><span class="col-date" style="font-size:'+fs+'px;font-weight:600;color:'+clr+';white-space:nowrap;">📅 '+t+'</span>':'';
+// يوم الحصة المربوطة بالواجب ('hw') أو بالتقييم ('assess') من إعداد صفحة الغياب (نوع كل فترة)،
+// كما يظهر في جدول الغياب لنفس الفصل والأسبوع — null لو لا فترة مربوطة أو الفترة غير موجودة في الجدول
+function gradesLinkedLessonDay(cls,w,type){
+  if(typeof buildAbsCols!=='function'||typeof getAbsColType!=='function')return null;
+  var cols=buildAbsCols(cls,w);
+  for(var ci=0;ci<cols.length;ci++){
+    if(getAbsColType(ci)!==type)continue;
+    var c=cols[ci];
+    if(c&&c.period&&!/^g\d+$/.test(String(c.period.id))&&c.dayIdx>=0)return c.dayIdx;
+    return null;
+  }
+  return null;
+}
+// نص تاريخ عمود تقييم/واجب/سلوك لأسبوع معيّن: {day, date}
+// الأولوية: يوم الفترة المربوطة بالواجب/التقييم في صفحة الغياب ← أول حصة للفصل في الجدول ← بداية الأسبوع
+function gradesColDateInfo(colId,cls){
+  var m=/^(a|h|bw)(\d+)$/.exec(String(colId||''));
+  if(!m||!DB.meta||!DB.meta.startDate)return null;
+  var w=Number(m[2]);
+  var di=null;
+  if(m[1]==='h')di=gradesLinkedLessonDay(cls,w,'hw');
+  else if(m[1]==='a')di=gradesLinkedLessonDay(cls,w,'assess');
+  if(di===null)di=gradesClassLessonDay(cls);
+  var d=new Date(DB.meta.startDate);
+  if(isNaN(d.getTime()))return null;
+  d.setDate(d.getDate()+(w-1)*7+(di===null?0:di));
+  return{day:di===null?'':DAYS_AR[di],date:d.getDate()+'/'+(d.getMonth()+1)};
+}
+function gradesColDateHtml(colId,cls,fs,clr){
+  var t=gradesColDateInfo(colId,cls);
+  if(!t)return '';
+  return '<br><span class="col-date" style="font-size:'+fs+'px;font-weight:600;color:'+clr+';white-space:nowrap;line-height:1.25;">'+(t.day?t.day+'<br>':'')+'📅 '+t.date+'</span>';
 }
 // FIX 4: set all students for a column to غ, م, or clear
 function gradesSetColAll(colId,val){
