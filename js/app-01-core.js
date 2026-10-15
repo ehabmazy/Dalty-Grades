@@ -672,6 +672,7 @@ function initDB(){
   if(!DB.absences){DB.absences={};DB.classes.forEach(function(c){DB.absences[c]={};});}
   if(!DB.meta.activeWeeks)DB.meta.activeWeeks=14;
   if(!DB.meta.periodTimes)DB.meta.periodTimes=[];
+  try{if(typeof migrateAbsColOrderByDay==='function')migrateAbsColOrderByDay();}catch(e){console.warn('absOrder migration',e);}
   if(!DB.meta.schoolName)DB.meta.schoolName='Dalty Grades';
   if(!DB.meta.teacherName)DB.meta.teacherName='إيهاب ماري عبده';
   if(!DB.meta.teacherGender)DB.meta.teacherGender='male';

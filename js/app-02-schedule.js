@@ -223,6 +223,54 @@ function clearSickRange(cls,studentId,fromDate,toDate){
   saveDB();
   _refreshCurrentAndRelated();
 }
+
+// ── ترحيل لمرة واحدة: الغياب مخزَّن برقم العمود (w{أسبوع}_ci{رقم})، وكان ترتيب الأعمدة حسب الفترة ثم اليوم،
+// وأصبح حسب اليوم ثم الفترة. نُعيد ربط السجلات القديمة بنفس الحصة (نفس الفترة واليوم) في موضعها الجديد. ──
+function migrateAbsColOrderByDay(){
+  if(!DB||!DB.meta||DB.meta.absOrderByDay)return;
+  DB.meta.absOrderByDay=true;
+  var sh=DB.schedule&&DB.schedule._shared;
+  if(!sh||!sh.periods||!sh.slots||!DB.absences){saveDB();return;}
+  var ppw=Math.max(1,Number(DB.meta.periodsPerWeek)||3);
+  var changedClasses=0,dropped=0;
+  (DB.classes||[]).forEach(function(cls){
+    var oldL=[];
+    sh.periods.forEach(function(p,pIdx){
+      for(var di=0;di<7;di++){
+        var v=sh.slots[p.id+"_d"+di]||"";
+        if(String(v).trim()===cls)oldL.push({id:p.id+"|"+di,di:di,pi:pIdx});
+      }
+    });
+    var newL=oldL.slice().sort(function(a,b){return a.di!==b.di?a.di-b.di:a.pi-b.pi;});
+    oldL=oldL.slice(0,ppw);newL=newL.slice(0,ppw);
+    var newIdx={};newL.forEach(function(c,i){newIdx[c.id]=i;});
+    var map={};var same=true;
+    oldL.forEach(function(c,i){
+      var n=newIdx[c.id];
+      if(n===undefined){map[i]=-1;same=false;}
+      else{map[i]=n;if(n!==i)same=false;}
+    });
+    if(same)return;
+    changedClasses++;
+    var clsAbs=DB.absences[cls]||{};
+    Object.keys(clsAbs).forEach(function(sid){
+      var abs=clsAbs[sid];if(!abs)return;
+      var out={},moved=[];
+      Object.keys(abs).forEach(function(k){
+        var m=k.match(/^w(\d+)_ci(\d+)$/);
+        if(!m||map[m[2]]===undefined){out[k]=abs[k];return;}
+        var n=map[m[2]];
+        if(n<0){dropped++;return;}
+        out["w"+m[1]+"_ci"+n]=abs[k];
+      });
+      clsAbs[sid]=out;
+    });
+  });
+  saveDB();
+  if(changedClasses&&typeof showSnack==='function'){
+    try{showSnack("🔄 أُعيد ترتيب أعمدة الغياب أسبوعياً لـ "+changedClasses+" فصل مع نقل السجلات القديمة لمواضعها"+(dropped?(" (تعذّر نقل "+dropped+" سجل)"):""));}catch(e){}
+  }
+}
 function buildAbsCols(cls,week){
   // عدد الأعمدة دائماً = periodsPerWeek (فترات المادة)
   // الجدول يُضيف فقط بيانات اليوم والوقت لكل فترة
@@ -233,14 +281,20 @@ function buildAbsCols(cls,week){
 
   // جمع فترات المادة من الجدول (مُرتبة حسب اليوم ثم الفترة)
   var scheduledCols=[];
-  schedPeriods.forEach(function(period){
+  schedPeriods.forEach(function(period,_pIdx){
     DAYS_AR.forEach(function(_,di){
       var slot=slots[period.id+"_d"+di]||"";
       if(slot.trim()===cls){
-        scheduledCols.push({period:period,dayIdx:di,
+        scheduledCols.push({period:period,dayIdx:di,_pi:_pIdx,
           label:DAYS_SHORT[di]+" "+(period.label||period.id)});
       }
     });
+  });
+
+  // ترتيب أسبوعي حقيقي: حسب اليوم (السبت ← الجمعة) ثم ترتيب الفترة داخل اليوم
+  scheduledCols.sort(function(a,b){
+    if(a.dayIdx!==b.dayIdx)return a.dayIdx-b.dayIdx;
+    return a._pi-b._pi;
   });
 
   var cols=[];
