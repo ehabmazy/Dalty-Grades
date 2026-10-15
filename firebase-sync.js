@@ -216,6 +216,7 @@ function listenForRemoteChanges() {
     /* تحديث DB في الذاكرة وإعادة الرسم */
     if (window.DB !== undefined) {
       window.DB = clean;
+      if (typeof window._photosHydrate === "function") window._photosHydrate();
       if (typeof window.renderGrades  === "function") window.renderGrades();
       if (typeof window.renderAbsence === "function") window.renderAbsence();
       if (typeof window.renderWeekly  === "function") window.renderWeekly();
@@ -242,11 +243,12 @@ function hookSaveDB() {
       window.saveDB = function () {
         /* _fbHooked — علامة لمنع التكرار */
         /* استدعاء الدالة الأصلية أولاً */
-        _origSave.apply(this, arguments);
+        var _saveRes = _origSave.apply(this, arguments);
         /* سجّل أن هناك تعديلاً لم يُرفع بعد (تُمسح عند نجاح الرفع) */
         _markUnsynced();
         /* ثم إرسال لـ Firebase بعد تأخير */
         scheduleSyncToFirebase();
+        return _saveRes;
       };
 
       /* علامة تمنع الـ hook مرة ثانية */
@@ -326,7 +328,7 @@ function pushToFirebase() {
   var ts = Date.now();
   _lastSaveTS = ts;
 
-  var payload = sanitizeKeys(JSON.parse(JSON.stringify(db)));
+  var payload = sanitizeKeys(JSON.parse(JSON.stringify(db, window._photoReplacerStrict || null)));
   payload._ts     = ts;
   payload._device = getDeviceId();
 
@@ -565,6 +567,7 @@ function pullFromFirebase() {
       localStorage.setItem(_localStoreKey(), JSON.stringify(clean));
       try { localStorage.removeItem(UNSYNCED_KEY); } catch (e) {} /* المستخدم اختار صراحةً نسخة السحابة */
       window.DB = clean;
+      if (typeof window._photosHydrate === "function") window._photosHydrate();
 
       if (typeof window.renderGrades  === "function") window.renderGrades();
       if (typeof window.renderAbsence === "function") window.renderAbsence();
