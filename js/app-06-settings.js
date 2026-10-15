@@ -185,7 +185,7 @@ function renderSettings(){
   html+='<div style="display:flex;flex-direction:column;gap:6px;">';
   html+='<label style="background:#1d4ed8;color:white;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;display:inline-block;">📷 اختر صورة<input type="file" accept="image/*" style="display:none;" onchange="settingsUploadPhoto(event)"/></label>';
   if(hasPhoto){
-    html+='<button class="btn btn-danger btn-sm" onclick="DB.meta.teacherPhoto=\'\';saveDB();renderSettings();">✕ حذف الصورة</button>';
+    html+='<button class="btn btn-danger btn-sm" onclick="DB.meta.teacherPhoto=\'\';removeLocalPhoto(\'m|teacherPhoto\');saveDB();renderSettings();">✕ حذف الصورة</button>';
   }
   html+='<span class="settings-desc">تظهر في الشاشة الرئيسية بدلاً من حرف الأحرف الأولى</span>';
   html+='</div></div></div></div>';
@@ -206,7 +206,7 @@ function renderSettings(){
   html+='<div style="display:flex;flex-direction:column;gap:6px;">';
   html+='<label style="background:#1d4ed8;color:white;padding:5px 14px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:700;display:inline-block;">📷 اختر صورة افتراضية<input type="file" accept="image/*" style="display:none;" onchange="settingsUploadDefaultStudentPhoto(event)"/></label>';
   if(hasDefStuPhoto){
-    html+='<button class="btn btn-danger btn-sm" onclick="DB.meta.defaultStudentPhoto=\'\';saveDB();renderSettings();">✕ حذف الصورة الافتراضية</button>';
+    html+='<button class="btn btn-danger btn-sm" onclick="DB.meta.defaultStudentPhoto=\'\';removeLocalPhoto(\'m|defaultStudentPhoto\');saveDB();renderSettings();">✕ حذف الصورة الافتراضية</button>';
   }
   html+='<span class="settings-desc">تظهر بدلاً من أيقونة 👤 للطلاب الذين ليس لديهم صور خاصة</span>';
   html+='</div></div></div></div>';
@@ -316,7 +316,8 @@ function renderSettings(){
   });
   html+='</div></div>';
   html+='<button class="btn btn-success btn-sm" onclick="settingsAddPeriodTime()">+ إضافة</button>';
-  html+='</div><span class="settings-desc">أدخل الوقت يدوياً أو اختر من القائمة. الصيغة: بداية-نهاية (8:00-8:45)</span></div></div>';
+  html+='<button class="btn btn-sm" onclick="timePickerOpen(\'settings\',0)" style="background:#1d4ed8;color:#fff;">🕐 اختيار الوقت</button>';
+  html+='</div><span class="settings-desc">اضغط «🕐 اختيار الوقت» لضبطه بسهولة (صباحاً/مساءً + المدة)، أو اكتبه بأي صيغة مثل 8-8:45 أو ١:٠٠م-١:٤٥م وسيُحوَّل تلقائياً.</span></div></div>';
 
   // List of saved times
   if(!ptimes.length){
@@ -600,25 +601,13 @@ function settingsSaveRange(){
 
 function settingsUploadPhoto(e){
   var f=e.target.files[0];if(!f)return;
-  var r=new FileReader();
-  r.onload=function(){
-    DB.meta.teacherPhoto=r.result;
-    saveDB();
-    renderSettings();
-    showSnack('✅ تم رفع الصورة');
-  };
-  r.readAsDataURL(f);
+  var old=DB.meta.teacherPhoto;
+  setPhotoSafely(f,420,function(){return 'm|teacherPhoto';},function(out){DB.meta.teacherPhoto=out;},function(){DB.meta.teacherPhoto=old;},function(){renderSettings();showSnack('✅ تم رفع الصورة');});
 }
 function settingsUploadDefaultStudentPhoto(e){
   var f=e.target.files[0];if(!f)return;
-  var r=new FileReader();
-  r.onload=function(){
-    DB.meta.defaultStudentPhoto=r.result;
-    saveDB();
-    renderSettings();
-    showSnack('✅ تم تعيين الصورة الافتراضية للطلاب');
-  };
-  r.readAsDataURL(f);
+  var old=DB.meta.defaultStudentPhoto;
+  setPhotoSafely(f,360,function(){return 'm|defaultStudentPhoto';},function(out){DB.meta.defaultStudentPhoto=out;},function(){DB.meta.defaultStudentPhoto=old;},function(){renderSettings();showSnack('✅ تم تعيين الصورة الافتراضية للطلاب');});
 }
 
 // ══════════════════════════════════════════════════════

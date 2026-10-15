@@ -478,7 +478,8 @@ function _gradesUpdateTotCell(cls,idx){
 }
 function gradesPhotoChange(e,idx){
   var f=e.target.files[0];if(!f)return;
-  var r=new FileReader();r.onload=function(){DB.data[GS.activeClass][idx].photo=r.result;saveDB();renderGrades();};r.readAsDataURL(f);
+  var st=DB.data[GS.activeClass][idx], old=st.photo;
+  setPhotoSafely(f,360,function(){return 's|'+st.uid;},function(out){st.photo=out;},function(){st.photo=old;},function(){renderGrades();showSnack('✅ تم حفظ صورة الطالب');});
 }
 function gradesDistribute(idx,inp){
   var v=inp.value.trim();if(!v)return;

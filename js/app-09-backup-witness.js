@@ -10,6 +10,8 @@ var _bkpLastCheck= 0;
 var BKP_SIG_KEY  = 'grades_v6_bkp_sig';   // بصمة آخر محتوى نُسخ احتياطياً
 var BKP_AUTO_GAP = 10*60*1000;            // أقل مدة بين نسختين تلقائيتين (عند وجود تغييرات)
 var _BKP_AUTO_LABELS = ['تلقائي','عند فتح التطبيق'];
+var BKP_MAX_MANUAL = 20;                  // النسخ المسماة/اليدوية تُحفظ حتى 20 (لا تدفعها النسخ التلقائية)
+var BKP_EXPORT_KEY = 'grades_v6_last_export';
 var _bkpLastSync = 0;
 var _folderHandle= null; // FileSystemDirectoryHandle
 
@@ -59,11 +61,26 @@ function _bkpLoadFolderHandle(cb){
 function bkpLoad(){
   try{ var s=localStorage.getItem(BKP_KEY); return s?JSON.parse(s):[]; }catch(e){ return []; }
 }
+function _bkpIsAuto(snap){ return _BKP_AUTO_LABELS.indexOf(snap.label)>=0; }
+// حذف نسخة واحدة عند امتلاء الذاكرة: الأقدم من التلقائية أولاً، ثم الأقدم عموماً
+function _bkpDropOne(list){
+  for(var k=list.length-1;k>0;k--){ if(_bkpIsAuto(list[k])){ list.splice(k,1); return; } }
+  list.pop();
+}
+// الحدود: 8 تلقائية + 20 يدوية/مسماة (الأحدث أولاً)
+function _bkpPrune(list){
+  var a=0,m=0,out=[];
+  list.forEach(function(sn){
+    if(_bkpIsAuto(sn)){ if(a<BKP_MAX){ out.push(sn); a++; } }
+    else if(m<BKP_MAX_MANUAL){ out.push(sn); m++; }
+  });
+  return out;
+}
 function _bkpSaveList(list){
   // عند امتلاء الذاكرة نحذف الأقدم بدل أن نفشل بصمت — ولا نسمح للنسخ بأن تُزاحم البيانات الأساسية
   while(true){
     try{ localStorage.setItem(BKP_KEY, JSON.stringify(list)); return; }
-    catch(e){ if(list.length<=1){ try{localStorage.removeItem(BKP_KEY);}catch(e2){} return; } list.pop(); }
+    catch(e){ if(list.length<=1){ try{localStorage.removeItem(BKP_KEY);}catch(e2){} return; } _bkpDropOne(list); }
   }
 }
 
@@ -80,7 +97,7 @@ function _bkpSig(){
   try{
     if(!window.DB) return '';
     var str = JSON.stringify(window.DB, function(k,v){
-      return (k==='defaultStudentPhoto' || k==='teacherPhoto') ? undefined : v;
+      return (k==='defaultStudentPhoto' || k==='teacherPhoto' || k==='photo') ? undefined : v;
     });
     var h = 2166136261;
     for(var i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = (h + ((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24))) >>> 0; }
@@ -90,6 +107,41 @@ function _bkpSig(){
 function _bkpStoredSig(){ try{ return localStorage.getItem(BKP_SIG_KEY)||''; }catch(e){ return ''; } }
 
 // ── إنشاء نسخة ───────────────────────────────────────
+// صور الطلاب لا تُخزَّن داخل النسخ الداخلية (توفيراً للذاكرة) — وتُعاد من البيانات الحالية عند الاستعادة
+function _bkpStripStudentPhotos(c){
+  try{
+    (c.classes||[]).forEach(function(cl){ ((c.data||{})[cl]||[]).forEach(function(st){ if(st&&st.photo) st.photo=''; }); });
+    c._studentPhotosStripped=true;
+  }catch(e){}
+}
+function _bkpReattachPhotos(newDB, curDB){
+  try{
+    if(!newDB||!curDB||!newDB._studentPhotosStripped) return;
+    (newDB.classes||[]).forEach(function(cl){
+      var cur=(curDB.data||{})[cl]||[], map={}, byName={};
+      cur.forEach(function(s){ if(s&&s.photo){ if(s.id!==undefined)map['i'+s.id]=s.photo; if(s.name)byName[s.name]=s.photo; } });
+      ((newDB.data||{})[cl]||[]).forEach(function(s){
+        if(s&&!s.photo) s.photo=(s.id!==undefined&&map['i'+s.id])||(s.name&&byName[s.name])||'';
+      });
+    });
+  }catch(e){}
+  delete newDB._studentPhotosStripped;
+}
+// تنظيف لمرة واحدة: إزالة صور الطلاب من النسخ المحفوظة سابقاً لتحرير الذاكرة
+function _bkpStripOldSnapshots(){
+  try{
+    if(localStorage.getItem('grades_v6_bkp_photos_stripped_v1')) return;
+    var list=bkpLoad(), ch=false;
+    list.forEach(function(sn){
+      try{
+        if(!sn.data||sn.data.length<200000) return;
+        var o=JSON.parse(sn.data); _bkpStripStudentPhotos(o); sn.data=JSON.stringify(o); ch=true;
+      }catch(e){}
+    });
+    if(ch) _bkpSaveList(list);
+    localStorage.setItem('grades_v6_bkp_photos_stripped_v1','1');
+  }catch(e){}
+}
 function _bkpCreate(label){
   if(!window.DB) return;
   var list = bkpLoad();
@@ -101,20 +153,15 @@ function _bkpCreate(label){
     students: _bkpCountStudents(),
     data: (function(){
       try{
-        var c=JSON.parse(JSON.stringify(window.DB));
+        var c=JSON.parse(JSON.stringify(window.DB, window._photoReplacerStrict||null));
         if(c.meta){ c.meta.defaultStudentPhoto=''; c.meta.teacherPhoto=''; c._photosStripped=true; }
+        _bkpStripStudentPhotos(c);
         return JSON.stringify(c);
       }catch(e){ return JSON.stringify(window.DB); }
     })()
   };
   list.unshift(snap);
-  // عند تجاوز الحد: نحذف أقدم نسخة تلقائية أولاً حتى لا تضيع النسخ اليدوية
-  while(list.length > BKP_MAX){
-    var di = -1;
-    for(var k=list.length-1;k>0;k--){ if(_BKP_AUTO_LABELS.indexOf(list[k].label)>=0){ di=k; break; } }
-    if(di<0) di = list.length-1;
-    list.splice(di,1);
-  }
+  list = _bkpPrune(list);
   _bkpSaveList(list);
   try{ localStorage.setItem(BKP_SIG_KEY, _bkpSig()); }catch(e){}
 }
@@ -227,7 +274,7 @@ function __bkpCreateManual(){
   var label = (lbl&&lbl.value.trim()) ? lbl.value.trim() : 'يدوي — '+new Date().toLocaleString('ar-EG');
   _bkpCreate(label);
   if(lbl) lbl.value='';
-  showSnack('✅ تم حفظ النسخة');
+  showSnack('✅ تم حفظ النسخة باسم «'+label+'»');
   __renderBackupPage();
 }
 
@@ -238,8 +285,10 @@ function __bkpRestore(id){
   if(!confirm('⚠️ استعادة هذه النسخة؟\nسيتم استبدال جميع البيانات الحالية!\n\n'+snap.label+' — '+snap.time)) return;
   try{
     _bkpCreate('قبل الاستعادة — احتياطي');
-    var _cur=window.DB&&window.DB.meta?window.DB.meta:{};
+    var _curDB=window.DB, _cur=window.DB&&window.DB.meta?window.DB.meta:{};
     window.DB = JSON.parse(snap.data);
+    _bkpReattachPhotos(window.DB,_curDB);
+    try{ if(window._photosHydrate) window._photosHydrate(); }catch(e){}
     if(window.DB.meta&&window.DB._photosStripped){
       if(!window.DB.meta.defaultStudentPhoto)window.DB.meta.defaultStudentPhoto=_cur.defaultStudentPhoto||'';
       if(!window.DB.meta.teacherPhoto)window.DB.meta.teacherPhoto=_cur.teacherPhoto||'';
@@ -265,52 +314,140 @@ function __bkpClearAll(){
   __renderBackupPage();
 }
 
-function __bkpExportJSON(){
-  if(!window.DB){ showSnack('⚠️ لا توجد بيانات'); return; }
-  var blob = new Blob([JSON.stringify(window.DB,null,2)],{type:'application/json'});
-  var url  = URL.createObjectURL(blob);
-  var a    = document.createElement('a');
-  a.href   = url;
-  a.download = 'نسخة_احتياطية_'+new Date().toLocaleDateString('ar-EG').replace(/\//g,'-')+'.json';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
-  showSnack('✅ تم التحميل');
+// ── أسماء الملفات والتصدير (الاسم الذي تكتبه يظهر في اسم الملف وداخله) ──
+function _bkpSafeName(s){
+  return String(s||'').replace(/[\\\/:*?"<>|\r\n]+/g,' ').replace(/\s+/g,'_').replace(/^_+|_+$/g,'').slice(0,50);
 }
-
-function __bkpExportSnapshot(id){
+function _bkpStamp(){
+  var d=new Date(),p=function(n){return (n<10?'0':'')+n;};
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'_'+p(d.getHours())+'-'+p(d.getMinutes());
+}
+function _bkpFileName(label){
+  var n=_bkpSafeName(label);
+  return 'دفتري_'+(n?n+'_':'')+_bkpStamp()+'.json';
+}
+function _bkpPayload(label, dbObj){
+  var o={}; Object.keys(dbObj).forEach(function(k){o[k]=dbObj[k];});
+  var st=0; (dbObj.classes||[]).forEach(function(c){ st+=((dbObj.data||{})[c]||[]).filter(function(s){return s&&s.name;}).length; });
+  o._bkpMeta={app:'dalty-grades',label:label||'',time:new Date().toLocaleString('ar-EG'),ts:Date.now(),classes:(dbObj.classes||[]).length,students:st};
+  return JSON.stringify(o,null,2);
+}
+function _bkpTypedLabel(){ var l=document.getElementById('bkpLabelInput'); return (l&&l.value.trim())?l.value.trim():''; }
+function _bkpMarkExported(){ try{ localStorage.setItem(BKP_EXPORT_KEY, JSON.stringify({t:Date.now(),sig:_bkpSig()})); }catch(e){} }
+function _bkpDownload(name,str){
+  var blob=new Blob([str],{type:'application/json'});
+  var url=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=url; a.download=name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); },4000);
+}
+// نافذة المشاركة في الهاتف (Drive / ملفات / واتساب ...)
+async function _bkpShare(name,str){
+  try{
+    if(navigator.share && navigator.canShare){
+      var types=['application/json','text/plain'];
+      for(var i=0;i<types.length;i++){
+        var f=new File([str],name,{type:types[i]});
+        if(navigator.canShare({files:[f]})){ await navigator.share({files:[f],title:name}); return true; }
+      }
+    }
+  }catch(e){ if(e && e.name==='AbortError') return 'abort'; }
+  return false;
+}
+async function _bkpOut(label,dbObj,mode){
+  var name=_bkpFileName(label), str=_bkpPayload(label,dbObj);
+  if(mode==='share'){
+    var r=await _bkpShare(name,str);
+    if(r==='abort') return;
+    if(r===true){ _bkpMarkExported(); showSnack('✅ تمت المشاركة: '+name); __renderBackupPage(); return; }
+    showSnack('ℹ️ المشاركة غير متاحة في هذا المتصفح — جارٍ التنزيل');
+  }
+  _bkpDownload(name,str); _bkpMarkExported();
+  showSnack('✅ تم تنزيل الملف: '+name);
+  __renderBackupPage();
+}
+function __bkpExportJSON(mode){
+  if(!window.DB){ showSnack('⚠️ لا توجد بيانات'); return; }
+  _bkpOut(_bkpTypedLabel()||'نسخة كاملة', window.DB, mode);
+}
+function __bkpExportSnapshot(id,mode){
   var snap = bkpLoad().find(function(s){return s.id===id;});
   if(!snap){ showSnack('⚠️ غير موجودة'); return; }
-  var blob = new Blob([snap.data],{type:'application/json'});
-  var url  = URL.createObjectURL(blob);
-  var a    = document.createElement('a');
-  a.href   = url;
-  a.download = 'نسخة_'+snap.label.replace(/[^أ-يa-z0-9]/gi,'_')+'.json';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
-  showSnack('✅ تم التحميل');
+  var obj; try{ obj=JSON.parse(snap.data); }catch(e){ showSnack('❌ النسخة تالفة'); return; }
+  _bkpOut(snap.label, obj, mode);
 }
 
+// ── الاستيراد: يظهر الاسم المحفوظ ويمكن إضافته للقائمة بدون استبدال البيانات ──
+var _bkpPending=null;
 function __bkpImportJSON(){
   var input = document.createElement('input');
-  input.type='file'; input.accept='.json';
+  input.type='file'; input.accept='.json,application/json,text/plain';
   input.onchange=function(e){
     var file=e.target.files[0]; if(!file) return;
     var reader=new FileReader();
     reader.onload=function(ev){
       try{
         var imp=JSON.parse(ev.target.result);
-        if(!imp.classes||!imp.data){ showSnack('❌ ملف غير صالح'); return; }
-        if(!confirm('استيراد هذا الملف؟\nالفصول: '+(imp.classes||[]).join('، ')+'\n\n⚠️ سيتم استبدال البيانات الحالية!')) return;
-        _bkpCreate('قبل الاستيراد — احتياطي');
-        window.DB=imp;
-        if(typeof saveDB==='function') saveDB();
-        showSnack('✅ تم الاستيراد');
-        __renderBackupPage();
+        if(!imp||!imp.classes||!imp.data){ showSnack('❌ ملف غير صالح'); return; }
+        var meta=imp._bkpMeta||{};
+        delete imp._bkpMeta;
+        var label=meta.label || String(file.name||'').replace(/\.json$/i,'').replace(/^دفتري_/,'').replace(/_/g,' ');
+        var st=0; (imp.classes||[]).forEach(function(c){ st+=((imp.data||{})[c]||[]).filter(function(s){return s&&s.name;}).length; });
+        _bkpPending={imp:imp,label:label,time:meta.time||new Date(file.lastModified||Date.now()).toLocaleString('ar-EG'),students:st};
+        _bkpImportDialog();
       }catch(err){ showSnack('❌ خطأ: '+err.message); }
     };
     reader.readAsText(file,'UTF-8');
   };
   document.body.appendChild(input); input.click(); document.body.removeChild(input);
+}
+function _bkpImportDialog(){
+  var p=_bkpPending; if(!p) return;
+  var root=document.getElementById('bkpImpRoot');
+  if(!root){ root=document.createElement('div'); root.id='bkpImpRoot'; document.body.appendChild(root); }
+  var h='<div class="mo" onclick="bkpImportChoose(\'cancel\')"><div class="md" style="max-width:380px" onclick="event.stopPropagation()">';
+  h+='<div class="mh"><h2>⬆️ استيراد ملف</h2><button class="xbtn" onclick="bkpImportChoose(\'cancel\')">✕</button></div>';
+  h+='<div class="mb" style="display:flex;flex-direction:column;gap:8px;font-size:12px;">';
+  h+='<div style="background:#f1f5f9;border-radius:9px;padding:9px 11px;line-height:1.9;">';
+  h+='<div><b>الاسم:</b> '+_esc(p.label)+'</div>';
+  h+='<div><b>التاريخ:</b> '+_esc(p.time)+'</div>';
+  h+='<div><b>الفصول:</b> '+_esc((p.imp.classes||[]).join('، '))+' — '+p.students+' طالب</div></div>';
+  h+='<button class="btn btn-success btn-sm" style="padding:10px;" onclick="bkpImportChoose(\'add\')">➕ إضافته إلى قائمة النسخ (بدون استبدال بياناتي)</button>';
+  h+='<button class="btn btn-warn btn-sm" style="padding:10px;" onclick="bkpImportChoose(\'replace\')">↩ استبدال بياناتي به الآن</button>';
+  h+='<div style="font-size:10px;color:#64748b;line-height:1.7;">الخيار الأول آمن: يظهر في «النسخ المحفوظة» باسمه ويمكنك استعادته متى شئت. الخيار الثاني يستبدل بياناتك الحالية بعد حفظ نسخة احتياطية منها.</div>';
+  h+='</div></div></div>';
+  root.innerHTML=h;
+}
+function __bkpImportChoose(mode){
+  var p=_bkpPending, root=document.getElementById('bkpImpRoot');
+  if(root) root.innerHTML='';
+  _bkpPending=null;
+  if(!p||mode==='cancel') return;
+  try{
+    if(mode==='add'){
+      var c=JSON.parse(JSON.stringify(p.imp));
+      if(c.meta){ c.meta.defaultStudentPhoto=''; c.meta.teacherPhoto=''; c._photosStripped=true; }
+      _bkpStripStudentPhotos(c);
+      var list=bkpLoad();
+      list.unshift({id:Date.now(),label:p.label,time:p.time,timestamp:Date.now(),classes:(p.imp.classes||[]).length,students:p.students,imported:true,data:JSON.stringify(c)});
+      _bkpSaveList(_bkpPrune(list));
+      showSnack('✅ أُضيف إلى النسخ المحفوظة باسم «'+p.label+'»');
+    } else {
+      _bkpCreate('قبل الاستيراد — احتياطي');
+      var curDB=window.DB, cur=window.DB&&window.DB.meta?window.DB.meta:{};
+      window.DB=p.imp;
+      _bkpReattachPhotos(window.DB,curDB);
+      try{ if(window._photosHydrate) window._photosHydrate(); }catch(e){}
+      if(window.DB.meta&&window.DB._photosStripped){
+        if(!window.DB.meta.defaultStudentPhoto)window.DB.meta.defaultStudentPhoto=cur.defaultStudentPhoto||'';
+        if(!window.DB.meta.teacherPhoto)window.DB.meta.teacherPhoto=cur.teacherPhoto||'';
+      }
+      delete window.DB._photosStripped;
+      if(typeof saveDB==='function') saveDB();
+      showSnack('✅ تم الاستيراد');
+    }
+  }catch(err){ showSnack('❌ خطأ: '+err.message); }
+  __renderBackupPage();
 }
 
 // ── صفحة النسخ الاحتياطي ──────────────────────────────
@@ -334,13 +471,13 @@ function __renderBackupPage(){
   html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">';
   html+='<span style="font-size:32px;">💾</span>';
   html+='<div><div style="font-size:15px;font-weight:900;color:#f1f5f9;">النسخ الاحتياطي والمزامنة</div>';
-  html+='<div style="font-size:9.5px;color:#64748b;margin-top:2px;">حماية بياناتك · مزامنة تلقائية مع مجلد على جهازك</div></div>';
+  html+='<div style="font-size:9.5px;color:#64748b;margin-top:2px;">حماية بياناتك · نسخ تلقائية عند التغيير + نسخ مسماة وتصدير</div></div>';
   html+='</div>';
   html+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
   html+=_bkpBadge('📊',_bkpCountStudents()+' طالب','#60a5fa');
   html+=_bkpBadge('🗂️',(window.DB&&window.DB.classes?window.DB.classes.length:0)+' فصل','#34d399');
   html+=_bkpBadge('💽',totalSize+' كيلوبايت','#fbbf24');
-  html+=_bkpBadge('📦',list.length+'/'+BKP_MAX+' نسخة','#c4b5fd');
+  html+=_bkpBadge('📦',list.length+' نسخة','#c4b5fd');
   html+='</div></div>';
 
   // ══ مزامنة المجلد ══
@@ -351,7 +488,14 @@ function __renderBackupPage(){
   html+='</div>';
 
   if(!fsaOk){
-    html+='<div style="background:#450a0a;border:1px solid #ef4444;border-radius:8px;padding:10px 12px;font-size:10px;color:#fca5a5;">❌ متصفحك لا يدعم هذه الميزة — استخدم Chrome أو Edge</div>';
+    var _le=null; try{ _le=JSON.parse(localStorage.getItem(BKP_EXPORT_KEY)||'null'); }catch(e){}
+    var _chg=_le && _le.sig!==_bkpSig();
+    html+='<div style="background:#0f1a2e;border:1px solid #1e3a5f;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:10px;color:#94a3b8;line-height:1.9;">📱 متصفح الهاتف (Chrome على أندرويد) لا يسمح للمواقع بالكتابة في مجلد تلقائياً — هذه الميزة تعمل على الكمبيوتر فقط.<br><strong style="color:#fbbf24;">البديل على الهاتف:</strong> اضغط «مشاركة» واختر Google Drive أو «ملفات»، فتُحفظ نسخة كاملة باسمها بضغطة واحدة.</div>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
+    html+='<button onclick="bkpExportJSON(\'share\')" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);border:none;color:white;padding:10px 18px;border-radius:9px;cursor:pointer;font-size:11.5px;font-weight:700;font-family:\'Cairo\',sans-serif;flex:1;min-width:150px;">📤 مشاركة / حفظ في Drive</button>';
+    html+='<button onclick="bkpExportJSON()" style="background:#065f46;border:1px solid #10b981;color:#6ee7b7;padding:10px 14px;border-radius:9px;cursor:pointer;font-size:11px;font-weight:700;font-family:\'Cairo\',sans-serif;">⬇️ تنزيل في الهاتف</button>';
+    html+='</div>';
+    html+='<div style="font-size:9.5px;color:'+(_chg?'#fbbf24':'#64748b')+';line-height:1.7;">'+(_le?('آخر تصدير: '+new Date(_le.t).toLocaleString('ar-EG')+(_chg?' — ⚠️ يوجد تعديلات بعده':' — لا تعديلات بعده')):'لم تُصدَّر نسخة من هذا الجهاز بعد')+'<br>الاسم الذي تكتبه في خانة «اسم النسخة» أدناه يظهر في اسم الملف.</div>';
   } else if(hasFolderStr){
     // المجلد مرتبط
     html+='<div style="background:#0d2a1a;border:1px solid #10b981;border-radius:8px;padding:10px 14px;margin-bottom:10px;">';
@@ -397,11 +541,12 @@ function __renderBackupPage(){
   html+='<div style="background:#1e293b;border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid #334155;">';
   html+='<div style="font-size:11px;font-weight:700;color:#94a3b8;margin-bottom:10px;">⚡ نسخ يدوي وتصدير</div>';
   html+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">';
-  html+='<input id="bkpLabelInput" type="text" placeholder="اسم النسخة (اختياري)..." style="background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:7px 12px;font-size:11px;outline:none;font-family:\'Cairo\',sans-serif;flex:1;min-width:140px;"/>';
+  html+='<input id="bkpLabelInput" type="text" placeholder="اسم النسخة (يظهر في الحفظ والتصدير)..." style="background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:7px 12px;font-size:11px;outline:none;font-family:\'Cairo\',sans-serif;flex:1;min-width:140px;"/>';
   html+='<button onclick="bkpCreateManual()" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);border:none;color:white;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:700;font-family:\'Cairo\',sans-serif;white-space:nowrap;">💾 حفظ نسخة</button>';
   html+='</div>';
   html+='<div style="display:flex;gap:7px;flex-wrap:wrap;">';
-  html+='<button onclick="bkpExportJSON()" style="background:#065f46;border:1px solid #10b981;color:#6ee7b7;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:700;font-family:\'Cairo\',sans-serif;">⬇️ تصدير JSON</button>';
+  html+='<button onclick="bkpExportJSON()" style="background:#065f46;border:1px solid #10b981;color:#6ee7b7;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:700;font-family:\'Cairo\',sans-serif;">⬇️ تصدير ملف</button>';
+  html+='<button onclick="bkpExportJSON(\'share\')" style="background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:700;font-family:\'Cairo\',sans-serif;">📤 مشاركة</button>';
   html+='<button onclick="bkpImportJSON()" style="background:#4c1d95;border:1px solid #8b5cf6;color:#c4b5fd;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:10px;font-weight:700;font-family:\'Cairo\',sans-serif;">⬆️ استيراد ملف</button>';
   if(list.length>0) html+='<button onclick="bkpClearAll()" style="background:#450a0a;border:1px solid #ef4444;color:#fca5a5;padding:7px 12px;border-radius:8px;cursor:pointer;font-size:10px;font-family:\'Cairo\',sans-serif;">🗑️ حذف الكل</button>';
   html+='</div></div>';
@@ -410,14 +555,19 @@ function __renderBackupPage(){
   html+='<div style="background:#1e293b;border-radius:12px;border:1px solid #334155;overflow:hidden;">';
   html+='<div style="padding:11px 14px;border-bottom:1px solid #334155;display:flex;align-items:center;justify-content:space-between;">';
   html+='<div style="font-size:11px;font-weight:700;color:#e2e8f0;">📋 النسخ المحفوظة ('+list.length+')</div>';
-  html+='<div style="font-size:9px;color:#475569;">أحدث '+BKP_MAX+' نسخة</div>';
+  html+='<div style="font-size:9px;color:#475569;">تلقائية: آخر '+BKP_MAX+' · مسماة: حتى '+BKP_MAX_MANUAL+'</div>';
   html+='</div>';
 
   if(!list.length){
     html+='<div style="text-align:center;padding:30px;color:#475569;"><div style="font-size:28px;margin-bottom:6px;">📭</div><div style="font-size:11px;">لا توجد نسخ بعد</div></div>';
   } else {
-    list.forEach(function(snap,i){
-      var isAuto = snap.label==='تلقائي';
+    var _man=list.filter(function(x){return !_bkpIsAuto(x);}), _aut=list.filter(_bkpIsAuto);
+    var _ord=_man.concat(_aut), _seenA=false, _seenM=false;
+    _ord.forEach(function(snap){
+      var i = (snap===list[0]) ? 0 : 1;
+      var isAuto = _bkpIsAuto(snap);
+      if(!isAuto && !_seenM){ _seenM=true; html+='<div style="padding:6px 14px;background:#0f172a;font-size:9.5px;font-weight:700;color:#60a5fa;">💾 نسخك المسماة / اليدوية ('+_man.length+')</div>'; }
+      if(isAuto && !_seenA){ _seenA=true; html+='<div style="padding:6px 14px;background:#0f172a;font-size:9.5px;font-weight:700;color:#64748b;">🔄 النسخ التلقائية ('+_aut.length+')</div>'; }
       var kb = Math.round(snap.data.length/1024);
       html+='<div style="padding:10px 14px;border-bottom:1px solid #0f172a;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-right:3px solid '+(isAuto?'#1e3a5f':'#1d4ed8')+';">';
       html+='<div style="flex:1;min-width:160px;">';
@@ -430,6 +580,7 @@ function __renderBackupPage(){
       html+='</div>';
       html+='<div style="display:flex;gap:5px;">';
       html+='<button onclick="bkpRestore('+snap.id+')" style="background:#0f2a5e;border:1px solid #1d4ed8;color:#93c5fd;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:9.5px;font-weight:700;font-family:\'Cairo\',sans-serif;">↩ استعادة</button>';
+      html+='<button onclick="bkpExportSnapshot('+snap.id+',\'share\')" style="background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:9.5px;font-family:\'Cairo\',sans-serif;">📤</button>';
       html+='<button onclick="bkpExportSnapshot('+snap.id+')" style="background:#065f46;border:1px solid #10b981;color:#6ee7b7;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:9.5px;font-family:\'Cairo\',sans-serif;">⬇️</button>';
       html+='<button onclick="bkpDelete('+snap.id+')" style="background:#450a0a;border:1px solid #ef4444;color:#fca5a5;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:9.5px;font-family:\'Cairo\',sans-serif;">✕</button>';
       html+='</div></div>';
@@ -456,6 +607,7 @@ window.bkpClearAll       = __bkpClearAll;
 window.bkpExportJSON     = __bkpExportJSON;
 window.bkpExportSnapshot = __bkpExportSnapshot;
 window.bkpImportJSON     = __bkpImportJSON;
+window.bkpImportChoose   = __bkpImportChoose;
 window.bkpPickFolder     = __bkpPickFolder;
 window.bkpSyncNow        = __bkpSyncNow;
 window.bkpClearFolder    = __bkpClearFolder;
@@ -473,6 +625,14 @@ window.renderBackupPage  = __renderBackupPage;
   // أول نسخة عند الفتح
   // عند الفتح: نسخة فقط إذا اختلف المحتوى عن آخر نسخة (مثلاً وصلت بيانات من مزامنة خارجية)
   setTimeout(function(){ try{ if(window.DB){ var sg=_bkpSig(); if(sg && sg!==_bkpStoredSig()) _bkpCreate('عند فتح التطبيق'); } }catch(e){} }, 1500);
+  setTimeout(_bkpStripOldSnapshots, 2500);
+  // تذكير (خصوصاً للهاتف): تعديلات لم تُصدَّر منذ 3 أيام
+  setTimeout(function(){ try{
+    if(_fsaSupported()||!window.DB) return;
+    var le=JSON.parse(localStorage.getItem(BKP_EXPORT_KEY)||'null');
+    if(!le){ localStorage.setItem(BKP_EXPORT_KEY,JSON.stringify({t:Date.now(),sig:_bkpSig()})); return; }
+    if(Date.now()-le.t>3*86400000 && le.sig!==_bkpSig()) showSnack('💾 لم تُصدِّر نسخة منذ 3 أيام — من «النسخ الاحتياطي» اضغط «مشاركة»');
+  }catch(e){} }, 6000);
   // حفظ آخر التغييرات عند مغادرة التطبيق أو إخفائه
   document.addEventListener('visibilitychange', function(){ if(document.hidden){ try{ _bkpAutoSnapshot(true); }catch(e){} } });
   window.addEventListener('pagehide', function(){ try{ _bkpAutoSnapshot(true); }catch(e){} });

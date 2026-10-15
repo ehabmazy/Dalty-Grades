@@ -337,31 +337,329 @@ function freshDB(){
 
 var DB=null;
 function loadDB(){
-  try{var s=localStorage.getItem(STORE_KEY);if(s)return JSON.parse(s);}catch(e){}
+  try{var s=localStorage.getItem(STORE_KEY);if(s){var o=JSON.parse(s);_bootHadLocal=true;return o;}}catch(e){}
   return null;
 }
+
+// ══════════════════════════════════════════════════════
+// الصور: ضغطها قبل الحفظ (صور الهاتف 3–8 ميجا تملأ ذاكرة المتصفح فيفشل الحفظ بصمت)
+// ══════════════════════════════════════════════════════
+function compressDataUrl(du, maxSide, quality, cb){
+  var img=new Image();
+  img.onload=function(){
+    try{
+      var w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+      if(!w||!h){cb(null);return;}
+      var k=Math.min(1,maxSide/Math.max(w,h));
+      var cw=Math.max(1,Math.round(w*k)), ch=Math.max(1,Math.round(h*k));
+      var c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      var g=c.getContext('2d'); g.fillStyle='#fff'; g.fillRect(0,0,cw,ch); g.drawImage(img,0,0,cw,ch);
+      cb(c.toDataURL('image/jpeg',quality));
+    }catch(e){cb(null);}
+  };
+  img.onerror=function(){cb(null);};
+  img.src=du;
+}
+function compressImageFile(file, maxSide, quality, cb){
+  var r=new FileReader();
+  r.onload=function(){ compressDataUrl(r.result,maxSide,quality,function(out){ cb(out||null, r.result); }); };
+  r.onerror=function(){cb(null,null);};
+  r.readAsDataURL(file);
+}
+// ══════════════════════════════════════════════════════
+// الصور على الهاتف فقط: تُحفظ في مخزن IndexedDB على الجهاز
+// ولا تدخل في الحفظ العادي (localStorage) ولا المزامنة السحابية ولا النسخ الداخلية
+// مفاتيح: s|<uid الطالب> ، m|teacherPhoto ، m|defaultStudentPhoto
+// ══════════════════════════════════════════════════════
+var PhotoStore=(function(){
+  var _p=null;
+  function open(){
+    if(_p)return _p;
+    _p=new Promise(function(res,rej){
+      if(!window.indexedDB){rej(new Error('no-idb'));return;}
+      var rq=indexedDB.open('dalty-photos',1);
+      rq.onupgradeneeded=function(){rq.result.createObjectStore('p');};
+      rq.onsuccess=function(){res(rq.result);};
+      rq.onerror=function(){rej(rq.error);};
+    });
+    _p.catch(function(){_p=null;});
+    return _p;
+  }
+  function tx(mode,fn){
+    return open().then(function(db){
+      return new Promise(function(res,rej){
+        var t=db.transaction('p',mode),out=fn(t.objectStore('p'));
+        t.oncomplete=function(){res(out&&out.result!==undefined?out.result:undefined);};
+        t.onerror=t.onabort=function(){rej(t.error||new Error('idb-fail'));};
+      });
+    });
+  }
+  return {
+    put:function(k,v){return tx('readwrite',function(s){return s.put(v,k);});},
+    del:function(k){return tx('readwrite',function(s){return s.delete(k);});},
+    all:function(){
+      return open().then(function(db){
+        return new Promise(function(res,rej){
+          var out={},t=db.transaction('p','readonly'),c=t.objectStore('p').openCursor();
+          c.onsuccess=function(){var cur=c.result;if(cur){out[cur.key]=cur.value;cur.continue();}};
+          t.oncomplete=function(){res(out);};
+          t.onerror=t.onabort=function(){rej(t.error||new Error('idb-fail'));};
+        });
+      });
+    }
+  };
+})();
+var _photoSaved={},_photoPending={},_photoResaveT=null;
+function _photoIsData(v){return typeof v==='string'&&v.indexOf('data:image')===0;}
+// يستبعد من الحفظ المحلي فقط الصور التي ثبت حفظها فعلاً في مخزن الجهاز
+function _photoReplacer(k,v){
+  if(_photoIsData(v)){
+    if(k==='photo'&&this&&this.uid&&_photoSaved['s|'+this.uid]===v)return undefined;
+    if((k==='teacherPhoto'||k==='defaultStudentPhoto')&&_photoSaved['m|'+k]===v)return undefined;
+  }
+  return v;
+}
+// للسحابة والنسخ: لا صور إطلاقاً
+function _photoReplacerStrict(k,v){
+  if(_photoIsData(v)&&(k==='photo'||k==='teacherPhoto'||k==='defaultStudentPhoto'))return undefined;
+  return v;
+}
+window._photoReplacerStrict=_photoReplacerStrict;
+function _photosAssignUids(){
+  var seen={},ch=false;
+  if(!DB||!DB.classes)return false;
+  DB.classes.forEach(function(c){(DB.data[c]||[]).forEach(function(s){
+    if(!s)return;
+    if(!s.uid||seen[s.uid]){s.uid='u'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);ch=true;}
+    seen[s.uid]=1;
+  });});
+  return ch;
+}
+function _photoScheduleResave(){
+  if(_photoResaveT)clearTimeout(_photoResaveT);
+  _photoResaveT=setTimeout(function(){_photoResaveT=null;try{saveDB();}catch(e){}},400);
+}
+function _photosSyncStore(){
+  try{
+    if(!DB||!DB.classes)return;
+    _photosAssignUids();
+    var jobs=[];
+    DB.classes.forEach(function(c){(DB.data[c]||[]).forEach(function(s){if(s&&_photoIsData(s.photo))jobs.push(['s|'+s.uid,s.photo]);});});
+    if(DB.meta)['teacherPhoto','defaultStudentPhoto'].forEach(function(k){if(_photoIsData(DB.meta[k]))jobs.push(['m|'+k,DB.meta[k]]);});
+    jobs.forEach(function(j){
+      var key=j[0],val=j[1];
+      if(_photoSaved[key]===val||_photoPending[key]===val)return;
+      _photoPending[key]=val;
+      PhotoStore.put(key,val).then(function(){
+        _photoSaved[key]=val; if(_photoPending[key]===val)delete _photoPending[key];
+        _photoScheduleResave();
+      }).catch(function(){ if(_photoPending[key]===val)delete _photoPending[key]; });
+    });
+  }catch(e){}
+}
+function removeLocalPhoto(key){ delete _photoSaved[key]; try{PhotoStore.del(key).catch(function(){});}catch(e){} }
+function _photosRerender(){
+  ['renderGrades','renderAbsence','renderWeekly','renderSick'].forEach(function(fn){
+    try{if(typeof window[fn]==='function')window[fn]();}catch(e){}
+  });
+}
+// تحميل صور الجهاز إلى البيانات الحالية (يُستدعى بعد فتح التطبيق أو بعد وصول بيانات من السحابة/الاستعادة)
+function _photosHydrate(){
+  if(!DB||!DB.classes)return Promise.resolve(0);
+  var ch=_photosAssignUids();
+  return PhotoStore.all().then(function(map){
+    var n=0;
+    DB.classes.forEach(function(c){(DB.data[c]||[]).forEach(function(s){
+      if(!s)return; var k='s|'+s.uid;
+      if(map[k]){_photoSaved[k]=map[k]; if(!_photoIsData(s.photo)){s.photo=map[k];n++;}}
+    });});
+    if(DB.meta)['teacherPhoto','defaultStudentPhoto'].forEach(function(f){
+      var k='m|'+f;
+      if(map[k]){_photoSaved[k]=map[k]; if(!_photoIsData(DB.meta[f])){DB.meta[f]=map[k];n++;}}
+    });
+    _photosSyncStore();            // ترحيل الصور القديمة الموجودة داخل البيانات إلى مخزن الجهاز
+    if(ch)try{saveDB();}catch(e){}
+    if(n)_photosRerender();
+    return n;
+  }).catch(function(){ _photosSyncStore(); return 0; });
+}
+window._photosHydrate=_photosHydrate;
+
+// حفظ صورة جديدة: تُضغط ثم تُكتب في مخزن الجهاز، وإن فشل الحفظ نتراجع ونُنبّه
+function setPhotoSafely(file, maxSide, keyFn, apply, revert, done){
+  compressImageFile(file, maxSide, 0.78, function(out){
+    if(!out){ try{showSnack('⚠️ تعذّر قراءة الصورة — جرّب صورة JPG أو PNG');}catch(e){} return; }
+    apply(out);
+    var key; try{ _photosAssignUids(); key=keyFn(); }catch(e){}
+    PhotoStore.put(key,out).then(function(){
+      _photoSaved[key]=out;
+      try{saveDB();}catch(e){}
+      if(done)done();
+    }).catch(function(){
+      revert();
+      try{alert('⚠️ تعذّر حفظ الصورة على الجهاز (قد يكون التخزين غير متاح، مثل وضع التصفح الخاص).');}catch(e){}
+    });
+  });
+}
+
+// تصغير الصور الكبيرة الموجودة سابقاً مرة واحدة (تحرير ذاكرة المتصفح)
+function _shrinkExistingPhotos(){
+  try{
+    if(!DB||!DB.data||localStorage.getItem('grades_v6_photos_shrunk_v1'))return;
+    var jobs=[];
+    DB.classes.forEach(function(c){(DB.data[c]||[]).forEach(function(s){
+      if(s&&typeof s.photo==='string'&&s.photo.indexOf('data:image')===0&&s.photo.length>90000)jobs.push({o:s,k:'photo',m:360});
+    });});
+    ['teacherPhoto','defaultStudentPhoto'].forEach(function(k){
+      var v=DB.meta&&DB.meta[k]; if(typeof v==='string'&&v.indexOf('data:image')===0&&v.length>90000)jobs.push({o:DB.meta,k:k,m:420});
+    });
+    if(!jobs.length){localStorage.setItem('grades_v6_photos_shrunk_v1','1');return;}
+    var done=0,changed=0;
+    (function next(){
+      var j=jobs[done];
+      if(!j){
+        if(changed){ if(saveDB()!==false){localStorage.setItem('grades_v6_photos_shrunk_v1','1');try{showSnack('🖼️ تم تصغير '+changed+' صورة لتوفير الذاكرة');}catch(e){}} }
+        else localStorage.setItem('grades_v6_photos_shrunk_v1','1');
+        return;
+      }
+      compressDataUrl(j.o[j.k],j.m,0.78,function(out){
+        if(out&&out.length<j.o[j.k].length){j.o[j.k]=out;changed++;}
+        done++; setTimeout(next,30);
+      });
+    })();
+  }catch(e){}
+}
+// طلب تخزين دائم حتى لا يمسح المتصفح بيانات التطبيق عند ضغط الذاكرة
+function _requestPersistentStorage(){
+  try{ if(navigator.storage&&navigator.storage.persist)navigator.storage.persist(); }catch(e){}
+}
+(function(){
+  var _o=initDB;
+  initDB=function(){var r=_o.apply(this,arguments);setTimeout(function(){_mainRecover().then(function(){_photosHydrate();});},60);return r;};
+})();
+window.addEventListener('load',function(){
+  setTimeout(function(){_photosHydrate();},300);
+  setTimeout(function(){_shrinkExistingPhotos();_requestPersistentStorage();},4000);
+});
+
+// ══════════════════════════════════════════════════════
+// حفظ الدرجات بنسختين: localStorage (الأساسي) + مرآة في مخزن الجهاز IndexedDB
+// إن فشل الحفظ الأساسي (ذاكرة ممتلئة) أو ضاعت بياناته، تُسترجع المرآة تلقائياً
+// ══════════════════════════════════════════════════════
+var MainStore=(function(){
+  var _p=null;
+  function open(){
+    if(_p)return _p;
+    _p=new Promise(function(res,rej){
+      if(!window.indexedDB){rej(new Error('no-idb'));return;}
+      var rq=indexedDB.open('dalty-main',1);
+      rq.onupgradeneeded=function(){rq.result.createObjectStore('k');};
+      rq.onsuccess=function(){res(rq.result);};
+      rq.onerror=function(){rej(rq.error);};
+    });
+    _p.catch(function(){_p=null;});
+    return _p;
+  }
+  return {
+    put:function(key,val){
+      return open().then(function(db){return new Promise(function(res,rej){
+        var t=db.transaction('k','readwrite');t.objectStore('k').put(val,key);
+        t.oncomplete=function(){res(true);};t.onerror=t.onabort=function(){rej(t.error||new Error('idb-fail'));};
+      });});
+    },
+    get:function(key){
+      return open().then(function(db){return new Promise(function(res,rej){
+        var t=db.transaction('k','readonly'),r=t.objectStore('k').get(key),out;
+        r.onsuccess=function(){out=r.result;};
+        t.oncomplete=function(){res(out);};t.onerror=t.onabort=function(){rej(t.error||new Error('idb-fail'));};
+      });});
+    }
+  };
+})();
+var _mirrorT=null,_mirrorLast=null,_mirrorNote=0,_bootHadLocal=false;
+function _mirrorWriteNow(){
+  if(_mirrorT){clearTimeout(_mirrorT);_mirrorT=null;}
+  if(!_mirrorLast)return Promise.resolve(false);
+  var rec=_mirrorLast;
+  return MainStore.put(rec.key,rec).then(function(){return true;}).catch(function(){return false;});
+}
+function _mirrorSchedule(str,localOk){
+  _mirrorLast={key:window.STORE_KEY||STORE_KEY,ts:Date.now(),str:str};
+  if(localOk){
+    if(_mirrorT)clearTimeout(_mirrorT);
+    _mirrorT=setTimeout(_mirrorWriteNow,800);
+    return;
+  }
+  // فشل الحفظ الأساسي: اكتب المرآة فوراً ونبّه بهدوء (أو بتحذير إن فشلت هي أيضاً)
+  _mirrorWriteNow().then(function(ok){
+    if(Date.now()-_saveFailWarned<15000)return;
+    _saveFailWarned=Date.now();
+    if(ok){ try{showSnack('✅ حُفظت التعديلات في مخزن الجهاز البديل (الذاكرة الرئيسية ممتلئة — صدّر نسخة احتياطية قريباً)');}catch(e){} }
+    else { try{alert('⚠️ تعذّر حفظ البيانات: ذاكرة المتصفح ممتلئة!\nصدّر نسخة احتياطية (ملف) فوراً من صفحة النسخ الاحتياطي ولا تغلق الصفحة.');}catch(e){} }
+  });
+}
+// عند فتح التطبيق: استرجاع المرآة إن لم توجد بيانات محلية أو كانت المرآة أحدث (أي أن آخر حفظ أساسي فشل)
+function _mainRecover(){
+  var key=window.STORE_KEY||STORE_KEY;
+  return MainStore.get(key).then(function(rec){
+    if(!rec||!rec.str||!DB)return false;
+    var lt=0; try{lt=parseInt(localStorage.getItem(key+'_ts')||'0',10)||0;}catch(e){}
+    if(_bootHadLocal && !(rec.ts>lt+3000))return false;
+    var obj; try{obj=JSON.parse(rec.str);}catch(e){return false;}
+    if(!obj||!obj.classes||!obj.data)return false;
+    // أبقِ نسخة من الحالة الحالية قبل الاستبدال
+    try{ if(typeof _bkpCreate==='function')_bkpCreate('قبل الاسترجاع التلقائي'); }catch(e){}
+    window.DB=obj; DB=obj;
+    try{ initDB_afterRecover(); }catch(e){}
+    try{ saveDB(); }catch(e){}
+    try{ showSnack('♻️ تم استرجاع آخر تعديلاتك من مخزن الجهاز البديل'); }catch(e){}
+    try{ _photosRerender(); }catch(e){}
+    return true;
+  }).catch(function(){return false;});
+}
+function initDB_afterRecover(){
+  // إصلاحات الهياكل الأساسية لبيانات مستردة (نفس حماية initDB)
+  if(!DB.classes)DB.classes=[]; if(!DB.data)DB.data={}; if(!DB.meta)DB.meta={};
+  if(!DB.colPages)DB.colPages=defaultColPages();
+  if(!DB.schedule){DB.schedule={};DB.classes.forEach(function(c){DB.schedule[c]=defaultSchedule();});}
+  if(!DB.absences){DB.absences={};DB.classes.forEach(function(c){DB.absences[c]={};});}
+  DB.classes.forEach(function(c){
+    if(!DB.schedule[c])DB.schedule[c]=defaultSchedule();
+    if(!DB.absences[c])DB.absences[c]={};
+    (DB.data[c]||[]).forEach(function(s){if(!s.absences)s.absences={};});
+  });
+}
+document.addEventListener('visibilitychange',function(){ if(document.hidden){ try{_mirrorWriteNow();}catch(e){} } });
+window.addEventListener('pagehide',function(){ try{_mirrorWriteNow();}catch(e){} });
+
 var _saveFailWarned=0;
-function saveDB(){
-  var str;
-  try{str=JSON.stringify(DB);}catch(e){return false;}
-  try{localStorage.setItem(STORE_KEY,str);return true;}catch(e){}
-  // الذاكرة ممتلئة: الأولوية للبيانات الأساسية — نحذف أقدم النسخ الاحتياطية المحلية ونعيد المحاولة
+// الحفظ المحلي (localStorage). عند امتلاء الذاكرة نحذف أقدم النسخ الاحتياطية المحلية ونعيد المحاولة
+function _saveLocalStr(str){
+  var key=window.STORE_KEY||STORE_KEY;
+  function stamp(){ try{localStorage.setItem(key+'_ts',String(Date.now()));}catch(e){} }
+  try{localStorage.setItem(STORE_KEY,str);stamp();return true;}catch(e){}
   try{
     var bk=JSON.parse(localStorage.getItem('grades_v6_backups')||'[]');
     while(bk.length>0){
       bk.pop();
       try{localStorage.setItem('grades_v6_backups',JSON.stringify(bk));}catch(e2){}
-      try{localStorage.setItem(STORE_KEY,str);return true;}catch(e3){}
+      try{localStorage.setItem(STORE_KEY,str);stamp();return true;}catch(e3){}
     }
     try{localStorage.removeItem('grades_v6_backups');}catch(e4){}
-    localStorage.setItem(STORE_KEY,str);return true;
+    localStorage.setItem(STORE_KEY,str);stamp();return true;
   }catch(e5){}
-  if(Date.now()-_saveFailWarned>15000){
-    _saveFailWarned=Date.now();
-    try{alert("⚠️ تعذّر حفظ البيانات: ذاكرة المتصفح ممتلئة!\nصدّر نسخة احتياطية (ملف JSON) فوراً من صفحة النسخ الاحتياطي ولا تغلق الصفحة.");}catch(e6){}
-  }
   return false;
 }
+function saveDB(){
+  var str;
+  try{_photosSyncStore();}catch(e){}
+  try{str=JSON.stringify(DB,_photoReplacer);}catch(e){return false;}
+  var ok=_saveLocalStr(str);
+  _mirrorSchedule(str,ok);
+  return ok;
+}
+
+var _initDB_orig_photos=null;
 function initDB(){
   var saved=loadDB();
   DB=saved||freshDB();
