@@ -862,7 +862,8 @@ window.__DAI_CORE = {
   normAr: normAr, nameSim: nameSim, matchStudent: matchStudent, normVal: normVal, keyOf: keyOf,
   planFromTable: planFromTable, planFromOps: planFromOps, applyPlan: applyPlan, undoLast: undoLast,
   undoCount: function () { return undoStack.length; }, parseJSON: parseJSON, errMsg: errMsg,
-  maxFor: maxFor, labelFor: labelFor, MODELS: MODELS, GMODELS: GMODELS
+  maxFor: maxFor, labelFor: labelFor, MODELS: MODELS, GMODELS: GMODELS,
+  _chat: function () { return { chatCatalog: chatCatalog, schoolContext: schoolContext, classDigest: classDigest, SYS_AGENT: SYS_AGENT }; }
 };
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -991,7 +992,7 @@ function viewHome() {
     'الأسبوع:<select style="' + SEL + '" onchange="DAI.setWeek(this.value)">' + weekOptions(ST.week) + '</select></div>' +
     card('📋', 'تسجيل الغياب من صورة', 'صوّر ورقة الغياب وسأسجّل الغائبين', 'att') +
     card('👥', 'إدراج الأسماء من صورة', 'صوّر قائمة الفصل وتُضاف الأسماء للفصل', 'names') +
-    card('🧠', 'المحادثة الذكية', 'حلّل الفصل، اقترح خطط علاج، اكتب رسائل لأولياء الأمور، ونفّذ تعديلات بأمر عادي أو صوتي', 'chat') +
+    card('🧠', 'المحادثة الذكية', 'اسأل عن أي شيء في التطبيق أو فصولك: شرح الاستخدام، تحليل ومقارنة، رسائل وخطط، وتعديلات بأمر عادي أو صوتي', 'chat') +
     card('📝', 'رصد الدرجات من صورة', 'صوّر كشف درجات (واجب/تقييم/سلوك/اختبار)', 'grades') +
     card('💬', 'أمر بالكتابة', 'انقل/انسخ/بدّل درجات، سجّل غياباً، املأ عموداً…', 'cmd') +
     card('📊', 'التقارير الذكية', 'الضعاف، المتفوقون، من لم تُرصد درجاتهم، الأكثر غياباً…', 'rep') +
@@ -2135,28 +2136,65 @@ function repSet(k, v, quiet) {
    • عند طلب تعديل: يقترح عمليات تُعرض للمراجعة ولا تُطبَّق إلا بزر «تطبيق»، مع تراجع.
    • إدخال صوتي مباشر بالميكروفون.
    ═════════════════════════════════════════════════════════════════════ */
-var CHAT = { msgs: [], busy: false, rec: null, listening: false, draft: '' };
+var CHAT = { msgs: [], busy: false, rec: null, listening: false, draft: '', status: '' };
 var CHAT_CHIPS = [
+  'أعطني ملخصاً سريعاً عن حال فصولي الآن',
   'من الطلاب المتعثرون في هذا الفصل ولماذا؟',
   'من تراجع مستواه في آخر أسابيع؟',
   'من لم تُرصد درجاته حتى الأسبوع الحالي؟',
+  'قارن بين فصولي من حيث المستوى والغياب',
   'اقترح خطة علاج للمتعثرين',
   'اكتب رسالة لولي أمر الطالب رقم 5 بخصوص مستواه',
-  'اجعل سلوك الأسبوع الحالي 10 لكل الطلاب',
-  'غيّر اسم الطالب رقم 3 إلى «محمد علي حسن»'
+  'كيف يُحسب المجموع وما تأثير الغياب على الدرجات؟',
+  'كيف أغيّر الدرجة النهائية لعمود أو أخفي أسابيع؟',
+  'اجعل سلوك الأسبوع الحالي 10 لكل الطلاب'
 ];
 
-var SYS_AGENT = 'You are "Dalty AI", a smart assistant for an Egyptian preparatory-school teacher using a gradebook app. ' +
-  'You chat in Arabic (Egyptian-friendly, clear, concise, respectful). You can (a) analyse the class data provided, give recommendations, remedial plans and parent messages, ' +
-  'and (b) propose structured edit operations when the teacher clearly asks to change data.\n' +
-  'Output ONE JSON object only (no markdown fences): {"reply":"Arabic answer for the teacher","ops":[...],"clarification":""}.\n' +
+/* ── دليل التطبيق: يعرّف المساعد بكل صفحات التطبيق ووظائفه ── */
+var APP_PAGES = {
+  home: 'الرئيسية', grades: 'الدرجات', weekly: 'الأسبوعي (الراصد والكروت)', sched: 'الجدول', absence: 'الغياب',
+  sick: 'المرضى', dict: 'الإملاء', stats: 'إحصائيات', settings: 'الإعدادات', notifs: 'الإشعارات',
+  curric: 'توزيع المنهج', backup: 'النسخ الاحتياطي', witness: 'توقيع المتابع', tafrigh: 'كشف التفريغ'
+};
+var APP_GUIDE =
+  'APP GUIDE — "Dalty Grades" (دفتري): a gradebook web-app (PWA) for teachers. Data is stored on the device (localStorage) and can sync to the cloud if the teacher signed in. ' +
+  'Navigation: bottom dock for common pages, side menu (☰) for all pages. Page ids you may use in "navigate": ' +
+  Object.keys(APP_PAGES).map(function (k) { return k + '=' + APP_PAGES[k]; }).join('; ') + '.\n' +
+  '• الدرجات (grades): interactive grades table per class. Column groups: التقييم (assess), الواجب (hw), السلوك والمواظبة (beh) — one column per week — plus اختبار 1/2 (ex1/ex2). ' +
+  'The "الأعمدة" button edits columns and their maximum scores; the "الأسابيع" button shows/hides weeks; totals and averages are computed automatically; "غ" = absent, "م" = excused.\n' +
+  '• الأسبوعي (weekly): student cards for fast weekly entry (تقييم/واجب/سلوك), with a numpad entry and Arabic voice entry, smart distribution, and card layout/font customisation.\n' +
+  '• الغياب (absence): weekly attendance per class and per period (weeks 1..32); absence is linked to the grades page. Settings decide the effect of absence on grades (absenceMode none/zero/deduct, absenceAllowed, absenceDeductPer, examAbsenceMode zero/exclude).\n' +
+  '• المرضى (sick): follow students who are sick. • الإملاء (dict): spelling grades by voice, with name matching (match threshold and separator word "التالي" in its settings).\n' +
+  '• الجدول (sched): weekly timetable with periods/days/times, can be exported as an image, and drives the "current period" on the home page.\n' +
+  '• إحصائيات (stats): performance analysis of students and classes. • توزيع المنهج (curric): units and lessons per week, exam weeks and holidays; shown as a widget on the home page.\n' +
+  '• كشف التفريغ (tafrigh): simplified summary sheet for printing; the official grades sheet prints on A4 with school header; توقيع المتابع (witness): follow-up signature sheet.\n' +
+  '• النسخ الاحتياطي (backup): export/import all data, local backups; Excel (.xlsx) export is available from the grades pages. • الإشعارات (notifs): custom alerts/alarms with tones. ' +
+  '• مشاركة الدرجات مع الطلاب: a viewer page (grades-viewer) with a share link.\n' +
+  '• الإعدادات (settings): school/teacher/subject names, semester, start date (it defines the current week), active weeks, periods per week, fonts, absence rules.\n' +
+  '• The AI assistant (this chat and the 🤖 button): reads a photo of an attendance sheet / class list / grades sheet, runs typed or spoken edit commands (with preview, apply and undo), and builds smart reports. ' +
+  'It needs an AI key from its ⚙️ settings (Gemini free tier or Claude).\n' +
+  'Be honest about this guide: it is a summary. If the teacher asks about a button or option you are not sure exists, say you are not sure and point to the most likely page instead of inventing steps.';
+
+var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assistant of the Dalty Grades gradebook app, talking to an Egyptian preparatory-school teacher. ' +
+  'You know the whole app (APP GUIDE below) and you see live data in CONTEXT (settings, curriculum, class overview and a DATA DIGEST of the selected class). ' +
+  'Chat in Arabic (Egyptian-friendly, clear, concise, respectful) and be a flexible, practical colleague. You can:\n' +
+  '(a) answer HOW-TO questions about the app: short numbered steps, naming the page and button in Arabic; if useful add "navigate" with the page id;\n' +
+  '(b) explain how totals, averages and absence rules work, using the SETTINGS in CONTEXT;\n' +
+  '(c) analyse the class data, compare classes, and give recommendations, remedial plans and parent messages;\n' +
+  '(d) help with general teaching work that needs no data (lesson ideas, quiz questions, activities, wording of notices) — you do not need the data for this;\n' +
+  '(e) propose structured edit operations when the teacher clearly asks to change data.\n' +
+  'Output ONE JSON object only (no markdown fences): {"reply":"Arabic answer","summary":"","ops":[],"clarification":"","lookup":null,"navigate":""}.\n' +
   '- "reply": your answer. You may use **bold** and lines starting with "- " for lists. Keep it focused; never pad.\n' +
-  '- For analysis questions, use ONLY the numbers in the DATA DIGEST. Never invent students, grades or statistics. Refer to students as «number. name». If the data does not contain the answer, say so.\n' +
-  '- Recommendations should be concrete, practical for a classroom, and short.\n' +
-  '- Parent messages: polite, specific to the student\'s digest numbers, with a constructive tone; no private data about other students.\n' +
-  '- "ops": [] unless the teacher asks to CHANGE data. Never claim an edit is done: the teacher reviews and presses apply. When you give ops, "reply" should briefly say what will change.\n' +
+  '- Numbers and statistics: use ONLY the SETTINGS / OVERVIEW / DATA DIGEST in CONTEXT. Never invent students, grades or statistics. Refer to students as «number. name» (names may be replaced by «طالب N» when the teacher turned off name sharing). If the data does not contain the answer, say so.\n' +
+  '- "lookup": when you need the full digest of ANOTHER class (or another week) to answer, set {"class":"exact class name","week":N}, leave "reply" empty and the app will call you again with that data (max 2 lookups per question). Do not use it when the selected class is enough.\n' +
+  '- "navigate": one page id from the APP GUIDE (or "") when opening that page would help; the teacher decides whether to tap the button. Never claim you opened it.\n' +
+  '- Recommendations should be concrete and short. Parent messages: polite, specific to that student\'s digest numbers, constructive; never mention other students.\n' +
+  '- "ops": [] unless the teacher asks to CHANGE data. Ops always apply to the SELECTED class only (if the teacher wants to edit another class, tell them to pick it from the class selector, or use move_student/transfer where allowed). ' +
+  'Never claim an edit is done: the teacher reviews and presses apply. When you give ops, "summary" is a short Arabic description and "reply" briefly says what will change.\n' +
   '- If a request is ambiguous (which student/week/column?), set "clarification" to a short Arabic question and ops [].\n' +
   '- Use the conversation history to resolve references like "the same", "them", "the previous week".\n' +
+  '- Never present something as a feature of the app unless it is in the APP GUIDE or the teacher already used it.\n\n' +
+  APP_GUIDE + '\n\n' +
   'Allowed ops (students by roster NUMBER; weeks are integers):\n' +
   '1) {"type":"set_grade","student":12,"field":"assess|hw|beh|ex1|ex2","week":3,"value":8}  (value: number, "غ", "م", or "" to clear)\n' +
   '2) {"type":"fill_column","field":"beh","week":5,"value":10,"students":"all"|[3,7]}\n' +
@@ -2170,7 +2208,7 @@ var SYS_AGENT = 'You are "Dalty AI", a smart assistant for an Egyptian preparato
   'Never output students absent from the roster (except add_students). Never delete students unless explicitly asked.';
 
 function classDigest(cls, week) {
-  var arr = DB.data[cls] || [], lines = [], tots = [], below = 0, tm = totalMax(), half = tm / 2;
+  var arr = DB.data[cls] || [], lines = [], tots = [], below = 0, tm = totalMax(), half = tm / 2, priv = !cfgGet().sendRoster;
   var ex = function (s, pre, w) { var v = s[pre + w]; if (!recorded(v)) return null; var n = (v === 'غ') ? 0 : Number(v); return isNaN(n) ? null : n / maxFor(pre + w) * 100; };
   arr.forEach(function (s, i) {
     if (!s || !(s.name || '').trim()) return;
@@ -2195,7 +2233,7 @@ function classDigest(cls, week) {
     }
     var tot = (s._totalAbsent || cs.total === undefined) ? null : cs.total;
     if (tot !== null) { tots.push(tot); if (tot < half) below++; }
-    lines.push((i + 1) + '|' + s.name + '|total ' + (tot === null ? '-' : tot + '/' + tm) +
+    lines.push((i + 1) + '|' + (priv ? ('طالب ' + (i + 1)) : s.name) + '|total ' + (tot === null ? '-' : tot + '/' + tm) +
       '|assess ' + (cs.avgAssess === undefined ? '-' : cs.avgAssess) + '|hw ' + (cs.avgHw === undefined ? '-' : cs.avgHw) +
       '|beh ' + (cs.avgBeh === undefined ? '-' : cs.avgBeh) + '|exams ' + (cs.exTotal === undefined ? '-' : cs.exTotal) +
       '|absent_periods ' + absP + '|missing_cells_to_week_' + week + ' ' + miss + (trend === '' ? '' : '|trend_last3_vs_prev3 ' + (trend > 0 ? '+' : '') + trend + '%'));
@@ -2215,8 +2253,42 @@ function otherClassesLine(cls) {
   });
   return out.length ? 'Other classes (names exact, for move_student/transfer): ' + out.join('; ') : '';
 }
+/* كتالوج الفصل للمحادثة (يحترم خيار «أرسل أسماء الفصل») */
+function chatCatalog(cls, week) {
+  var cat = buildCatalog(cls, week);
+  if (cfgGet().sendRoster) return cat;
+  var mark = 'Roster (student number. name):\n', i = cat.indexOf(mark);
+  if (i < 0) return cat;
+  var arr = DB.data[cls] || [];
+  var r = arr.map(function (s, k) { return (s.name || '').trim() ? (k + 1) + '. طالب ' + (k + 1) : null; }).filter(Boolean).join('\n');
+  return cat.slice(0, i + mark.length) + r;
+}
+/* إعدادات المدرسة + المنهج + أسماء الفصول: يجعل المساعد ملمّاً بالصورة الكاملة */
+function schoolContext(cls, week) {
+  var M = DB.meta || {}, out = [], cw = 1;
+  try { cw = _calcCurrentWeek(); } catch (e) {}
+  var tm = 0; try { tm = totalMax(); } catch (e) {}
+  out.push('SETTINGS: subject=' + (M.subject || '-') + '; semester=' + (M.semester || 1) + '; schoolYear=' + (M.schoolYear || '-') +
+    '; startDate=' + (M.startDate || 'not set') + '; calendar_current_week=' + cw + '; active_weeks=' + activeWeeks() +
+    '; periods_per_week=' + (M.periodsPerWeek || 3) + '; total_max=' + tm +
+    '; absenceMode=' + (M.absenceMode || 'none') + ' (none/zero/deduct; "deduct" uses absenceAllowed=' + (M.absenceAllowed || 0) + ' and absenceDeductPer=' + (M.absenceDeductPer || 0) + ')' +
+    '; examAbsenceMode=' + (M.examAbsenceMode || 'zero') + ' (zero: absent in exam counts 0 / exclude: exam ignored).');
+  out.push('CLASSES (exact names): ' + (DB.classes || []).join(' | ') + '. Selected class: ' + cls + '.');
+  try {
+    var c = DB.curric || {}, wd = null, un = '';
+    (c.weeks || []).forEach(function (x) { if (x && x.w === week) wd = x; });
+    if (wd && wd.unitId) (c.units || []).forEach(function (u) { if (u && u.id === wd.unitId) un = u.name; });
+    var ex = (c.exams || []).map(function (e) { return 'w' + e.w + (e.label ? ' ' + e.label : ''); }).join(', ');
+    var ho = (c.holidays || []).map(function (e) { return 'w' + e.w + (e.label ? ' ' + e.label : ''); }).join(', ');
+    out.push('CURRICULUM week ' + week + ': ' + (un || 'no unit set') + (wd && wd.lessons ? ' — lessons: ' + String(wd.lessons).slice(0, 220) : '') +
+      (wd && wd.notes ? ' — notes: ' + String(wd.notes).slice(0, 120) : '') + '. Exam weeks: ' + (ex || 'none') + '. Holidays: ' + (ho || 'none') + '.');
+  } catch (e) {}
+  return out.join('\n');
+}
+function clampWeek(w, dflt) { w = parseInt(w, 10); if (!w) w = dflt; return Math.min(Math.max(1, w), activeWeeks()); }
+function validPage(p) { return typeof p === 'string' && Object.prototype.hasOwnProperty.call(APP_PAGES, p) ? p : ''; }
 function chatHistory() {
-  var h = [], m = CHAT.msgs.filter(function (x) { return !x.err; }).slice(-10);
+  var h = [], m = CHAT.msgs.filter(function (x) { return !x.err; }).slice(-16);
   m.forEach(function (x) {
     if (x.role === 'user') h.push({ role: 'user', text: x.text });
     else {
@@ -2245,7 +2317,7 @@ function viewChat() {
     '<div id="daiChatList"></div>' +
     '<div style="position:sticky;bottom:-18px;background:#0f172a;padding:8px 0 4px;margin-top:8px;border-top:1px solid #1e293b;">' +
     '<div style="display:flex;gap:6px;align-items:flex-end;">' +
-    '<textarea id="daiChatIn" rows="2" placeholder="اسأل أو اطلب… (مثال: من المتعثرون؟ — اجعل سلوك الأسبوع 4 عشرة)" oninput="DAI.chatDraft(this.value)" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();DAI.chatSend();}" style="' + SEL + 'flex:1;box-sizing:border-box;resize:none;line-height:1.7;">' + esc(CHAT.draft) + '</textarea>' +
+    '<textarea id="daiChatIn" rows="2" placeholder="اسأل عن الطلاب أو عن التطبيق أو اطلب تعديلاً… (مثال: كيف أطبع الكشف؟ — اجعل سلوك الأسبوع 4 عشرة)" oninput="DAI.chatDraft(this.value)" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();DAI.chatSend();}" style="' + SEL + 'flex:1;box-sizing:border-box;resize:none;line-height:1.7;">' + esc(CHAT.draft) + '</textarea>' +
     '<button id="daiMicBtn" onclick="DAI.chatMic()" title="إدخال صوتي" style="' + BTN + 'background:' + (CHAT.listening ? '#dc2626' : '#0f766e') + ';color:#fff;padding:10px 12px;font-size:16px;">🎤</button>' +
     btn('➤', 'DAI.chatSend()', PRIMARY + 'padding:10px 14px;font-size:16px;') + '</div></div>';
   chatRenderList();
@@ -2254,7 +2326,7 @@ function viewChat() {
 function chatRenderList() {
   var el = document.getElementById('daiChatList'); if (!el) return;
   if (!CHAT.msgs.length) {
-    el.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;line-height:1.9;padding:10px 4px;">أنا أحلّل بيانات الفصل المختار وأقترح وأنفّذ تعديلات بعد موافقتك.<br>جرّب أحد الأسئلة:</div>' +
+    el.innerHTML = '<div style="text-align:center;color:#94a3b8;font-size:12px;line-height:1.9;padding:10px 4px;">أنا ملمّ بكل صفحات التطبيق وبيانات فصولك: أجيب عن طريقة الاستخدام، أحلّل وأقارن، أكتب الرسائل والخطط، وأنفّذ التعديلات بعد موافقتك.<br>جرّب أحد الأسئلة:</div>' +
       '<div style="display:flex;gap:5px;flex-wrap:wrap;">' + CHAT_CHIPS.map(function (c, i) {
         return '<button onclick="DAI.chatChip(' + i + ')" style="' + BTN + 'background:#111c33;border:1px solid #1e3a5f;color:#93c5fd;font-size:11px;padding:7px 10px;font-weight:600;text-align:right;">' + esc(c) + '</button>';
       }).join('') + '</div>';
@@ -2281,12 +2353,13 @@ function chatRenderList() {
           btn(n ? '✅ تطبيق (' + n + ')' : 'لا يوجد ما يُطبَّق', 'DAI.chatApply(' + i + ')', PRIMARY + 'padding:7px 12px;font-size:12px;' + (n ? '' : 'opacity:.45;'), n ? '' : 'disabled') +
           btn('✖ تجاهل', 'DAI.chatDismiss(' + i + ')', GHOST + 'padding:6px 10px;')) + '</div></div>';
     }
+    if (m.nav) card += '<div style="margin-top:8px;">' + btn('↗ افتح صفحة «' + esc(APP_PAGES[m.nav]) + '»', 'DAI.chatGo(' + i + ')', GHOST + 'padding:7px 12px;font-size:11px;') + '</div>';
     h += '<div style="display:flex;justify-content:flex-end;margin:8px 0;"><div style="background:' + (m.err ? '#450a0a' : '#111c33') + ';border:1px solid ' + (m.err ? '#7f1d1d' : '#1e3a5f') + ';color:' + (m.err ? '#fca5a5' : '#e2e8f0') + ';border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:12px;line-height:1.95;max-width:94%;">' +
       fmtMsg(m.text) + (m.clar ? '<div style="margin-top:6px;background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:8px;padding:6px 8px;">❓ ' + esc(m.clar) + '</div>' : '') + card +
       (m.err ? '' : '<div style="margin-top:6px;text-align:left;"><button onclick="DAI.chatCopy(' + i + ')" style="' + BTN + 'background:none;color:#64748b;font-size:10px;padding:2px 4px;">📋 نسخ</button></div>') +
       '</div></div>';
   });
-  if (CHAT.busy) h += '<div style="color:#94a3b8;font-size:12px;padding:8px 4px;">🤖 أفكّر…</div>';
+  if (CHAT.busy) h += '<div style="color:#94a3b8;font-size:12px;padding:8px 4px;">' + (CHAT.status || '🤖 أفكّر…') + '</div>';
   el.innerHTML = h;
   var b = box(); if (b) b.scrollTop = b.scrollHeight;
 }
@@ -2301,11 +2374,13 @@ function chatSend(textIn) {
   var hist = chatHistory();
   CHAT.msgs.push({ role: 'user', text: txt });
   CHAT.draft = ''; if (inp) inp.value = '';
-  CHAT.busy = true; chatRenderList();
+  CHAT.busy = true; CHAT.status = ''; chatRenderList();
   var cls = ST.cls, week = ST.week;
-  var ctx = buildCatalog(cls, week) + '\n' + otherClassesLine(cls) + '\n\n' + classDigest(cls, week);
-  var content = [{ type: 'text', text: 'CONTEXT (fresh, authoritative):\n' + ctx + '\n\nTeacher message (Arabic): ' + txt }];
-  var attempt = function (retry) {
+  var ctx = chatCatalog(cls, week) + '\n' + otherClassesLine(cls) + '\n\n' + schoolContext(cls, week) + '\n\n' + classDigest(cls, week);
+  var extra = '';
+  /* يستدعي النموذج؛ وإن طلب بيانات فصل آخر (lookup) نضيفها ونعيد الاستدعاء (حد أقصى مرتان) */
+  var run = function (round) {
+    var content = [{ type: 'text', text: 'CONTEXT (fresh, authoritative):\n' + ctx + extra + '\n\nTeacher message (Arabic): ' + txt }];
     return callAI({ system: SYS_AGENT, history: hist, content: content, maxTokens: 6000 }).then(function (r) {
       var j = null;
       try { j = parseJSON(r.text); } catch (e) { j = null; }
@@ -2315,13 +2390,25 @@ function chatSend(textIn) {
         if (!plain) throw new Error('BAD_JSON');
         return { reply: plain, ops: [], clarification: '' };
       }
+      var lk = j.lookup;
+      if (lk && typeof lk === 'object' && round < 2) {
+        var lc = String(lk.class || lk.cls || '').trim();
+        if ((DB.classes || []).indexOf(lc) >= 0) {
+          var lw = clampWeek(lk.week, week);
+          CHAT.status = '🔍 أراجع بيانات ' + lc + '…'; chatRenderList();
+          extra += '\n\nEXTRA DATA requested by you — class ' + lc + ' (read-only; ops still apply to the selected class only):\n' + classDigest(lc, lw);
+        } else {
+          extra += '\n\n(lookup failed: there is no class named "' + lc + '". Exact names: ' + (DB.classes || []).join(' | ') + ')';
+        }
+        return run(round + 1);
+      }
       return j;
     });
   };
-  attempt(false).then(function (j) {
+  run(0).then(function (j) {
     if (!ST) return;
     var ops = Array.isArray(j.ops) ? j.ops : [];
-    var m = { role: 'assistant', text: String(j.reply || '').trim(), clar: String(j.clarification || '').trim(), cls: cls };
+    var m = { role: 'assistant', text: String(j.reply || '').trim(), clar: String(j.clarification || '').trim(), cls: cls, nav: validPage(String(j.navigate || '').trim()) };
     if (ops.length) {
       m.plan = planFromOps(cls, ops, { week: week });
       m.summary = String(j.summary || '').trim() || '';
@@ -2333,9 +2420,15 @@ function chatSend(textIn) {
   }).catch(function (e) {
     CHAT.msgs.push({ role: 'assistant', text: errMsg(e), err: true });
   }).then(function () {
-    CHAT.busy = false;
+    CHAT.busy = false; CHAT.status = '';
     if (ST && ST.view === 'chat') chatRenderList();
   });
+}
+function chatGo(i) {
+  var m = CHAT.msgs[i]; if (!m || !m.nav) return;
+  var pg = m.nav;
+  closeAI();
+  try { if (typeof switchPage === 'function') switchPage(pg); } catch (e) {}
 }
 function chatApply(i) {
   var m = CHAT.msgs[i]; if (!m || !m.plan || m.state !== 'pending') return;
@@ -2464,7 +2557,7 @@ window.DAI = {
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   chatSend: function () { chatSend(); }, chatChip: function (i) { chatSend(CHAT_CHIPS[i]); },
   chatDraft: function (v) { CHAT.draft = v; }, chatMic: chatMic, chatClear: chatClear,
-  chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
+  chatGo: chatGo, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
   undo: function (fromDone) { doUndo(fromDone === true); }
 };
 
