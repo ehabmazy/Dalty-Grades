@@ -106,7 +106,7 @@ function renderGrades(){
     html+='<div class="tw"><table><thead>';
     if(_wkSpan>0){
       html+='<tr>';
-      html+='<th style="min-width:20px">م</th><th style="width:32px;"></th><th class="td-name">الاسم</th>';
+      html+='<th style="min-width:20px">م</th><th style="width:32px;"></th><th class="td-name">الاسم</th><th class="td-notes">ملاحظات<datalist id="gradesNoteSug"><option value="نشاط"><option value="ضعيف"><option value="ضعيف القراءة والكتابة"><option value="متفوق"><option value="يحتاج متابعة"><option value="مشاغب"></datalist></th>';
       weeks.forEach(function(w){
         if(_wkSpan>0){
           var _wc=_wkComplete[w];
@@ -127,7 +127,7 @@ function renderGrades(){
       html+='</tr>';
     }
     html+='<tr>';
-    html+='<th></th><th></th><th></th>';
+    html+='<th></th><th></th><th></th><th></th>';
     weeks.forEach(function(w){
       var _wc=_wkComplete[w];
       if(_showHw)html+='<th style="background:'+(_wc.hw?'#0d9488':'#102060')+';font-size:8px;'+(_wc.hw?'color:#ffffff;':'')+_wkEdgeStyle('hw')+'">'+(_wc.hw?'✅ ':'')+'واجب<br>/10'+gradesColDateHtml('h'+w,cls,7,_wc.hw?'#ccfbf1':'#fbbf24')+'</th>';
@@ -171,7 +171,8 @@ function renderGrades(){
       html+='</div>';
       html+='<input id="hph'+s.id+'" type="file" accept="image/*" capture="environment" style="display:none" onchange="gradesPhotoChange(event,'+idx+')" />';
       html+='</td>';
-      html+='<td class="td-name" style="padding:2px 3px;"><div style="display:flex;align-items:center;gap:3px;"><input class="ni"'+(namesLocked?' readonly':'')+' style="font-size:10px;flex:1 1 auto;min-width:0;width:auto;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/>'+_sickBadge(GS.activeClass,s.id)+'</div></td>';
+      html+='<td class="td-name" style="padding:2px 3px;"><div style="display:flex;align-items:center;gap:3px;"><input class="ni"'+(namesLocked?' readonly':'')+' style="font-size:10px;flex:1 1 auto;min-width:0;width:auto;" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/>'+_sickBadge(GS.activeClass,s.id)+'<button class="note-btn" onclick="openNotesModal('+idx+')" title="ملاحظة عن الطالب" style="background:none;border:none;cursor:pointer;font-size:11px;padding:1px 2px;flex:0 0 auto;">'+(s.notes?'📝':'🗒️')+'</button></div></td>';
+      html+='<td class="td-notes"><input class="ni" list="gradesNoteSug" value="'+esc(s.notes||'')+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" onchange="gradesSetNote('+idx+',this.value)" placeholder="ملاحظة" style="font-size:10px;"/></td>';
       var behSum=0,behCnt=0;
       weeks.forEach(function(w){
         var aField='a'+w, hField='h'+w, bField='bw'+w;
@@ -286,7 +287,7 @@ function renderGrades(){
   }
 
   html+='<div class="tw"><table><thead><tr>';
-  html+='<th>م</th><th class="td-photo">صورة</th><th class="td-name" style="position:relative;">الاسم<span class="nm-rz" title="اسحب لتغيير عرض عمود الاسم — دبل كليك للرجوع للافتراضي" onpointerdown="gradesNameResizeStart(event)" ondblclick="gradesNameResizeReset()"></span></th>';
+  html+='<th>م</th><th class="td-photo">صورة</th><th class="td-name" style="position:relative;">الاسم<span class="nm-rz" title="اسحب لتغيير عرض عمود الاسم — دبل كليك للرجوع للافتراضي" onpointerdown="gradesNameResizeStart(event)" ondblclick="gradesNameResizeReset()"></span></th><th class="td-notes">ملاحظات<datalist id="gradesNoteSug"><option value="نشاط"><option value="ضعيف"><option value="ضعيف القراءة والكتابة"><option value="متفوق"><option value="يحتاج متابعة"><option value="مشاغب"></datalist></th>';
   pageCols.forEach(function(c){
     html+='<th>'+esc(c.label)+'<span class="ml">/'+c.max+'</span>'+gradesColDateHtml(c.id,cls,8,'#fbbf24');
     html+='<div style="display:flex;gap:2px;justify-content:center;margin-top:2px;">';
@@ -319,7 +320,8 @@ function renderGrades(){
     html+=(s.photo?'<img src="'+s.photo+'" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>':(_defP?'<img src="'+_defP+'" style="width:100%;height:100%;object-fit:cover;border-radius:4px;"/>':'<span style="font-size:12px;color:#94a3b8">👤</span>'));
     html+='</div><input id="ph'+s.id+'" type="file" accept="image/*" style="display:none" onchange="gradesPhotoChange(event,'+idx+')"/></td>';
     // Name
-    html+='<td class="td-name"><input class="ni"'+(namesLocked?' readonly':'')+' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/></td>';
+    html+='<td class="td-name"><input class="ni"'+(namesLocked?' readonly':'')+' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" value="'+esc(s.name)+'" onchange="gradesRenameStudent('+idx+',this.value)" onpaste="gradesNamePaste(event,'+idx+')" title="عدّل الاسم — أو الصق قائمة أسماء (سطر لكل اسم) لتعبئة الصفوف التالية" placeholder="اسم الطالب"/>'+'<button class="note-btn" onclick="openNotesModal('+idx+')" title="ملاحظة عن الطالب" style="background:none;border:none;cursor:pointer;font-size:12px;padding:1px 3px;">'+(s.notes?"📝":"🗒️")+'</button></td>';
+    html+='<td class="td-notes"><input class="ni" list="gradesNoteSug" value="'+esc(s.notes||'')+'" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}" onchange="gradesSetNote('+idx+',this.value)" placeholder="ملاحظة" style="font-size:10px;"/></td>';
     // Grade cells for this page
     pageCols.forEach(function(c){
         var v=s[c.field];
@@ -680,6 +682,15 @@ function pasteFromClipboard(){
 function openRangeModal(){GS.modal={type:"range"};renderGrades();}
 function openColConfigModal(){GS.modal={type:"colConfig",data:{activePgId:GS.activePage}};renderGrades();}
 function openDelStudentModal(idx){GS.modal={type:"delStudent",data:{idx:idx}};renderGrades();}
+function openNotesModal(idx){var s=(DB.data[GS.activeClass]||[])[idx];GS.modal={type:"stuNotes",data:{idx:idx,val:(s&&s.notes)||""}};renderGrades();}
+function gradesSaveNotes(){
+  var m=GS.modal;if(!m||m.type!=="stuNotes")return;
+  var ta=document.getElementById("stuNotesTa");
+  var s=(DB.data[GS.activeClass]||[])[m.data.idx];
+  if(s)s.notes=ta?ta.value.trim():"";
+  saveDB();GS.modal=null;renderGrades();
+}
+
 function openAddClsModal(){GS.modal={type:"addCls",data:{name:""}};renderGrades();}
 function openRenameClsModal(cls){GS.modal={type:"renameCls",data:{old:cls,val:cls}};renderGrades();}
 function openDelClsModal(cls){GS.modal={type:"delCls",data:{cls:cls}};renderGrades();}
@@ -1084,6 +1095,14 @@ function gradesRenameStudent(idx,val){
   arr[idx].name=nv;
   saveDB();
   if(dup)showSnack("⚠️ يوجد طالب آخر بنفس الاسم في هذا الفصل");
+}
+
+// حفظ الملاحظة المكتوبة مباشرة بجانب الاسم (نفس حقل notes الذي تستخدمه نافذة 📝)
+function gradesSetNote(idx,val){
+  var arr=DB.data[GS.activeClass];
+  if(!arr||!arr[idx])return;
+  arr[idx].notes=String(val==null?"":val).replace(/\s+/g," ").trim();
+  saveDB();
 }
 
 // يحوّل نصاً ملصوقاً إلى قائمة أسماء نظيفة
