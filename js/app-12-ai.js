@@ -2204,7 +2204,7 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   '(2) query_students {"class":"","metric":"total|avg_assess|avg_hw|avg_beh|exams|absences|missing","op":"top|bottom|lt|lte|gt|gte|between","value":60,"value2":80,"limit":15} — percentages for grade metrics; ' +
   '(3) declining {"class":"","last_n":3,"min_drop":5,"direction":"down|up"} — students whose weekly percentage fell (or rose) between the last N recorded weeks and the N before; ' +
   '(4) compare_classes {} — all classes side by side; (5) weekly_series {"class":"","student":12 (optional)} — percentage per recorded week; (6) find_student {"name":"..."}. ' +
-  'Omit "class" for the selected class. Prefer a tool over guessing; use ONLY what TOOL RESULT returns and never invent numbers.\n' +
+  'Omit "class" for the selected class. The app displays each tool result to the teacher as a table automatically — do NOT repeat its rows in "reply"; write a short Arabic summary and insights instead. When you must list several records yourself, use a markdown table (| col | col |) rather than plain lines. Prefer a tool over guessing; use ONLY what TOOL RESULT returns and never invent numbers.\n' +
   '- "navigate": one page id from the APP GUIDE (or "") when opening that page would help; the teacher decides whether to tap the button. Never claim you opened it.\n' +
   '- Recommendations should be concrete and short. Parent messages: polite, specific to that student\'s digest numbers, constructive; never mention other students.\n' +
   '- "ops": [] unless the teacher asks to CHANGE data. Each op may carry an optional "class":"exact class name" — without it the op applies to the SELECTED class; student numbers always refer to the roster of the class the op targets (see the digests). Global ops (add_class, rename_class, set_active_weeks, set_column_max, set_weeks_visibility) need no class. ' +
@@ -2320,12 +2320,18 @@ function otherDigests(cls, week) {
 function clampWeek(w, dflt) { w = parseInt(w, 10); if (!w) w = dflt; return Math.min(Math.max(1, w), activeWeeks()); }
 function validPage(p) { return typeof p === 'string' && Object.prototype.hasOwnProperty.call(APP_PAGES, p) ? p : ''; }
 /* ═════ أدوات المساعد: يطلبها النموذج عند الحاجة وتُنفَّذ محلياً على بيانات التطبيق ═════
-   لا يُرسل للنموذج إلا نتيجة الأداة (أسماء الطلاب تُستبدل بـ«طالب N» إن أوقفتِ مشاركة الأسماء) */
+   كل أداة تُرجع جدولاً منظماً يُعرض للمعلمة كما هو، ويُرسَل للنموذج نصّه فقط
+   (أسماء الطلاب تُستبدل بـ«طالب N» إن أوقفتِ مشاركة الأسماء) */
 var TOOL_LABELS = { student_profile: 'أراجع ملف الطالب', query_students: 'أفلتر الطلاب', declining: 'أقارن بين الأسابيع',
   compare_classes: 'أقارن الفصول', weekly_series: 'أحسب تطور الأسابيع', find_student: 'أبحث عن الطالب' };
 var TOOL_METRICS = { total: 'المجموع', avg_assess: 'متوسط التقييم', avg_hw: 'متوسط الواجب', avg_beh: 'متوسط السلوك', exams: 'الاختبارات' };
+var _TT = null;
+function emitTable(title, head, rows, note) {
+  if (_TT) _TT.push({ title: title, head: head, rows: rows, note: note || '' });
+  return title + (note ? '\n' + note : '') + '\n' + head.join(' | ') + '\n' + rows.map(function (r) { return r.join(' | '); }).join('\n');
+}
 function toolClass(a) { var c = String((a && (a['class'] || a.cls)) || '').trim(); return (DB.classes || []).indexOf(c) >= 0 ? c : ST.cls; }
-function toolName(cls, i, s) { return (i + 1) + '. ' + (cfgGet().sendRoster ? (s.name || '').trim() : ('طالب ' + (i + 1))); }
+function toolNm(s, i) { return cfgGet().sendRoster ? (s.name || '').trim() : ('طالب ' + (i + 1)); }
 function toolStu(cls, ref) {
   var arr = DB.data[cls] || [], n = parseInt(ref, 10);
   if (String(ref).trim() !== '' && !isNaN(n) && String(n) === String(ref).trim()) return arr[n - 1] && (arr[n - 1].name || '').trim() ? { s: arr[n - 1], i: n - 1 } : null;
@@ -2346,30 +2352,35 @@ function toolMissing(s, upTo) {
 function recordedWeeks(cls) {
   var out = [], w;
   for (w = 1; w <= activeWeeks(); w++) {
-    var any = namedStudents(cls).some(function (e) { return weekPctOf(e.s, w) !== null; });
-    if (any) out.push(w);
+    if (namedStudents(cls).some(function (e) { return weekPctOf(e.s, w) !== null; })) out.push(w);
   }
   return out;
 }
+function avgOf(a) { return a.length ? a.reduce(function (x, y) { return x + y; }, 0) / a.length : null; }
 function toolStudentProfile(a, cls) {
   var f = toolStu(cls, a.student);
   if (!f) return 'لم أجد الطالب «' + a.student + '» في فصل ' + cls + (cfgGet().sendRoster ? '' : ' (الأسماء مخفية: استخدم رقم الطالب)') + '.';
-  var s = f.s, lines = [], list = namedStudents(cls);
-  if (!hasAnyGrade(s) || s._totalAbsent) return toolName(cls, f.i, s) + ': لا توجد درجات مرصودة بعد.';
-  lines.push('الطالب ' + toolName(cls, f.i, s) + ' — فصل ' + cls + ' (الدرجة العظمى المرصودة ' + recordedMax(cls) + ')');
+  var s = f.s, rows = [], list = namedStudents(cls), who = (f.i + 1) + '. ' + toolNm(s, f.i);
+  if (!hasAnyGrade(s) || s._totalAbsent) return who + ': لا توجد درجات مرصودة بعد.';
   Object.keys(TOOL_METRICS).forEach(function (k) {
-    var mine = metricOf(s, cls, { type: k }); if (!mine) { lines.push(TOOL_METRICS[k] + ': لم يُرصد'); return; }
+    var mine = metricOf(s, cls, { type: k });
+    if (!mine) { rows.push([TOOL_METRICS[k], 'لم يُرصد', '', '', '']); return; }
     var p = mine.v / mine.max * 100, ps = [];
     list.forEach(function (o) { var q = toolPct(o.s, cls, k); if (q !== null) ps.push(q); });
-    var avg = ps.length ? ps.reduce(function (x, y) { return x + y; }, 0) / ps.length : null;
-    var rank = ps.length ? 1 + ps.filter(function (x) { return x > p + 1e-9; }).length : 0;
-    lines.push(TOOL_METRICS[k] + ': ' + r1(mine.v) + '/' + r1(mine.max) + ' (' + r1(p) + '٪، ' + levelOf(p) + ') — متوسط الفصل ' + (avg === null ? '-' : r1(avg) + '٪') + (k === 'total' ? ' — الترتيب ' + rank + ' من ' + ps.length : ''));
+    var av = avgOf(ps), rank = ps.length ? 1 + ps.filter(function (x) { return x > p + 1e-9; }).length : 0;
+    rows.push([TOOL_METRICS[k], r1(mine.v) + '/' + r1(mine.max), r1(p) + '٪', av === null ? '-' : r1(av) + '٪', levelOf(p) + (k === 'total' ? ' — الترتيب ' + rank + ' من ' + ps.length : '')]);
   });
-  var ab = absCountOf(cls, s); lines.push('الغياب: ' + ab.a + ' فترة' + (ab.sk ? ' (+ مرض ' + ab.sk + ')' : ''));
-  var tr = studentTrend(s); lines.push('الاتجاه: ' + tr.txt);
-  var series = [], w; for (w = 1; w <= activeWeeks(); w++) { var p2 = weekPctOf(s, w); if (p2 !== null) series.push('أ' + w + ':' + r1(p2) + '٪'); }
-  if (series.length) lines.push('النسبة الأسبوعية (تقييم/واجب/سلوك): ' + series.join(' ، '));
-  return lines.join('\n');
+  var ab = absCountOf(cls, s), tr = studentTrend(s);
+  rows.push(['الغياب', ab.a + ' فترة' + (ab.sk ? ' (+ مرض ' + ab.sk + ')' : ''), '', '', '']);
+  rows.push(['الاتجاه', tr.txt, '', '', '']);
+  var t1 = emitTable('ملف الطالب ' + who + ' — فصل ' + cls, ['البند', 'درجته', 'النسبة', 'متوسط الفصل', 'التقدير'], rows, 'الدرجة العظمى المرصودة ' + recordedMax(cls));
+  var wr = [], w;
+  for (w = 1; w <= activeWeeks(); w++) {
+    var p2 = weekPctOf(s, w); if (p2 === null) continue;
+    var cp = []; list.forEach(function (o) { var q = weekPctOf(o.s, w); if (q !== null) cp.push(q); });
+    wr.push(['أسبوع ' + w, r1(p2) + '٪', cp.length ? r1(avgOf(cp)) + '٪' : '-']);
+  }
+  return wr.length ? t1 + '\n\n' + emitTable('نسبة الطالب كل أسبوع (تقييم/واجب/سلوك)', ['الأسبوع', 'النسبة', 'متوسط الفصل'], wr) : t1;
 }
 function toolQuery(a, cls) {
   var metric = String(a.metric || 'total'), op = String(a.op || 'bottom'), lim = Math.min(Math.max(parseInt(a.limit, 10) || 15, 1), 40);
@@ -2384,13 +2395,16 @@ function toolQuery(a, cls) {
   });
   if (!rows.length) return 'لا توجد بيانات كافية لهذا المقياس في فصل ' + cls + ' (المقاييس: ' + Object.keys(TOOL_METRICS).concat(['absences', 'missing']).join(', ') + ').';
   var out;
-  if (op === 'top') out = rows.slice().sort(function (x, y) { return y.v - x.v; }).slice(0, lim);
-  else if (op === 'bottom') out = rows.slice().sort(function (x, y) { return x.v - y.v; }).slice(0, lim);
-  else { out = rows.filter(function (r) { return cmpOp(op, r.v, v1, v2); }).sort(function (x, y) { return x.v - y.v; }); }
-  var total = out.length; out = out.slice(0, lim);
-  return 'فصل ' + cls + ' — ' + (TOOL_METRICS[metric] || (metric === 'absences' ? 'فترات الغياب' : 'الخلايا غير المرصودة')) + ' — ' + op + (op === 'top' || op === 'bottom' ? '' : ' ' + v1 + (op === 'between' ? '–' + v2 : '')) +
-    ' — المطابقون ' + total + ' من ' + rows.length + (total > out.length ? ' (عُرض ' + out.length + ')' : '') + ':\n' +
-    out.map(function (r) { return toolName(cls, r.e.i, r.e.s) + ' | ' + r1(r.v) + unit; }).join('\n');
+  if (op === 'top') out = rows.slice().sort(function (x, y) { return y.v - x.v; });
+  else if (op === 'bottom') out = rows.slice().sort(function (x, y) { return x.v - y.v; });
+  else out = rows.filter(function (r) { return cmpOp(op, r.v, v1, v2); }).sort(function (x, y) { return x.v - y.v; });
+  var total = out.length; if (op === 'top' || op === 'bottom') total = Math.min(lim, out.length);
+  out = out.slice(0, lim);
+  var crit = (op === 'top' ? 'الأعلى' : op === 'bottom' ? 'الأدنى' : OP_SYM[op] ? OP_SYM[op] + ' ' + v1 : 'بين ' + v1 + ' و ' + v2);
+  var mName = TOOL_METRICS[metric] || (metric === 'absences' ? 'فترات الغياب' : 'الخلايا غير المرصودة');
+  return emitTable('فصل ' + cls + ' — ' + mName + ' — ' + crit, ['م', 'الاسم', mName],
+    out.map(function (r) { return [String(r.e.i + 1), toolNm(r.e.s, r.e.i), r1(r.v) + unit]; }),
+    'المطابقون ' + (op === 'top' || op === 'bottom' ? out.length : total) + ' من ' + rows.length + ' طالب');
 }
 function toolDeclining(a, cls) {
   var n = Math.min(Math.max(parseInt(a.last_n, 10) || 3, 1), 6), minD = Number(a.min_drop); if (isNaN(minD)) minD = 5;
@@ -2398,53 +2412,83 @@ function toolDeclining(a, cls) {
   namedStudents(cls).forEach(function (e) {
     var pts = [], w; for (w = 1; w <= activeWeeks(); w++) { var p = weekPctOf(e.s, w); if (p !== null) pts.push(p); }
     if (pts.length < 2 * n) return;
-    var avg = function (x) { return x.reduce(function (s1, s2) { return s1 + s2; }, 0) / x.length; };
-    var d = avg(pts.slice(-n)) - avg(pts.slice(-2 * n, -n));
-    if (dir < 0 ? d <= -minD : d >= minD) rows.push({ e: e, d: d, last: avg(pts.slice(-n)) });
+    var d = avgOf(pts.slice(-n)) - avgOf(pts.slice(-2 * n, -n));
+    if (dir < 0 ? d <= -minD : d >= minD) rows.push({ e: e, d: d, last: avgOf(pts.slice(-n)), prev: avgOf(pts.slice(-2 * n, -n)) });
   });
   rows.sort(function (x, y) { return dir < 0 ? x.d - y.d : y.d - x.d; });
   if (!rows.length) return 'لا يوجد طلاب ' + (dir < 0 ? 'تراجعوا' : 'تحسّنوا') + ' بمقدار ' + minD + '٪ أو أكثر بين آخر ' + n + ' أسابيع مرصودة والـ' + n + ' التي قبلها (فصل ' + cls + ').';
-  return 'فصل ' + cls + ' — ' + (dir < 0 ? 'التراجع' : 'التحسن') + ' بين آخر ' + n + ' أسابيع مرصودة وما قبلها (' + rows.length + ' طالب):\n' +
-    rows.slice(0, 30).map(function (r) { return toolName(cls, r.e.i, r.e.s) + ' | ' + (r.d > 0 ? '+' : '') + r1(r.d) + '٪ | مستواه الحالي ' + r1(r.last) + '٪'; }).join('\n');
+  return emitTable('فصل ' + cls + ' — ' + (dir < 0 ? 'الطلاب المتراجعون' : 'الطلاب المتحسّنون'), ['م', 'الاسم', 'قبل', 'الآن', 'التغير'],
+    rows.slice(0, 30).map(function (r) { return [String(r.e.i + 1), toolNm(r.e.s, r.e.i), r1(r.prev) + '٪', r1(r.last) + '٪', (r.d > 0 ? '+' : '') + r1(r.d) + '٪']; }),
+    'مقارنة آخر ' + n + ' أسابيع مرصودة بالـ' + n + ' التي قبلها — ' + rows.length + ' طالب');
 }
 function toolCompare() {
-  return 'مقارنة الفصول (نسب مئوية من الدرجة العظمى المرصودة):\n' + (DB.classes || []).map(function (c) {
+  var rows = (DB.classes || []).map(function (c) {
     var list = namedStudents(c), o = {};
     Object.keys(TOOL_METRICS).forEach(function (k) {
       var ps = []; list.forEach(function (e) { var q = toolPct(e.s, c, k); if (q !== null) ps.push(q); });
-      o[k] = ps.length ? r1(ps.reduce(function (x, y) { return x + y; }, 0) / ps.length) + '٪' : '-';
+      o[k] = ps.length ? r1(avgOf(ps)) + '٪' : '-';
     });
-    var ab = list.map(function (e) { return absCountOf(c, e.s).a; }), abAvg = ab.length ? r1(ab.reduce(function (x, y) { return x + y; }, 0) / ab.length) : '-';
-    return c + ' (' + list.length + ' طالب): المجموع ' + o.total + ' | تقييم ' + o.avg_assess + ' | واجب ' + o.avg_hw + ' | سلوك ' + o.avg_beh + ' | اختبارات ' + o.exams + ' | غياب/طالب ' + abAvg;
-  }).join('\n');
+    var ab = avgOf(list.map(function (e) { return absCountOf(c, e.s).a; }));
+    return [c, String(list.length), o.total, o.avg_assess, o.avg_hw, o.avg_beh, o.exams, ab === null ? '-' : String(r1(ab))];
+  });
+  return emitTable('مقارنة الفصول', ['الفصل', 'الطلاب', 'المجموع', 'التقييم', 'الواجب', 'السلوك', 'الاختبارات', 'غياب/طالب'], rows, 'النسب من الدرجة العظمى المرصودة لكل فصل');
 }
 function toolWeekly(a, cls) {
-  var out = [], f = a.student !== undefined && a.student !== '' ? toolStu(cls, a.student) : null;
+  var rows = [], f = (a.student !== undefined && a.student !== '') ? toolStu(cls, a.student) : null;
   if (a.student !== undefined && a.student !== '' && !f) return 'لم أجد الطالب «' + a.student + '» في فصل ' + cls + '.';
   recordedWeeks(cls).forEach(function (w) {
-    if (f) { var p = weekPctOf(f.s, w); if (p !== null) out.push('أسبوع ' + w + ': ' + r1(p) + '٪'); }
-    else { var ps = []; namedStudents(cls).forEach(function (e) { var q = weekPctOf(e.s, w); if (q !== null) ps.push(q); }); if (ps.length) out.push('أسبوع ' + w + ': ' + r1(ps.reduce(function (x, y) { return x + y; }, 0) / ps.length) + '٪ (' + ps.length + ' طالب)'); }
+    var ps = []; namedStudents(cls).forEach(function (e) { var q = weekPctOf(e.s, w); if (q !== null) ps.push(q); });
+    if (f) { var p = weekPctOf(f.s, w); if (p !== null) rows.push(['أسبوع ' + w, r1(p) + '٪', ps.length ? r1(avgOf(ps)) + '٪' : '-']); }
+    else if (ps.length) rows.push(['أسبوع ' + w, r1(avgOf(ps)) + '٪', String(ps.length)]);
   });
-  return (f ? 'تطور ' + toolName(cls, f.i, f.s) : 'تطور متوسط الفصل ' + cls) + ' (تقييم/واجب/سلوك):\n' + (out.join('\n') || 'لا توجد أسابيع مرصودة.');
+  if (!rows.length) return 'لا توجد أسابيع مرصودة.';
+  return emitTable(f ? 'تطور ' + (f.i + 1) + '. ' + toolNm(f.s, f.i) + ' (فصل ' + cls + ')' : 'تطور متوسط الفصل ' + cls,
+    f ? ['الأسبوع', 'نسبة الطالب', 'متوسط الفصل'] : ['الأسبوع', 'متوسط الفصل', 'عدد الطلاب'], rows, 'تقييم/واجب/سلوك');
 }
 function toolFind(a) {
   if (!cfgGet().sendRoster) return 'مشاركة الأسماء متوقفة — لا أستطيع البحث بالاسم. استخدم رقم الطالب.';
   var q = String(a.name || ''), found = [];
   (DB.classes || []).forEach(function (c) { namedStudents(c).forEach(function (e) { var sc = studentNameScore(q, e.s.name); if (sc >= 0.6) found.push({ c: c, e: e, sc: sc }); }); });
   found.sort(function (x, y) { return y.sc - x.sc; });
-  return found.length ? 'المطابقون لـ«' + q + '»:\n' + found.slice(0, 8).map(function (f) { return f.c + ' | ' + toolName(f.c, f.e.i, f.e.s); }).join('\n') : 'لا يوجد طالب بهذا الاسم.';
+  return found.length ? emitTable('المطابقون لـ«' + q + '»', ['الفصل', 'م', 'الاسم'], found.slice(0, 8).map(function (f) { return [f.c, String(f.e.i + 1), f.e.s.name]; })) : 'لا يوجد طالب بهذا الاسم.';
 }
+/* يرجع {text, tables} — النص يذهب للنموذج والجداول تُعرض للمعلمة */
 function runChatTool(t) {
+  _TT = [];
+  var text;
   try {
     var name = String((t && t.name) || ''), a = (t && t.args && typeof t.args === 'object') ? t.args : {}, cls = toolClass(a);
-    if (name === 'student_profile') return toolStudentProfile(a, cls);
-    if (name === 'query_students') return toolQuery(a, cls);
-    if (name === 'declining') return toolDeclining(a, cls);
-    if (name === 'compare_classes') return toolCompare();
-    if (name === 'weekly_series') return toolWeekly(a, cls);
-    if (name === 'find_student') return toolFind(a);
-    return 'أداة غير معروفة: ' + name + ' (المتاح: ' + Object.keys(TOOL_LABELS).join(', ') + ').';
-  } catch (e) { return 'تعذّر تنفيذ الأداة: ' + (e && e.message ? e.message : e); }
+    if (name === 'student_profile') text = toolStudentProfile(a, cls);
+    else if (name === 'query_students') text = toolQuery(a, cls);
+    else if (name === 'declining') text = toolDeclining(a, cls);
+    else if (name === 'compare_classes') text = toolCompare();
+    else if (name === 'weekly_series') text = toolWeekly(a, cls);
+    else if (name === 'find_student') text = toolFind(a);
+    else text = 'أداة غير معروفة: ' + name + ' (المتاح: ' + Object.keys(TOOL_LABELS).join(', ') + ').';
+  } catch (e) { text = 'تعذّر تنفيذ الأداة: ' + (e && e.message ? e.message : e); _TT = []; }
+  var tabs = _TT; _TT = null;
+  return { text: text, tables: tabs };
+}
+/* عرض الجداول (نفس ألوان الواجهة الداكنة صراحةً حتى لا تتأثر بقواعد الصفحة العامة) */
+function chatTableHtml(t, mi, ti) {
+  var BD = 'border:1px solid #1e293b;';
+  var th = t.head.map(function (h) { return '<th style="padding:5px 7px;background:#1e293b;color:#cbd5e1;font-size:10px;white-space:nowrap;' + BD + '">' + esc(h) + '</th>'; }).join('');
+  var body = t.rows.map(function (r, ri) {
+    var bg = ri % 2 ? '#111a30' : '#0b1220';
+    return '<tr style="background:' + bg + ';">' + r.map(function (c, ci) { return '<td style="padding:5px 7px;font-size:11px;background:' + bg + ';color:#e2e8f0;' + BD + 'text-align:' + (ci === 1 && t.head.length > 3 ? 'right' : 'center') + ';">' + esc(c) + '</td>'; }).join('') + '</tr>';
+  }).join('');
+  return '<div style="margin:8px 0 4px;"><div style="font-size:11px;font-weight:800;color:#a5b4fc;margin-bottom:2px;">📊 ' + esc(t.title) + '</div>' +
+    (t.note ? '<div style="font-size:9.5px;color:#64748b;margin-bottom:3px;">' + esc(t.note) + '</div>' : '') +
+    '<div style="overflow-x:auto;background:#0b1220;border:1px solid #1e293b;border-radius:8px;"><table style="border-collapse:collapse;width:100%;background:#0b1220;color:#e2e8f0;"><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+    '<div style="text-align:left;margin-top:2px;"><button onclick="DAI.chatTableXls(' + mi + ',' + ti + ')" style="' + BTN + 'background:none;color:#64748b;font-size:10px;padding:2px 4px;">⬇️ Excel</button></div></div>';
+}
+function chatTablesHtml(m, mi) { return (m.tables || []).map(function (t, ti) { return chatTableHtml(t, mi, ti); }).join(''); }
+function chatTablesText(m) {
+  return (m.tables || []).map(function (t) { return t.title + '\n' + t.head.join(' | ') + '\n' + t.rows.map(function (r) { return r.join(' | '); }).join('\n'); }).join('\n\n');
+}
+function chatTableXls(mi, ti) {
+  var m = CHAT.msgs[mi], t = m && m.tables && m.tables[ti]; if (!t) return;
+  repExcel({ title: t.title, criteria: t.note || '', head: t.head, data: t.rows, foot: [], kind: 'chat' });
 }
 function chatHistory() {
   var h = [], m = CHAT.msgs.filter(function (x) { return !x.err; }).slice(-16);
@@ -2460,10 +2504,28 @@ function chatHistory() {
   while (h.length && h[0].role !== 'user') h.shift();
   return h;
 }
+function fmtInline(x) { return esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
+/* يحوّل جداول الماركداون (| عمود | عمود |) التي يكتبها النموذج إلى جداول حقيقية */
+function mdTable(rows) {
+  var BD = 'border:1px solid #1e293b;', cells = function (ln) { return ln.trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); }); };
+  var head = cells(rows[0]), body = rows.slice(2).map(cells);
+  return '<div style="overflow-x:auto;margin:6px 0;background:#0b1220;border:1px solid #1e293b;border-radius:8px;"><table style="border-collapse:collapse;width:100%;background:#0b1220;color:#e2e8f0;"><thead><tr>' +
+    head.map(function (h) { return '<th style="padding:5px 7px;background:#1e293b;color:#cbd5e1;font-size:10px;white-space:nowrap;' + BD + '">' + fmtInline(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    body.map(function (r, ri) { var bg = ri % 2 ? '#111a30' : '#0b1220'; return '<tr style="background:' + bg + ';">' + r.map(function (c) { return '<td style="padding:5px 7px;font-size:11px;background:' + bg + ';color:#e2e8f0;' + BD + 'text-align:center;">' + fmtInline(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+    '</tbody></table></div>';
+}
 function fmtMsg(t) {
-  var h = esc(String(t || ''));
-  h = h.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-  return h.replace(/\n/g, '<br>');
+  var lines = String(t || '').split('\n'), out = [], i = 0, isSep = function (l) { return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(l); };
+  while (i < lines.length) {
+    if (/^\s*\|.*\|\s*$/.test(lines[i]) && i + 1 < lines.length && isSep(lines[i + 1])) {
+      var blk = [lines[i], lines[i + 1]]; i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { blk.push(lines[i]); i++; }
+      out.push({ tbl: mdTable(blk) });
+    } else { out.push({ txt: fmtInline(lines[i]) }); i++; }
+  }
+  var h = '', prevTxt = false;
+  out.forEach(function (o) { if (o.tbl) { h += o.tbl; prevTxt = false; } else { h += (prevTxt ? '<br>' : '') + o.txt; prevTxt = true; } });
+  return h;
 }
 
 function viewChat() {
@@ -2525,7 +2587,7 @@ function chatRenderList() {
     }
     if (m.nav) card += '<div style="margin-top:8px;">' + btn('↗ افتح صفحة «' + esc(APP_PAGES[m.nav]) + '»', 'DAI.chatGo(' + i + ')', GHOST + 'padding:7px 12px;font-size:11px;') + '</div>';
     h += '<div style="display:flex;justify-content:flex-end;margin:8px 0;"><div style="background:' + (m.err ? '#450a0a' : '#111c33') + ';border:1px solid ' + (m.err ? '#7f1d1d' : '#1e3a5f') + ';color:' + (m.err ? '#fca5a5' : '#e2e8f0') + ';border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:12px;line-height:1.95;max-width:94%;">' +
-      fmtMsg(m.text) + (m.clar ? '<div style="margin-top:6px;background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:8px;padding:6px 8px;">❓ ' + esc(m.clar) + '</div>' : '') + card +
+      fmtMsg(m.text) + chatTablesHtml(m, i) + (m.clar ? '<div style="margin-top:6px;background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:8px;padding:6px 8px;">❓ ' + esc(m.clar) + '</div>' : '') + card +
       (m.err ? '' : '<div style="margin-top:6px;text-align:left;"><button onclick="DAI.chatCopy(' + i + ')" style="' + BTN + 'background:none;color:#64748b;font-size:10px;padding:2px 4px;">📋 نسخ</button></div>') +
       '</div></div>';
   });
@@ -2547,7 +2609,7 @@ function chatSend(textIn) {
   CHAT.busy = true; CHAT.status = ''; chatSave(); chatRenderList();
   var cls = ST.cls, week = ST.week;
   var ctx = chatCatalog(cls, week) + '\n' + otherClassesLine(cls) + '\n\n' + schoolContext(cls, week) + '\n\n' + classDigest(cls, week) + '\n\n' + otherDigests(cls, week);
-  var extra = '';
+  var extra = '', tabs = [];
   /* يستدعي النموذج؛ وإن طلب بيانات فصل آخر (lookup) نضيفها ونعيد الاستدعاء (حد أقصى مرتان) */
   var run = function (round) {
     var content = [{ type: 'text', text: 'CONTEXT (fresh, authoritative):\n' + ctx + extra + '\n\nTeacher message (Arabic): ' + txt }];
@@ -2563,7 +2625,9 @@ function chatSend(textIn) {
       if (j.tool && typeof j.tool === 'object' && round < 5) {
         var tn = String(j.tool.name || '');
         CHAT.status = '🔧 ' + (TOOL_LABELS[tn] || 'أحسب') + '…'; chatRenderList();
-        extra += '\n\nTOOL RESULT (' + tn + '):\n' + runChatTool(j.tool);
+        var tr = runChatTool(j.tool);
+        tr.tables.forEach(function (t) { tabs.push(t); });
+        extra += '\n\nTOOL RESULT (' + tn + '):\n' + tr.text;
         return run(round + 1);
       }
       var lk = j.lookup;
@@ -2597,7 +2661,8 @@ function chatSend(textIn) {
       m.state = 'pending';
       if (!m.text) m.text = 'جهّزتُ التعديلات التالية للمراجعة:';
     }
-    if (!m.text && !m.clar) m.text = 'لم أجد ما أضيفه. أعد الصياغة من فضلك.';
+    if (tabs.length) m.tables = tabs.slice(0, 6);
+    if (!m.text && !m.clar && !m.tables) m.text = 'لم أجد ما أضيفه. أعد الصياغة من فضلك.';
     CHAT.msgs.push(m);
   }).catch(function (e) {
     CHAT.msgs.push({ role: 'assistant', text: errMsg(e), err: true });
@@ -2651,7 +2716,7 @@ function chatUndo(i) {
   if (typeof showSnack === 'function') showSnack('↩ تم التراجع');
   chatSave(); refreshHead(); chatRenderList();
 }
-function chatCopy(i) { var m = CHAT.msgs[i]; if (m) copyTextToClipboard(m.text + (m.clar ? '\n' + m.clar : '')); }
+function chatCopy(i) { var m = CHAT.msgs[i]; if (m) copyTextToClipboard(m.text + (m.clar ? '\n' + m.clar : '') + (m.tables ? '\n\n' + chatTablesText(m) : '')); }
 function chatClear() { CHAT.msgs = []; CHAT.draft = ''; chatSave(); viewChat(); }
 function chatMic() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2760,6 +2825,7 @@ function chatSave() {
       if (m.nav) o.nav = m.nav;
       if (m.cls) o.cls = m.cls;
       if (m.summary) o.summary = m.summary;
+      if (m.tables) o.tables = m.tables;
       if (m.groups || m.hadPlan) { o.hadPlan = 1; o.state = m.state; }
       return o;
     });
@@ -2834,7 +2900,7 @@ window.DAI = {
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   chatSend: function () { chatSend(); }, chatChip: function (i) { chatSend(CHAT_CHIPS[i]); },
   chatDraft: function (v) { CHAT.draft = v; }, chatMic: chatMic, chatClear: chatClear,
-  chatGo: chatGo, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
+  chatGo: chatGo, chatTableXls: chatTableXls, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
   undo: function (fromDone) { doUndo(fromDone === true); }
 };
 
