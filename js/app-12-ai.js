@@ -957,7 +957,7 @@ function closeAI() {
   if (_abort) { try { _abort.abort(); } catch (e) {} }
   var o = ov(); if (o) o.remove();
   ST = null;
-  hideMini(); AI_OPEN = false; chatSave();
+  hideMini(); AI_OPEN = false; chatSave(); try { updateBadge(); } catch (e) {}
 }
 
 function head(title, back) {
@@ -2268,13 +2268,17 @@ function repSet(k, v, quiet) {
    • عند طلب تعديل: يقترح عمليات تُعرض للمراجعة ولا تُطبَّق إلا بزر «تطبيق»، مع تراجع.
    • إدخال صوتي مباشر بالميكروفون.
    ═════════════════════════════════════════════════════════════════════ */
-var CHAT = { msgs: [], busy: false, rec: null, listening: false, draft: '', status: '', imgs: [], imgKind: '', attHint: '' };
+var CHAT = { msgs: [], busy: false, rec: null, listening: false, draft: '', status: '', imgs: [], imgKind: '', attHint: '', alerts: [], alertsOpen: null };
 var CHAT_CHIPS = [
   'أعطني ملخصاً سريعاً عن حال فصولي الآن',
   'من الطلاب المتعثرون في هذا الفصل ولماذا؟',
   'من تراجع مستواه في آخر أسابيع؟',
   'من لم تُرصد درجاته حتى الأسبوع الحالي؟',
   'قارن بين فصولي من حيث المستوى والغياب',
+  'من الطلاب المعرّضون للخطر في هذا الفصل؟',
+  'أعطني إحصاءات الفصل وتوزيع المستويات',
+  'في أي أيام يكثر الغياب؟',
+  'هل الغياب يؤثر على درجات الطلاب؟',
   'اقترح خطة علاج للمتعثرين',
   'اكتب رسالة لولي أمر الطالب رقم 5 بخصوص مستواه',
   'كيف يُحسب المجموع وما تأثير الغياب على الدرجات؟',
@@ -2325,7 +2329,13 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   '(1) student_profile {"class":"","student":12 or name} — full profile: components vs class average, rank, absences, weekly percentages; ' +
   '(2) query_students {"class":"","metric":"total|avg_assess|avg_hw|avg_beh|exams|absences|missing","op":"top|bottom|lt|lte|gt|gte|between","value":60,"value2":80,"limit":15} — percentages for grade metrics; ' +
   '(3) declining {"class":"","last_n":3,"min_drop":5,"direction":"down|up"} — students whose weekly percentage fell (or rose) between the last N recorded weeks and the N before; ' +
-  '(4) compare_classes {} — all classes side by side; (5) weekly_series {"class":"","student":12 (optional)} — percentage per recorded week; (6) find_student {"name":"..."}. ' +
+  '(4) compare_classes {} — all classes side by side; (5) weekly_series {"class":"","student":12 (optional)} — percentage per recorded week; (6) find_student {"name":"..."}; ' +
+  '(7) at_risk {"class":"","low_pct":50,"min_abs":3,"min_missing":6} — students at risk (low percentage, or a combination of absences / decline / missing grades) with reasons; ' +
+  '(8) class_stats {"class":"","metric":"total|avg_assess|avg_hw|avg_beh|exams"} — mean, median, std, min, max, pass rate per metric + level distribution of the chosen metric; ' +
+  '(9) absence_pattern {"class":""} — absences by weekday (or period) and by week; ' +
+  '(10) missing_report {"class":""} — how many students have no recorded assessment/homework/behaviour per week; ' +
+  '(11) compare_weeks {"class":"","week_a":3,"week_b":5} — each student\'s weekly percentage in two weeks and the change (defaults: last two recorded weeks); ' +
+  '(12) absence_vs_grades {"class":""} — does absence relate to lower grades (correlation + bands). ' +
   'Omit "class" for the selected class. The app displays each tool result to the teacher as a table automatically — do NOT repeat its rows in "reply"; write a short Arabic summary and insights instead. When you must list several records yourself, use a markdown table (| col | col |) rather than plain lines. Prefer a tool over guessing; use ONLY what TOOL RESULT returns and never invent numbers.\n' +
   '- "navigate": one page id from the APP GUIDE (or "") when opening that page would help; the teacher decides whether to tap the button. Never claim you opened it.\n' +
   '- Recommendations should be concrete and short. Parent messages: polite, specific to that student\'s digest numbers, constructive; never mention other students.\n' +
@@ -2445,7 +2455,9 @@ function validPage(p) { return typeof p === 'string' && Object.prototype.hasOwnP
    كل أداة تُرجع جدولاً منظماً يُعرض للمعلمة كما هو، ويُرسَل للنموذج نصّه فقط
    (أسماء الطلاب تُستبدل بـ«طالب N» إن أوقفتِ مشاركة الأسماء) */
 var TOOL_LABELS = { student_profile: 'أراجع ملف الطالب', query_students: 'أفلتر الطلاب', declining: 'أقارن بين الأسابيع',
-  compare_classes: 'أقارن الفصول', weekly_series: 'أحسب تطور الأسابيع', find_student: 'أبحث عن الطالب' };
+  compare_classes: 'أقارن الفصول', weekly_series: 'أحسب تطور الأسابيع', find_student: 'أبحث عن الطالب',
+  at_risk: 'أحدد الطلاب المعرّضين للخطر', class_stats: 'أحسب إحصاءات الفصل', absence_pattern: 'أحلّل نمط الغياب',
+  missing_report: 'أفحص الدرجات الناقصة', compare_weeks: 'أقارن بين أسبوعين', absence_vs_grades: 'أربط الغياب بالدرجات' };
 var TOOL_METRICS = { total: 'المجموع', avg_assess: 'متوسط التقييم', avg_hw: 'متوسط الواجب', avg_beh: 'متوسط السلوك', exams: 'الاختبارات' };
 var _TT = null;
 function emitTable(title, head, rows, note) {
@@ -2574,6 +2586,133 @@ function toolFind(a) {
   found.sort(function (x, y) { return y.sc - x.sc; });
   return found.length ? emitTable('المطابقون لـ«' + q + '»', ['الفصل', 'م', 'الاسم'], found.slice(0, 8).map(function (f) { return [f.c, String(f.e.i + 1), f.e.s.name]; })) : 'لا يوجد طالب بهذا الاسم.';
 }
+/* ───── أدوات تحليل إضافية ───── */
+var DAYS_TL = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
+function medianOf(a) { if (!a.length) return null; var b = a.slice().sort(function (x, y) { return x - y; }), m = Math.floor(b.length / 2); return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }
+function stdOf(a) { if (a.length < 2) return null; var m = avgOf(a); return Math.sqrt(avgOf(a.map(function (x) { return (x - m) * (x - m); }))); }
+function lastRecWeek(cls) { var r = recordedWeeks(cls); return r.length ? r[r.length - 1] : 0; }
+function numArg(v, d) { if (v === undefined || v === null || v === '') return d; var n = Number(v); return isNaN(n) ? d : n; }
+
+/* طلاب معرّضون للخطر: نسبة منخفضة + غياب + تراجع + درجات ناقصة */
+function toolRisk(a, cls) {
+  var low = numArg(a.low_pct, 50), minAbs = Math.max(1, parseInt(a.min_abs, 10) || 3), minMiss = Math.max(1, parseInt(a.min_missing, 10) || 6);
+  var lw = lastRecWeek(cls); if (!lw) return 'لا توجد درجات مرصودة في فصل ' + cls + '.';
+  var list = namedStudents(cls), rows = [];
+  list.forEach(function (e) {
+    var p = toolPct(e.s, cls, 'total'), ab = absCountOf(cls, e.s).a, ms = toolMissing(e.s, lw), tr = studentTrend(e.s), why = [], sc = 0, isLow = p !== null && p < low;
+    if (isLow) { why.push('نسبة منخفضة'); sc += 2; }
+    if (ab >= minAbs) { why.push('غياب ' + ab); sc++; }
+    if (tr.dir < 0) { why.push('تراجع'); sc++; }
+    if (ms >= minMiss) { why.push('ناقص ' + ms); sc++; }
+    if (isLow || sc >= 2) rows.push({ e: e, p: p, ab: ab, ms: ms, why: why, sc: sc });
+  });
+  if (!rows.length) return 'لا يوجد طلاب معرّضون للخطر في فصل ' + cls + ' (نسبة < ' + low + '٪، غياب ≥ ' + minAbs + '، ناقص ≥ ' + minMiss + ').';
+  rows.sort(function (x, y) { return y.sc - x.sc || (x.p === null ? 101 : x.p) - (y.p === null ? 101 : y.p); });
+  return emitTable('فصل ' + cls + ' — الطلاب المعرّضون للخطر', ['م', 'الاسم', 'النسبة', 'غياب', 'ناقص', 'الأسباب'],
+    rows.slice(0, 30).map(function (r) { return [String(r.e.i + 1), toolNm(r.e.s, r.e.i), r.p === null ? '-' : r1(r.p) + '٪', String(r.ab), String(r.ms), r.why.join('، ')]; }),
+    'المعايير: نسبة < ' + low + '٪ أو تجمّع عاملين: غياب ≥ ' + minAbs + '، تراجع، ناقص ≥ ' + minMiss + ' (حتى أسبوع ' + lw + ') — ' + rows.length + ' من ' + list.length + ' طالب');
+}
+
+/* إحصاءات الفصل + توزيع المستويات */
+function toolStats(a, cls) {
+  var list = namedStudents(cls), rows = [];
+  Object.keys(TOOL_METRICS).forEach(function (k) {
+    var ps = []; list.forEach(function (e) { var q = toolPct(e.s, cls, k); if (q !== null) ps.push(q); });
+    if (!ps.length) { rows.push([TOOL_METRICS[k], '0', '-', '-', '-', '-', '-', '-']); return; }
+    rows.push([TOOL_METRICS[k], String(ps.length), r1(avgOf(ps)) + '٪', r1(medianOf(ps)) + '٪', ps.length > 1 ? r1(stdOf(ps)) : '-',
+      r1(Math.min.apply(null, ps)) + '٪', r1(Math.max.apply(null, ps)) + '٪', r1(ps.filter(function (x) { return x >= 50; }).length / ps.length * 100) + '٪']);
+  });
+  var t1 = emitTable('إحصاءات فصل ' + cls, ['المقياس', 'عدد', 'المتوسط', 'الوسيط', 'الانحراف', 'الأدنى', 'الأعلى', 'نجاح ≥50٪'], rows, 'النسب من الدرجة العظمى المرصودة — الانحراف الكبير يعني تفاوتاً كبيراً بين الطلاب');
+  var m = TOOL_METRICS[a.metric] ? a.metric : 'total', ps2 = [];
+  list.forEach(function (e) { var q = toolPct(e.s, cls, m); if (q !== null) ps2.push(q); });
+  if (!ps2.length) return t1;
+  var bands = [['ممتاز (90٪ فأكثر)', 90, 1e9], ['جيد جداً (75–90)', 75, 90], ['جيد (60–75)', 60, 75], ['مقبول (50–60)', 50, 60], ['ضعيف (أقل من 50)', -1e9, 50]];
+  var rows2 = bands.map(function (b) { var c = ps2.filter(function (x) { return x >= b[1] && x < b[2]; }).length; return [b[0], String(c), r1(c / ps2.length * 100) + '٪']; });
+  return t1 + '\n\n' + emitTable('توزيع المستويات — ' + TOOL_METRICS[m] + ' (فصل ' + cls + ')', ['المستوى', 'عدد الطلاب', 'النسبة'], rows2, 'من ' + ps2.length + ' طالب لهم درجات');
+}
+
+/* نمط الغياب: حسب اليوم/الحصة وحسب الأسبوع */
+function toolAbsPattern(a, cls) {
+  var list = namedStudents(cls), aw = activeWeeks(), ppw = Math.max(1, Number(DB.meta.periodsPerWeek) || 3);
+  var byDay = [], byCi = {}, byWk = {}, i, any = false, cache = {}, realAny = false;
+  for (i = 0; i < 7; i++) byDay.push({ abs: 0, sick: 0 });
+  var psOf = function (w) { if (!cache[w]) { cache[w] = periodsFor(cls, w); if (cache[w].some(function (p) { return p.period && !/^g\d+$/.test(String(p.period.id)); })) realAny = true; } return cache[w]; };
+  list.forEach(function (e) {
+    var ab = (DB.absences && DB.absences[cls] && DB.absences[cls][e.s.id]) || {};
+    Object.keys(ab).forEach(function (k) {
+      var m = /^w(\d+)_ci(\d+)$/.exec(k); if (!m) return;
+      var w = parseInt(m[1], 10), ci = parseInt(m[2], 10), v = ab[k];
+      if (w < 1 || w > aw || (v !== 'abs' && v !== 'sick')) return;
+      any = true;
+      var ps = psOf(w), di = ps[ci] ? ps[ci].dayIdx : -1, kk = v === 'abs' ? 'abs' : 'sick';
+      if (di >= 0 && di < 7) byDay[di][kk]++;
+      byCi[ci] = byCi[ci] || { abs: 0, sick: 0 }; byCi[ci][kk]++;
+      byWk[w] = byWk[w] || { abs: 0, sick: 0 }; byWk[w][kk]++;
+    });
+  });
+  if (!any) return 'لا توجد غيابات مسجّلة في فصل ' + cls + '.';
+  var out = [], rowsW = Object.keys(byWk).map(Number).sort(function (x, y) { return x - y; }).map(function (w) {
+    return ['أسبوع ' + w, String(byWk[w].abs), String(byWk[w].sick), r1(byWk[w].abs / (list.length * ppw) * 100) + '٪'];
+  });
+  if (realAny) {
+    var rowsD = byDay.map(function (d, di) { return [DAYS_TL[di], String(d.abs), String(d.sick)]; }).filter(function (r) { return r[1] !== '0' || r[2] !== '0'; });
+    out.push(emitTable('الغياب حسب اليوم — فصل ' + cls, ['اليوم', 'غياب', 'مرض'], rowsD, 'بحسب أيام حصص الفصل في الجدول'));
+  } else {
+    var rowsC = Object.keys(byCi).map(Number).sort(function (x, y) { return x - y; }).map(function (ci) { return ['حصة ' + (ci + 1), String(byCi[ci].abs), String(byCi[ci].sick)]; });
+    out.push(emitTable('الغياب حسب الحصة — فصل ' + cls, ['الحصة', 'غياب', 'مرض'], rowsC, 'لا يوجد جدول حصص لهذا الفصل لتحديد الأيام'));
+  }
+  out.push(emitTable('الغياب حسب الأسبوع — فصل ' + cls, ['الأسبوع', 'غياب', 'مرض', 'نسبة الغياب'], rowsW, 'نسبة الغياب = فترات الغياب ÷ (عدد الطلاب × حصص الأسبوع)'));
+  return out.join('\n\n');
+}
+
+/* الدرجات الناقصة حسب الأسبوع والنوع */
+function toolMissingReport(a, cls) {
+  var lw = lastRecWeek(cls); if (!lw) return 'لا توجد درجات مرصودة في فصل ' + cls + '.';
+  var list = namedStudents(cls), rows = [], w;
+  for (w = 1; w <= lw; w++) {
+    var r = ['أسبوع ' + w];
+    ['a', 'h', 'bw'].forEach(function (p) { r.push(String(list.filter(function (e) { var v = e.s[p + w]; return v !== 'م' && !recorded(v); }).length)); });
+    rows.push(r);
+  }
+  return emitTable('الدرجات الناقصة — فصل ' + cls, ['الأسبوع', 'تقييم', 'واجب', 'سلوك'], rows, 'عدد الطلاب (من ' + list.length + ') الذين لم تُرصد درجتهم، حتى أسبوع ' + lw + ' (المعفى «م» لا يُحسب)');
+}
+
+/* مقارنة أسبوعين لكل طالب */
+function toolCompareWeeks(a, cls) {
+  var rec = recordedWeeks(cls), wb = parseInt(a.week_b, 10), wa = parseInt(a.week_a, 10);
+  if (!wb) wb = rec.length ? rec[rec.length - 1] : 0;
+  if (!wa) wa = rec.length > 1 ? rec[rec.length - 2] : 0;
+  if (!wa || !wb || wa === wb) return 'حدّد أسبوعين مختلفين للمقارنة (week_a و week_b) — الأسابيع المرصودة: ' + (rec.join('، ') || 'لا يوجد') + '.';
+  var rows = [], pa = [], pb = [];
+  namedStudents(cls).forEach(function (e) {
+    var x = weekPctOf(e.s, wa), y = weekPctOf(e.s, wb);
+    if (x === null || y === null) return;
+    pa.push(x); pb.push(y); rows.push({ e: e, x: x, y: y, d: y - x });
+  });
+  if (!rows.length) return 'لا يوجد طلاب لهم درجات في الأسبوعين ' + wa + ' و ' + wb + '.';
+  rows.sort(function (p, q) { return p.d - q.d; });
+  return emitTable('مقارنة أسبوع ' + wa + ' بأسبوع ' + wb + ' — فصل ' + cls, ['م', 'الاسم', 'أسبوع ' + wa, 'أسبوع ' + wb, 'الفرق'],
+    rows.slice(0, 40).map(function (r) { return [String(r.e.i + 1), toolNm(r.e.s, r.e.i), r1(r.x) + '٪', r1(r.y) + '٪', (r.d > 0 ? '+' : '') + r1(r.d) + '٪']; }),
+    'متوسط الفصل: ' + r1(avgOf(pa)) + '٪ ← ' + r1(avgOf(pb)) + '٪ — الأكثر تراجعاً أولاً — ' + rows.length + ' طالب (تقييم/واجب/سلوك)');
+}
+
+/* علاقة الغياب بالدرجات */
+function toolAbsVsGrades(a, cls) {
+  var pts = [];
+  namedStudents(cls).forEach(function (e) { var p = toolPct(e.s, cls, 'total'); if (p !== null) pts.push({ ab: absCountOf(cls, e.s).a, p: p }); });
+  if (pts.length < 5) return 'بيانات غير كافية لتحليل العلاقة (يلزم 5 طلاب على الأقل لهم درجات).';
+  var mx = avgOf(pts.map(function (q) { return q.ab; })), my = avgOf(pts.map(function (q) { return q.p; })), sxy = 0, sxx = 0, syy = 0;
+  pts.forEach(function (q) { sxy += (q.ab - mx) * (q.p - my); sxx += (q.ab - mx) * (q.ab - mx); syy += (q.p - my) * (q.p - my); });
+  var r = (sxx > 0 && syy > 0) ? sxy / Math.sqrt(sxx * syy) : null;
+  var bands = [['بلا غياب', 0, 0], ['1 – 2', 1, 2], ['3 – 5', 3, 5], ['6 فأكثر', 6, 1e9]];
+  var rows = bands.map(function (b) {
+    var g = pts.filter(function (q) { return q.ab >= b[1] && q.ab <= b[2]; });
+    return [b[0], String(g.length), g.length ? r1(avgOf(g.map(function (q) { return q.p; }))) + '٪' : '-'];
+  });
+  var txt = r === null ? 'لا يمكن حساب الارتباط (لا تباين في الغياب أو الدرجات)' : 'معامل الارتباط r = ' + (Math.round(r * 100) / 100) + (r <= -0.3 ? ' — علاقة عكسية واضحة: كلما زاد الغياب انخفضت الدرجات' : r >= 0.3 ? ' — علاقة طردية غير معتادة' : ' — علاقة ضعيفة');
+  return emitTable('الغياب والدرجات — فصل ' + cls, ['فترات الغياب', 'عدد الطلاب', 'متوسط المجموع'], rows, txt + ' — الارتباط لا يعني السببية');
+}
+
 /* يرجع {text, tables} — النص يذهب للنموذج والجداول تُعرض للمعلمة */
 function runChatTool(t) {
   _TT = [];
@@ -2586,6 +2725,12 @@ function runChatTool(t) {
     else if (name === 'compare_classes') text = toolCompare();
     else if (name === 'weekly_series') text = toolWeekly(a, cls);
     else if (name === 'find_student') text = toolFind(a);
+    else if (name === 'at_risk') text = toolRisk(a, cls);
+    else if (name === 'class_stats') text = toolStats(a, cls);
+    else if (name === 'absence_pattern') text = toolAbsPattern(a, cls);
+    else if (name === 'missing_report') text = toolMissingReport(a, cls);
+    else if (name === 'compare_weeks') text = toolCompareWeeks(a, cls);
+    else if (name === 'absence_vs_grades') text = toolAbsVsGrades(a, cls);
     else text = 'أداة غير معروفة: ' + name + ' (المتاح: ' + Object.keys(TOOL_LABELS).join(', ') + ').';
   } catch (e) { text = 'تعذّر تنفيذ الأداة: ' + (e && e.message ? e.message : e); _TT = []; }
   var tabs = _TT; _TT = null;
@@ -2681,24 +2826,26 @@ function chatMdXls(mi, k) {
 }
 
 function viewChat() {
+  var IC = 'width:44px;height:44px;padding:0;border-radius:12px;font-size:19px;display:flex;align-items:center;justify-content:center;flex-shrink:0;';
   head('🧠 المحادثة الذكية', true);
   var tools = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:11px;color:#94a3b8;">الفصل:' +
     '<select style="' + SEL + '" onchange="DAI.setCls(this.value)">' + classOptions() + '</select>' +
     'حتى الأسبوع:<select style="' + SEL + '" onchange="DAI.setWeek(this.value)">' + weekOptions(ST.week) + '</select>' +
     '<span style="flex:1"></span>' + btn('🧹 محادثة جديدة', 'DAI.chatClear()', GHOST + 'padding:5px 9px;font-size:10px;') + '</div>';
   box().innerHTML = tools +
+    '<div id="daiAlerts"></div>' +
     '<div id="daiChatList"></div>' +
-    '<div style="position:sticky;bottom:-18px;background:#0f172a;padding:8px 0 4px;margin-top:8px;border-top:1px solid #1e293b;">' +
+    '<div style="position:sticky;bottom:-18px;background:#0f172a;padding:8px 0 calc(6px + env(safe-area-inset-bottom,0px));margin-top:8px;border-top:1px solid #1e293b;">' +
     '<div id="daiChatAtt"></div>' +
     '<input id="daiChatCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="DAI.chatFiles(this)">' +
     '<input id="daiChatGal" type="file" accept="image/*" multiple style="display:none" onchange="DAI.chatFiles(this)">' +
-    '<div style="display:flex;gap:6px;align-items:flex-end;">' +
-    '<textarea id="daiChatIn" rows="2" placeholder="اسأل أو اطلب تعديلاً أو أرفق صورة 📷… (مثال: كيف أطبع الكشف؟ — اجعل سلوك الأسبوع 4 عشرة)" oninput="DAI.chatDraft(this.value)" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();DAI.chatSend();}" style="' + SEL + 'flex:1;box-sizing:border-box;resize:none;line-height:1.7;">' + esc(CHAT.draft) + '</textarea>' +
-    '<button onclick="document.getElementById(\'daiChatCam\').click()" title="التقاط صورة" style="' + BTN + 'background:#1d4ed8;color:#fff;padding:10px 11px;font-size:16px;">📷</button>' +
-    '<button onclick="document.getElementById(\'daiChatGal\').click()" title="صورة من المعرض" style="' + BTN + 'background:#0f766e;color:#fff;padding:10px 11px;font-size:16px;">🖼</button>' +
-    '<button id="daiMicBtn" onclick="DAI.chatMic()" title="إدخال صوتي" style="' + BTN + 'background:' + (CHAT.listening ? '#dc2626' : '#0f766e') + ';color:#fff;padding:10px 12px;font-size:16px;">🎤</button>' +
-    btn('➤', 'DAI.chatSend()', PRIMARY + 'padding:10px 14px;font-size:16px;') + '</div></div>';
-  chatRenderList(); chatRenderAtt();
+    '<textarea id="daiChatIn" rows="3" placeholder="اكتب سؤالك أو طلبك…" oninput="DAI.chatDraft(this.value);this.style.height=\'auto\';this.style.height=Math.min(this.scrollHeight,140)+\'px\'" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey&&!(\'ontouchstart\' in window)){event.preventDefault();DAI.chatSend();}" style="' + SEL + 'display:block;width:100%;box-sizing:border-box;resize:none;line-height:1.7;font-size:15px;min-height:78px;max-height:140px;padding:10px 12px;border-radius:12px;margin-bottom:8px;"></textarea>' +
+    '<div style="display:flex;gap:8px;align-items:center;">' +
+    '<button onclick="document.getElementById(\'daiChatCam\').click()" title="التقاط صورة" style="' + BTN + IC + 'background:#1d4ed8;color:#fff;">📷</button>' +
+    '<button onclick="document.getElementById(\'daiChatGal\').click()" title="صورة من المعرض" style="' + BTN + IC + 'background:#0f766e;color:#fff;">🖼</button>' +
+    '<button id="daiMicBtn" onclick="DAI.chatMic()" title="إدخال صوتي" style="' + BTN + IC + 'background:' + (CHAT.listening ? '#dc2626' : '#475569') + ';color:#fff;">🎤</button>' +
+    btn('إرسال ➤', 'DAI.chatSend()', PRIMARY + 'flex:1;height:44px;padding:0 16px;font-size:15px;border-radius:12px;') + '</div></div>';
+  chatRenderAlerts(); chatRenderList(); chatRenderAtt();
   var b = box(); if (b) b.scrollTop = b.scrollHeight;
 }
 function chatRenderList() {
@@ -2779,10 +2926,10 @@ function chatRenderAtt() {
   }).join('');
   var chips = CHAT_KINDS.map(function (k) {
     var on = (CHAT.imgKind || 'auto') === k[0];
-    return '<button onclick="DAI.chatKind(\'' + k[0] + '\')" style="' + BTN + 'font-size:11px;padding:6px 10px;border:1px solid ' + (on ? '#6366f1' : '#1e3a5f') + ';background:' + (on ? '#312e81' : '#111c33') + ';color:' + (on ? '#e0e7ff' : '#93c5fd') + ';">' + k[1] + '</button>';
+    return '<button onclick="DAI.chatKind(\'' + k[0] + '\')" style="' + BTN + 'flex-shrink:0;font-size:12px;padding:7px 11px;border-radius:999px;border:1px solid ' + (on ? '#6366f1' : '#1e3a5f') + ';background:' + (on ? '#312e81' : '#111c33') + ';color:' + (on ? '#e0e7ff' : '#93c5fd') + ';">' + k[1] + '</button>';
   }).join('');
   el.innerHTML = '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px;">' + th + '</div>' +
-    '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:10px;color:#94a3b8;">نوع الصورة:' + chips + '</div>' +
+    '<div style="display:flex;gap:5px;align-items:center;overflow-x:auto;white-space:nowrap;margin-bottom:8px;font-size:10px;color:#94a3b8;"><span style="flex-shrink:0;">النوع:</span>' + chips + '</div>' +
     (CHAT.attHint ? '<div style="font-size:10px;color:#fbbf24;margin-bottom:6px;">⚠️ ' + esc(CHAT.attHint) + '</div>' : '');
 }
 function chatAddFiles(input) {
@@ -2809,17 +2956,89 @@ function chatSendImages(txt) {
   chatSave();
   analyze();
 }
+/* ═════ التنبيهات الاستباقية: تُحسب محلياً من بياناتك (بدون إرسال شيء للذكاء الاصطناعي ودون أي تكلفة) ═════ */
+function alertCls() {
+  try { return (ST && ST.cls) || (typeof GS !== 'undefined' && GS.activeClass) || (DB.classes || [])[0] || ''; } catch (e) { return ''; }
+}
+function computeAlerts(cls) {
+  var out = []; if (!cls) return out;
+  var cnt = function (name, args) {
+    try { var r = runChatTool({ name: name, args: args }); return r.tables && r.tables.length ? r.tables[0].rows.length : 0; } catch (e) { return 0; }
+  };
+  var n, A = { 'class': cls };
+  if ((n = cnt('at_risk', A))) out.push({ icon: '🚨', text: n + ' طالب معرّض للخطر', tool: { name: 'at_risk', args: A } });
+  try {
+    var cw = 1; try { cw = _calcCurrentWeek(); } catch (e0) {}
+    var w = cw - 1, list = namedStudents(cls);
+    if (w >= 1 && w <= activeWeeks() && list.length) {
+      var miss = list.filter(function (e) { return ['a', 'h', 'bw'].some(function (p) { var v = e.s[p + w]; return v !== 'م' && !recorded(v); }); }).length;
+      if (miss) out.push({ icon: '📝', text: miss === list.length ? 'لم تُرصد درجات الأسبوع ' + w + ' بعد' : 'درجات الأسبوع ' + w + ' ناقصة عند ' + miss + ' طالب', tool: { name: 'missing_report', args: A } });
+    }
+  } catch (e1) {}
+  if ((n = cnt('declining', A))) out.push({ icon: '📉', text: n + ' طالب تراجع مستواهم في آخر الأسابيع', tool: { name: 'declining', args: A } });
+  var QA = { 'class': cls, metric: 'absences', op: 'gte', value: 3, limit: 40 };
+  if ((n = cnt('query_students', QA))) out.push({ icon: '🙋', text: n + ' طالب غيابهم 3 فترات فأكثر', tool: { name: 'query_students', args: QA } });
+  return out;
+}
+function chatRenderAlerts() {
+  var el = document.getElementById('daiAlerts'); if (!el) return;
+  var cls = ST.cls, today = new Date().toISOString().slice(0, 10), sn = '';
+  try { sn = localStorage.getItem('dai_alert_snooze') || ''; } catch (e) {}
+  CHAT.alerts = (sn === cls + '|' + today) ? [] : computeAlerts(cls);
+  if (!CHAT.alerts.length) { el.innerHTML = ''; return; }
+  var open = CHAT.alertsOpen === null ? !CHAT.msgs.length : CHAT.alertsOpen;
+  var sm = 'background:none;border:none;color:#a8a29e;font-size:13px;padding:2px 6px;cursor:pointer;';
+  var rows = !open ? '' : CHAT.alerts.map(function (a, i) {
+    return '<div style="display:flex;align-items:center;gap:6px;margin-top:7px;flex-wrap:wrap;"><span style="font-size:12px;color:#fde68a;flex:1;min-width:150px;line-height:1.7;">' + a.icon + ' ' + esc(a.text) + '</span>' +
+      '<button onclick="DAI.alertDetail(' + i + ')" style="' + BTN + 'background:#78350f;color:#fef3c7;font-size:11px;padding:6px 10px;">تفاصيل</button>' +
+      '<button onclick="DAI.alertAsk(' + i + ')" style="' + BTN + 'background:#312e81;color:#e0e7ff;font-size:11px;padding:6px 10px;">💡 ماذا أفعل؟</button></div>';
+  }).join('');
+  el.innerHTML = '<div style="background:#1c1917;border:1px solid #78350f;border-radius:12px;padding:8px 10px;margin-bottom:8px;">' +
+    '<div style="display:flex;align-items:center;gap:4px;"><b style="font-size:12px;color:#fcd34d;">🔔 تنبيهات فصل ' + esc(cls) + ' (' + CHAT.alerts.length + ')</b><span style="flex:1"></span>' +
+    '<button onclick="DAI.alertToggle()" style="' + sm + '" title="طيّ/فتح">' + (open ? '▴' : '▾') + '</button>' +
+    '<button onclick="DAI.alertHide()" style="' + sm + '" title="إخفاء اليوم">✕</button></div>' + rows + '</div>';
+}
+function alertToggle() { CHAT.alertsOpen = !(CHAT.alertsOpen === null ? !CHAT.msgs.length : CHAT.alertsOpen); chatRenderAlerts(); }
+function alertHide() {
+  try { localStorage.setItem('dai_alert_snooze', ST.cls + '|' + new Date().toISOString().slice(0, 10)); } catch (e) {}
+  chatRenderAlerts();
+}
+function alertDetail(i) {
+  var a = CHAT.alerts[i]; if (!a) return;
+  var r = runChatTool(a.tool);
+  CHAT.msgs.push({ role: 'assistant', text: '🔔 ' + a.text + ' — هذه التفاصيل:', cls: ST.cls, tables: (r.tables || []).slice(0, 6) });
+  CHAT.alertsOpen = false; chatSave(); render();
+}
+function alertAsk(i) {
+  var a = CHAT.alerts[i]; if (!a) return;
+  CHAT.alertsOpen = false;
+  chatSend('بخصوص التنبيه «' + a.text + '» في فصل ' + ST.cls + ': ما التدخل المناسب؟ استخدم الأدوات اللازمة واقترح خطوات عملية قصيرة.');
+}
+/* نقطة حمراء على 🤖 بعدد التنبيهات */
+function updateBadge() {
+  var b = document.getElementById('daiTopBtn'); if (!b) return;
+  var n = 0; try { n = computeAlerts(alertCls()).length; } catch (e) {}
+  var d = document.getElementById('daiTopDot');
+  if (!n) { if (d) d.remove(); return; }
+  if (!d) {
+    d = document.createElement('span'); d.id = 'daiTopDot';
+    d.style.cssText = 'position:absolute;top:-5px;right:-4px;min-width:14px;height:14px;border-radius:7px;background:#ef4444;color:#fff;font-size:9px;font-weight:800;line-height:14px;text-align:center;padding:0 3px;font-family:sans-serif;pointer-events:none;';
+    b.appendChild(d);
+  }
+  d.textContent = n;
+}
+
 function chatSend(textIn) {
   if (CHAT.busy) return;
   var inp = document.getElementById('daiChatIn');
   var txt = String(textIn != null ? textIn : (inp ? inp.value : CHAT.draft) || '').trim();
-  if (CHAT.imgs.length) { if (inp) inp.value = ''; chatSendImages(txt); return; }
+  if (CHAT.imgs.length) { if (inp) { inp.value = ''; inp.style.height = ''; } chatSendImages(txt); return; }
   if (!txt) return;
   if (!ensureConsent()) return;
   if (CHAT.listening) chatMic();
   var hist = chatHistory();
   CHAT.msgs.push({ role: 'user', text: txt });
-  CHAT.draft = ''; if (inp) inp.value = '';
+  CHAT.draft = ''; if (inp) { inp.value = ''; inp.style.height = ''; }
   CHAT.busy = true; CHAT.status = ''; chatSave(); chatRenderList();
   var cls = ST.cls, week = ST.week;
   var ctx = chatCatalog(cls, week) + '\n' + otherClassesLine(cls) + '\n\n' + schoolContext(cls, week) + '\n\n' + classDigest(cls, week) + '\n\n' + otherDigests(cls, week);
@@ -3114,6 +3333,7 @@ window.DAI = {
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   chatSend: function () { chatSend(); }, chatChip: function (i) { chatSend(CHAT_CHIPS[i]); },
   chatDraft: function (v) { CHAT.draft = v; }, chatMic: chatMic, chatClear: chatClear,
+  alertToggle: alertToggle, alertHide: alertHide, alertDetail: alertDetail, alertAsk: alertAsk,
   chatFiles: chatAddFiles, chatRmImg: function (i) { CHAT.imgs.splice(i, 1); chatRenderAtt(); }, chatKind: function (k) { CHAT.imgKind = (CHAT.imgKind === k ? '' : k); CHAT.attHint = ''; chatRenderAtt(); },
   chatGo: chatGo, chatTableXls: chatTableXls, chatMdXls: chatMdXls, chatTablePdf: chatTablePdf, chatMdPdf: chatMdPdf, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
   undo: function (fromDone) { doUndo(fromDone === true); }
@@ -3128,7 +3348,7 @@ function mountButton() {
   b.id = 'daiTopBtn';
   b.title = 'المساعد الذكي';
   b.textContent = '🤖';
-  b.style.cssText = 'background:none;border:none;font-size:17px;cursor:pointer;padding:0 2px;line-height:1;';
+  b.style.cssText = 'background:none;border:none;font-size:17px;cursor:pointer;padding:0 2px;line-height:1;position:relative;';
   b.onclick = function () { open(); };
   area.insertBefore(b, area.firstChild);
   return true;
@@ -3138,6 +3358,7 @@ document.addEventListener('keydown', function (e) {
 });
 (function () { if (chatRestore()) { AI_OPEN = true; setTimeout(function () { if (!ST) showMini(); }, 900); } })();
 var tries = 0;
-(function tryMount() { if (!mountButton() && tries++ < 40) setTimeout(tryMount, 500); })();
+(function tryMount() { if (!mountButton()) { if (tries++ < 40) setTimeout(tryMount, 500); } else { setTimeout(updateBadge, 2500); } })();
+setInterval(function () { try { updateBadge(); } catch (e) {} }, 120000);
 
 })();
