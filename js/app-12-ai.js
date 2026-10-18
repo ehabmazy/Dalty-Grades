@@ -42,7 +42,8 @@ function cfgGet() {
     provider: (o.provider === 'claude' || o.provider === 'gemini') ? o.provider : (o.key ? 'claude' : 'gemini'),
     key: String(o.key || ''), model: String(o.model || MODELS[0].id),
     gkey: String(o.gkey || ''), gmodel: String(o.gmodel || GMODELS[0].id),
-    sendRoster: o.sendRoster !== false
+    sendRoster: o.sendRoster !== false,
+    route: o.route !== false
   };
 }
 function cfgSet(o) { try { localStorage.setItem(CFG_KEY, JSON.stringify(o)); } catch (e) {} }
@@ -56,11 +57,100 @@ function guardNet() {
 }
 function mkErr(msg, status, code) { var e = new Error(msg); e.status = status; e.code = code; return e; }
 
+/* ═════ الإخراج المنظّم: يُجبَر النموذج على JSON مطابق للمخطط (Claude عبر أداة إلزامية، Gemini عبر responseSchema) ═════ */
+var S_STR = { type: 'string' }, S_NSTR = { type: ['string', 'null'] }, S_NNUM = { type: ['number', 'null'] };
+function sObj(props, req) { return { type: 'object', properties: props, required: req || [] }; }
+function sArr(items) { return { type: 'array', items: items }; }
+var SCH_COL = sObj({ label: S_STR, date: S_STR, day: S_STR, type: { type: 'string', enum: ['hw', 'assess', 'beh', 'ex1', 'ex2', 'unknown'] } }, ['label']);
+var SCH_COL_ATT = sObj({ label: S_STR, date: S_STR, day: S_STR }, ['label']);
+var SCH_ATT = sObj({
+  columns: sArr(SCH_COL_ATT),
+  students: sArr(sObj({ no: S_NNUM, name: S_STR, marks: sArr({ type: 'string', enum: ['absent', 'present', 'unknown'] }), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' } }, ['name', 'marks']))
+}, ['columns', 'students']);
+var SCH_GR = sObj({
+  columns: sArr(SCH_COL),
+  students: sArr(sObj({ no: S_NNUM, name: S_STR, values: sArr(S_NSTR), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' } }, ['name', 'values']))
+}, ['columns', 'students']);
+var SCH_NM = sObj({ names: sArr(S_STR) }, ['names']);
+var SCH_AUTO = sObj({
+  kind: { type: 'string', enum: ['att', 'grades', 'names'] },
+  columns: sArr(SCH_COL),
+  students: sArr(sObj({ no: S_NNUM, name: S_STR, marks: sArr(S_STR), values: sArr(S_NSTR), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' } }, ['name'])),
+  names: sArr(S_STR)
+}, ['kind']);
+/* تعليمات حرّة البنية (ops متعددة الأشكال): مخطط الحقول العليا فقط */
+var SCH_AGENT = { type: 'object', properties: {
+  reply: S_STR, summary: S_STR, ops: sArr({ type: 'object' }), clarification: S_STR,
+  lookup: {}, navigate: S_STR, tool: { type: 'object' }, remember: sArr(S_STR), forget: sArr(S_STR)
+}, required: ['reply'] };
+var SCH_CMD = { type: 'object', properties: { summary: S_STR, ops: sArr({ type: 'object' }), clarification: S_STR }, required: ['ops'] };
+var SCH_TEXT = sObj({ text: S_STR }, ['text']);
+var SCH_ANY = { type: 'object' };
+
+/* مخطط JSON القياسي → مخطط Gemini (أحرف كبيرة + nullable). يرجع undefined إذا كان فيه جزء حرّ غير مدعوم عند Gemini */
+function toGeminiSchema(sc) {
+  if (!sc || typeof sc !== 'object' || !sc.type) return undefined;
+  var t = sc.type, nullable = false;
+  if (Array.isArray(t)) { nullable = t.indexOf('null') >= 0; t = t.filter(function (x) { return x !== 'null'; })[0]; }
+  if (!t) return undefined;
+  var o = { type: String(t).toUpperCase() };
+  if (nullable) o.nullable = true;
+  if (sc.enum) o.enum = sc.enum.slice();
+  if (t === 'object') {
+    var keys = Object.keys(sc.properties || {}); if (!keys.length) return undefined;
+    o.properties = {};
+    for (var i = 0; i < keys.length; i++) { var c = toGeminiSchema(sc.properties[keys[i]]); if (!c) return undefined; o.properties[keys[i]] = c; }
+    if (sc.required && sc.required.length) o.required = sc.required.slice();
+  } else if (t === 'array') {
+    var it = toGeminiSchema(sc.items); if (!it) return undefined; o.items = it;
+  }
+  return o;
+}
+function schemaFor(mode) { return mode === 'att' ? SCH_ATT : mode === 'grades' ? SCH_GR : mode === 'names' ? SCH_NM : SCH_AUTO; }
+
+/* ═════ التوجيه الذكي للنماذج: الصور بنموذجك الأدق، والأسئلة البسيطة بنموذج سريع وأرخص ═════ */
+var LIGHT_MODEL = { claude: 'claude-haiku-4-5-20251001', gemini: 'gemini-3.5-flash-lite' };
+var MID_MODEL = { claude: 'claude-sonnet-5-5', gemini: 'gemini-3.8-flash' };
+/* tier: 'light' = أسئلة بسيطة، 'vision' = قراءة صور (لا تقل عن النموذج المتوسط)، 'strong' أو بلا tier = نموذجك المختار */
+function resolveModel(cfg, tier) {
+  var gem = cfg.provider === 'gemini', sel = gem ? cfg.gmodel : cfg.model, p = gem ? 'gemini' : 'claude';
+  if (!cfg.route || !tier) return sel;
+  if (tier === 'light') return LIGHT_MODEL[p];
+  if (tier === 'vision' && sel === LIGHT_MODEL[p]) return MID_MODEL[p];
+  return sel;
+}
+/* أسئلة «كيف أستخدم…» العامة والتحيات فقط تذهب للنموذج السريع؛ أي سؤال عن بياناتك أو تعديل يبقى على نموذجك الأدق */
+function chatTier(txt) {
+  var t = String(txt || '').replace(/[\u064B-\u065F]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').trim();
+  if (!t || t.length > 140) return 'strong';
+  if (/^(شكرا|مرحبا|اهلا|السلام|تمام|ممتاز|جزاك|الله يعطيك)/.test(t) && t.length <= 40) return 'light';
+  var howto = /^(كيف|ازاي|اين|فين|اشرح|شرح|طريقه|هل يمكن|هل ينفع|هل استطيع|ما معني|ما وظيفه|ما فائده|ما هي طريقه|ما هو الفرق)/.test(t);
+  var personal = /\d|فصلي|طلابي|عندي|لدي|عندنا|الطالب رقم|هذا الفصل|ثانيه|الاسبوع الحالي|متوسط|نسبه|عدد|كم |كام|الاعلي|الاقل|ترتيب|الاضعف|المتعثر/.test(t);
+  return howto && !personal ? 'light' : 'strong';
+}
 function callAI(opts) {
   var cfg = cfgGet();
   if (!(cfg.provider === 'gemini' ? cfg.gkey : cfg.key)) return Promise.reject(new Error('NO_KEY'));
   var off = guardNet(); if (off) return off;
-  return cfg.provider === 'gemini' ? callGemini(opts, cfg) : callClaude(opts, cfg);
+  var sel = cfg.provider === 'gemini' ? cfg.gmodel : cfg.model;
+  var rm = opts.model ? opts.model : resolveModel(cfg, opts.tier);
+  var go = function (o) { return cfg.provider === 'gemini' ? callGemini(o, cfg) : callClaude(o, cfg); };
+  var withModel = function (o, m) { var c = {}; Object.keys(o).forEach(function (k) { c[k] = o[k]; }); c.model = m; return c; };
+  var p = go(withModel(opts, rm));
+  if (rm !== sel) p = p.catch(function (e) {
+    /* النموذج الموجَّه إليه غير متاح/حصته نفدت → نرجع لنموذجك المختار بدل الفشل */
+    if (e && (e.status === 404 || e.status === 400 || e.code === 'MODEL' || e.code === 'QUOTA' || e.code === 'BUSY')) return go(withModel(opts, sel));
+    throw e;
+  });
+  if (!opts.schema || opts.ping) return p;
+  /* إن لم يكن الرد JSON صالحاً (نادر مع المخطط) نعيد المحاولة مرة واحدة بتنبيه صريح */
+  return p.then(function (r) {
+    if (r.truncated) return r;
+    try { parseJSON(r.text); return r; } catch (e) {}
+    var o2 = {}; Object.keys(opts).forEach(function (k) { o2[k] = opts[k]; });
+    o2.content = (opts.content || []).concat([{ type: 'text', text: 'IMPORTANT: your previous reply was not valid JSON. Reply again with ONLY one valid JSON object that follows the required structure.' }]);
+    return go(withModel(o2, rm)).catch(function () { return r; });
+  });
 }
 
 /* سجل المحادثة (للمحادثة الذكية): [{role:'user'|'assistant', text}] */
@@ -76,6 +166,19 @@ function histMsgsGemini(h) {
 }
 
 /* ── Claude (Anthropic) ── */
+function claudeBody(opts, cfg) {
+  var body = {
+    model: opts.model || cfg.model,
+    max_tokens: opts.maxTokens || 6000,
+    system: opts.system,
+    messages: histMsgsClaude(opts.history).concat([{ role: 'user', content: opts.content }])
+  };
+  if (opts.schema && !opts.ping) {
+    body.tools = [{ name: 'respond', description: 'Return the final answer as one structured JSON object.', input_schema: opts.schema }];
+    body.tool_choice = { type: 'tool', name: 'respond' };
+  }
+  return body;
+}
 function callClaude(opts, cfg) {
   var ctrl = new AbortController(); _abort = ctrl;
   var timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 120000);
@@ -88,12 +191,7 @@ function callClaude(opts, cfg) {
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true'
     },
-    body: JSON.stringify({
-      model: opts.model || cfg.model,
-      max_tokens: opts.maxTokens || 6000,
-      system: opts.system,
-      messages: histMsgsClaude(opts.history).concat([{ role: 'user', content: opts.content }])
-    })
+    body: JSON.stringify(claudeBody(opts, cfg))
   }).then(function (r) {
     return r.json().catch(function () { return {}; }).then(function (j) {
       clearTimeout(timer);
@@ -104,7 +202,8 @@ function callClaude(opts, cfg) {
       return j;
     });
   }).then(function (j) {
-    var t = (j.content || []).filter(function (b) { return b.type === 'text'; })
+    var tu = (j.content || []).filter(function (b) { return b.type === 'tool_use' && b.name === 'respond'; })[0];
+    var t = tu ? JSON.stringify(tu.input || {}) : (j.content || []).filter(function (b) { return b.type === 'text'; })
       .map(function (b) { return b.text; }).join('\n');
     return { text: t, truncated: j.stop_reason === 'max_tokens' };
   }).catch(function (e) { clearTimeout(timer); throw e; });
@@ -125,6 +224,7 @@ function geminiOnce(model, opts, cfg) {
   var timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 120000);
   var gen = { maxOutputTokens: opts.ping ? 64 : 16000 };
   if (!opts.ping) gen.responseMimeType = 'application/json';
+  if (opts.schema && !opts.noSchema && !opts.ping) { var gs = toGeminiSchema(opts.schema); if (gs) gen.responseSchema = gs; }
   var body = {
     contents: histMsgsGemini(opts.history).concat([{ role: 'user', parts: toGeminiParts(opts.content) }]),
     generationConfig: gen
@@ -169,6 +269,10 @@ function callGemini(opts, cfg) {
   var chain = [first].concat(GEMINI_FALLBACK.filter(function (m) { return m !== first; }));
   function step(i) {
     return geminiOnce(chain[i], opts, cfg).catch(function (e) {
+      if (opts.schema && !opts.noSchema && e && e.status === 400) {
+        var o3 = {}; Object.keys(opts).forEach(function (k) { o3[k] = opts[k]; }); o3.noSchema = true;
+        return geminiOnce(chain[i], o3, cfg);
+      }
       var retry = (e && (e.code === 'QUOTA' || e.code === 'MODEL' || e.code === 'BUSY')) && i + 1 < chain.length;
       if (retry) return step(i + 1);
       throw e;
@@ -982,6 +1086,7 @@ function render() {
   else if (v === 'reviewNames') viewReviewNames();
   else if (v === 'cmd') viewCmd();
   else if (v === 'chat') viewChat();
+  else if (v === 'prefs') viewPrefs();
   else if (v === 'reviewPlan') viewReviewPlan();
   else if (v === 'rep') viewRep();
   else if (v === 'repOut') viewRepOut();
@@ -1043,6 +1148,7 @@ function viewSettings() {
   h += '<label style="font-size:10px;color:#94a3b8;display:block;margin-bottom:10px;"><input type="checkbox" onchange="document.getElementById(\'daiKey\').style.webkitTextSecurity=this.checked?\'none\':\'disc\'"> إظهار المفتاح</label>' +
     '<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">النموذج</div>' +
     '<select style="' + SEL + 'width:100%;margin-bottom:10px;" onchange="DAI.setSet(\'' + (gem ? 'gmodel' : 'model') + '\',this.value)">' + opt(gem ? GMODELS : MODELS, gem ? c.gmodel : c.model) + '</select>' +
+    '<label style="font-size:11px;color:#cbd5e1;display:block;line-height:1.8;margin-bottom:10px;"><input type="checkbox" ' + (c.route !== false ? 'checked' : '') + ' onchange="DAI.setSet(\'route\',this.checked)"> التوجيه الذكي: قراءة الصور والتعديلات بنموذجك المختار، والأسئلة العامة البسيطة («كيف أستخدم…؟») بنموذج أسرع وأرخص (' + (gem ? 'Flash-Lite' : 'Haiku') + ')</label>' +
     '<label style="font-size:11px;color:#cbd5e1;display:block;line-height:1.8;margin-bottom:12px;"><input type="checkbox" ' + (c.sendRoster ? 'checked' : '') + ' onchange="DAI.setSet(\'sendRoster\',this.checked)"> أرسل أسماء الفصل مع الصورة (تُحسّن قراءة الخط الصعب؛ الأسماء الظاهرة في الصورة تُرسل في كل الأحوال)</label>' +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + btn('💾 حفظ', 'DAI.saveCfg()', PRIMARY) + btn('🔌 اختبار الاتصال', 'DAI.testCfg()', GHOST) +
     ((gem ? c.gkey : c.key) ? btn('🗑 حذف المفتاح', 'DAI.delKey()', 'background:#450a0a;color:#fca5a5;border:1px solid #7f1d1d;padding:8px 12px;font-size:11px;') : '') + '</div>' +
@@ -1054,7 +1160,7 @@ function viewSettings() {
 }
 function saveCfg(silent) {
   var c = ST.sets || cfgGet();
-  var o = { provider: c.provider, key: String(c.key || '').trim(), model: c.model, gkey: String(c.gkey || '').trim(), gmodel: c.gmodel, sendRoster: c.sendRoster !== false };
+  var o = { provider: c.provider, key: String(c.key || '').trim(), model: c.model, gkey: String(c.gkey || '').trim(), gmodel: c.gmodel, sendRoster: c.sendRoster !== false, route: c.route !== false };
   cfgSet(o);
   ST.sets = null;
   if (!silent) {
@@ -1192,13 +1298,14 @@ function analyze() {
       ? 'Class roster (hint only, to help read unclear handwriting — transcribe what is written; do NOT add roster students who are absent from the sheet):\n' + rosterText(cls) + '\n\n'
       : '\n');
   var DATEF = 'Each column header may show a DATE and a DAY NAME (e.g. "الأحد 12/10" or "١٢/١٠"). Copy them per column: "date" as ASCII digits "D/M" or "D/M/YYYY" exactly as written (convert Arabic-Indic digits; never guess a missing year or day), "day" as the weekday name as written; use "" when absent.';
+  var DOUBTF = ' Honesty about uncertainty: in each student\'s "doubt" list the 0-based column indexes whose mark/value you could NOT read with confidence (blurry, overwritten, ambiguous digit such as 1/7 or 3/8), and set "name_unsure" to true when the name is hard to read. Never guess silently; an empty list means you are confident.';
   var pAtt = base + 'This is an ATTENDANCE sheet. Return exactly: {"columns":[{"label":"column header text; use \"عمود N\" if none","date":"","day":""}],' +
-    '"students":[{"no":<serial number printed on sheet or null>,"name":"name as written","marks":["absent"|"present"|"unknown",...]}]}.\n' +
+    '"students":[{"no":<serial number printed on sheet or null>,"name":"name as written","marks":["absent"|"present"|"unknown",...],"doubt":[],"name_unsure":false}]}.\n' +
     '"marks" must have exactly one entry per column, in the same order as "columns". Absent is usually marked by غ / غائب / ✗ / a filled circle or colored cell; present by ✓ or the sheet legend\'s symbol; ' +
-    'if the sheet has a legend follow it. If a cell is empty: treat as "present" only when other students have explicit absence marks in that column; otherwise "unknown". ' + DATEF;
-  var pGr = base + 'This is a GRADES sheet. Return exactly: {"columns":[{"label":"column header","date":"","day":"","type":"hw|assess|beh|ex1|ex2|unknown"}],"students":[{"no":<serial or null>,"name":"name as written","values":["17"|"غ"|"م"|null,...]}]}.\n' +
+    'if the sheet has a legend follow it. If a cell is empty: treat as "present" only when other students have explicit absence marks in that column; otherwise "unknown". ' + DATEF + DOUBTF;
+  var pGr = base + 'This is a GRADES sheet. Return exactly: {"columns":[{"label":"column header","date":"","day":"","type":"hw|assess|beh|ex1|ex2|unknown"}],"students":[{"no":<serial or null>,"name":"name as written","values":["17"|"غ"|"م"|null,...],"doubt":[],"name_unsure":false}]}.\n' +
     'Include only columns that hold grades (skip serial/name/total/signature columns). "values" must have one entry per column; copy each value exactly as written (digits may be Arabic-Indic), use null if empty or unreadable. Do not compute anything. ' +
-    '"type" from the header words: واجب=hw, تقييم=assess, سلوك=beh, اختبار أول/١=ex1, اختبار ثاني/٢=ex2; use "unknown" when the header does not say. ' + DATEF;
+    '"type" from the header words: واجب=hw, تقييم=assess, سلوك=beh, اختبار أول/١=ex1, اختبار ثاني/٢=ex2; use "unknown" when the header does not say. ' + DATEF + DOUBTF;
   var pNm = base + 'This is a student NAME LIST. Return exactly: {"names":["full name 1","full name 2",...]} — one string per student, in the order shown, without numbering or bullets. ' +
     'Skip titles, class names, dates, headers and footers.';
   var prompt;
@@ -1210,7 +1317,7 @@ function analyze() {
     '[att] ' + pAtt.slice(base.length) + '\n[grades] ' + pGr.slice(base.length) + '\n[names] ' + pNm.slice(base.length);
   var content = imageBlocks(ST.imgs).concat([{ type: 'text', text: prompt }]);
   ST.view = 'loading'; ST.err = ''; render();
-  callAI({ system: SYS_TABLE, content: content, maxTokens: 8000 })
+  callAI({ system: SYS_TABLE, content: content, maxTokens: 8000, schema: schemaFor(mode), tier: 'vision' })
     .then(function (r) {
       if (!ST) return;
       var j;
@@ -1286,6 +1393,25 @@ function colNote(info, extra) {
   return p.join(' — ');
 }
 
+/* أقرب اقتراحين من أسماء الفصل (لتصحيح المطابقة بنقرة) */
+function topCands(nm, arr, skipIdx) {
+  var sc = [];
+  arr.forEach(function (s, i) { if (i !== skipIdx && s && (s.name || '').trim()) sc.push({ i: i, sc: nameSim(nm, s.name) }); });
+  sc.sort(function (a, b) { return b.sc - a.sc; });
+  return sc.filter(function (x) { return x.sc >= 0.3; }).slice(0, 2);
+}
+function rowNote(r, i) {
+  var arr = DB.data[ST.cls] || [], out = [], ch = '';
+  if (r.idx < 0) out.push('<span style="color:#fca5a5;">لم يُطابَق مع أي طالب</span>');
+  else if (r._dup) out.push('<span style="color:#c4b5fd;">⚠️ نفس الطالب في صف آخر</span>');
+  else if (r.conf === 'mid') out.push('<span style="color:#fbbf24;">مطابقة تقريبية — تأكد</span>');
+  if (r.nameUnsure) out.push('<span style="color:#fbbf24;">الاسم غير واضح في الصورة</span>');
+  if (r.idx < 0 || r.conf === 'mid' || r.nameUnsure || r._dup) (r.cands || []).forEach(function (c) {
+    if (c.i !== r.idx && arr[c.i]) ch += '<button onclick="DAI.setRowStu(' + i + ',' + c.i + ')" style="' + BTN + 'background:#172554;color:#bfdbfe;border:1px solid #1e40af;font-size:10px;padding:3px 8px;">هل تقصد: ' + (c.i + 1) + '. ' + esc(arr[c.i].name) + '؟</button>';
+  });
+  if (!out.length && !ch) return '';
+  return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:10px;margin-bottom:5px;">' + out.join(' · ') + ch + '</div>';
+}
 function buildNames(j) {
   var names = (j && j.names) || [];
   if (!Array.isArray(names) || !names.length) throw new Error('BAD_JSON');
@@ -1358,7 +1484,9 @@ function buildTable(j, mode) {
       else cells.push(v === null || v === undefined ? '' : String(v));
     }
     var m = matchStudent(nm, s.no, arrS);
-    rows.push({ name: nm, no: s.no, idx: m.idx, conf: m.conf, cells: cells });
+    var dset = {};
+    (Array.isArray(s.doubt) ? s.doubt : []).forEach(function (x) { var k = parseInt(x, 10); if (k >= 0 && k < n) dset[k] = true; });
+    rows.push({ name: nm, no: s.no, idx: m.idx, conf: m.conf, cells: cells, doubt: dset, nameUnsure: s.name_unsure === true, cands: topCands(nm, arrS, m.idx) });
   });
   if (!rows.length) throw new Error('BAD_JSON');
   ST.tbl = { cols: tcols, rows: rows };
@@ -1391,6 +1519,20 @@ function viewReviewTable() {
   var h = '';
   var unm = ST.tbl.rows.filter(function (r) { return r.idx < 0; }).length;
   h += '<div style="font-size:11px;color:#94a3b8;line-height:1.9;margin-bottom:8px;">قرأتُ <b style="color:#e2e8f0;">' + ST.tbl.rows.length + '</b> صفاً' + (unm ? ' — <span style="color:#fbbf24;">' + unm + ' لم يُطابَق مع طالب (اختره يدوياً أو اتركه)</span>' : '') + '.</div>';
+  var arrR = DB.data[ST.cls] || [], cntIdx = {}, dupN = 0, doubtN = 0, unsureN = 0;
+  ST.tbl.rows.forEach(function (r) { if (r.idx >= 0) cntIdx[r.idx] = (cntIdx[r.idx] || 0) + 1; });
+  ST.tbl.rows.forEach(function (r) {
+    r._dup = r.idx >= 0 && cntIdx[r.idx] > 1; if (r._dup) dupN++;
+    if (r.nameUnsure) unsureN++;
+    doubtN += Object.keys(r.doubt || {}).length;
+  });
+  var missingR = []; arrR.forEach(function (st, i) { if ((st.name || '').trim() && !cntIdx[i]) missingR.push((i + 1) + '. ' + String(st.name).trim()); });
+  var notes = [];
+  if (doubtN) notes.push('<span style="color:#fbbf24;">🟨 ' + doubtN + ' خانة غير مؤكدة القراءة (عليها إطار أصفر وعلامة ؟) — راجعها</span>');
+  if (unsureN) notes.push('<span style="color:#fbbf24;">✍️ ' + unsureN + ' اسم غير واضح في الصورة</span>');
+  if (dupN) notes.push('<span style="color:#c4b5fd;">🟪 ' + dupN + ' صف يشير لطالب مكرر — تأكد من الاختيار</span>');
+  if (missingR.length) notes.push('<span style="color:#93c5fd;">👥 ' + missingR.length + ' طالباً من الفصل لم يظهروا في الصورة' + (missingR.length <= 6 ? ': ' + esc(missingR.join('، ')) : '') + '</span>');
+  if (notes.length) h += '<div style="font-size:10px;line-height:1.9;margin-bottom:8px;background:#0b1220;border:1px solid #1e293b;border-radius:8px;padding:6px 8px;">' + notes.join('<br>') + '</div>';
   if (att) h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:11px;color:#94a3b8;">الأسبوع:<select style="' + SEL + '" onchange="DAI.setWeekRev(this.value)">' + weekOptions(ST.week) + '</select></div>';
   /* ربط الأعمدة */
   h += '<div style="background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;margin-bottom:10px;"><div style="font-size:10px;color:#64748b;margin-bottom:6px;">ربط أعمدة الصورة بالتطبيق:</div>';
@@ -1412,23 +1554,24 @@ function viewReviewTable() {
   /* الصفوف */
   var arrS = DB.data[ST.cls] || [];
   ST.tbl.rows.forEach(function (r, i) {
-    var cc = r.idx < 0 ? '#7f1d1d' : (r.conf === 'mid' ? '#78350f' : '#1e293b');
+    var cc = r.idx < 0 ? '#7f1d1d' : (r._dup ? '#6d28d9' : (r.conf === 'mid' || r.nameUnsure ? '#b45309' : '#1e293b'));
     h += '<div style="border:1px solid ' + cc + ';border-radius:10px;padding:7px 8px;margin-bottom:6px;background:#0b1220;">' +
       '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;"><span style="font-size:10px;color:#64748b;min-width:70px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(r.name) + '">' + esc(r.name) + '</span>' +
-      '<select style="' + SEL + 'flex:1;min-width:0;" onchange="DAI.setRowStu(' + i + ',this.value)">' + stuOptions(r.idx) + '</select></div><div style="display:flex;gap:5px;flex-wrap:wrap;">';
+      '<select style="' + SEL + 'flex:1;min-width:0;" onchange="DAI.setRowStu(' + i + ',this.value)">' + stuOptions(r.idx) + '</select></div>' + rowNote(r, i) + '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
     r.cells.forEach(function (cell, j) {
       var col = ST.tbl.cols[j];
       if (att) {
         var ign = (col.ci === null || col.ci === undefined);
         var clr = cell === 'absent' ? 'background:#7f1d1d;color:#fecaca;border:1px solid #dc2626;' : (cell === 'present' ? 'background:#064e3b;color:#a7f3d0;border:1px solid #059669;' : 'background:#422006;color:#fde68a;border:1px solid #d97706;');
-        h += '<button onclick="DAI.mark(' + i + ',' + j + ')" style="' + BTN + clr + 'padding:4px 9px;font-size:11px;' + (ign ? 'opacity:.35;' : '') + '">' + (j + 1) + ' ' + SYM[cell] + '</button>';
+        h += '<button onclick="DAI.mark(' + i + ',' + j + ')" style="' + BTN + clr + 'padding:4px 9px;font-size:11px;' + (ign ? 'opacity:.35;' : '') + (r.doubt && r.doubt[j] ? 'outline:2px solid #facc15;outline-offset:1px;' : '') + '">' + (j + 1) + ' ' + SYM[cell] + (r.doubt && r.doubt[j] ? ' ؟' : '') + '</button>';
       } else {
         var ign2 = col.type === 'ignore';
         var key = ign2 ? null : keyOf(col.type, col.week);
         var nv = key ? normVal(cell, maxFor(key)) : { skip: true };
         var bad = nv.bad ? 'border-color:#dc2626;' : '';
+        if (!nv.bad && r.doubt && r.doubt[j]) bad = 'border-color:#facc15;box-shadow:0 0 0 2px rgba(250,204,21,.35);';
         var old = (r.idx >= 0 && key && arrS[r.idx]) ? arrS[r.idx][key] : '';
-        h += '<div style="display:flex;flex-direction:column;align-items:center;' + (ign2 ? 'opacity:.35;' : '') + '"><span style="font-size:9px;color:#64748b;">' + (j + 1) + (key ? '/' + maxFor(key) : '') + '</span>' +
+        h += '<div style="display:flex;flex-direction:column;align-items:center;' + (ign2 ? 'opacity:.35;' : '') + '"><span style="font-size:9px;color:#64748b;">' + (j + 1) + (key ? '/' + maxFor(key) : '') + (r.doubt && r.doubt[j] ? ' ؟' : '') + '</span>' +
           '<input value="' + esc(cell) + '" oninput="DAI.cell(' + i + ',' + j + ',this.value)" inputmode="decimal" style="' + SEL + 'width:52px;text-align:center;' + bad + '">' +
           (hasData(old) ? '<span style="font-size:9px;color:#fbbf24;">الحالي: ' + esc(fmtVal(old)) + '</span>' : '') + '</div>';
       }
@@ -1451,6 +1594,8 @@ function updateSummary() {
     h += 'سيُرصد <b style="color:#a5b4fc;">' + plan.cells.length + '</b> درجة' + (plan.over ? ' <span style="color:#fbbf24;">(منها ' + plan.over + ' استبدال)</span>' : '') + (plan.skipped ? ' · تُجوهل ' + plan.skipped + ' (موجودة/غير صالحة)' : '');
   }
   h += '</div>';
+  var dd = {}, dn = 0; ST.tbl.rows.forEach(function (r) { if (r.idx >= 0) { if (dd[r.idx]) dn++; dd[r.idx] = 1; } });
+  if (dn) h += '<div style="font-size:10px;color:#c4b5fd;margin-bottom:6px;">⚠️ ' + dn + ' صف يشير لطالب سبق اختياره — راجع الصفوف ذات الإطار البنفسجي</div>';
   if (plan.warn.length) h += '<div style="font-size:10px;color:#fbbf24;margin-bottom:6px;">' + plan.warn.map(esc).join('<br>') + '</div>';
   h += btn(n ? '✅ تطبيق (' + n + ')' : 'لا يوجد ما يُطبَّق', 'DAI.applyTable()', PRIMARY + 'width:100%;' + (n ? '' : 'opacity:.45;'), n ? '' : 'disabled');
   el.innerHTML = h;
@@ -1547,7 +1692,7 @@ function runCmd() {
   var cls = ST.cls, week = ST.week;
   ST.view = 'loading'; ST.err = ''; ST.cmd.clar = ''; render();
   callAI({
-    system: SYS_CMD, maxTokens: 4000,
+    system: SYS_CMD, maxTokens: 4000, schema: SCH_CMD, tier: 'strong',
     content: [{ type: 'text', text: buildCatalog(cls, week) + '\n\nInstruction (Arabic): ' + txt }]
   }).then(function (r) {
     if (!ST) return;
@@ -2206,7 +2351,7 @@ function repWrite() {
     system: 'You write concise formal Arabic paragraphs for Egyptian school reports. Use ONLY the figures given; never invent numbers, names, or causes. ' +
       'Write 4-7 sentences summarizing the finding, then 2-3 short practical recommendations as a numbered list. Output ONE JSON object only: {"text":"..."}',
     content: [{ type: 'text', text: 'Subject: ' + ((DB.meta && DB.meta.subject) || 'العلوم') + '\nReport data (aggregates only, no student names):\n' + JSON.stringify(res.agg) }],
-    maxTokens: 1500
+    maxTokens: 1500, schema: SCH_TEXT
   }).then(function (r) {
     if (!ST || !ST.rep) return;
     var j = parseJSON(r.text);
@@ -2223,7 +2368,7 @@ function repAnalyze() {
   if (!txt) return;
   if (!hasKey()) { ST.view = 'settings'; render(); return; }
   ST.view = 'loading'; ST.err = ''; ST.repClar = ''; render();
-  callAI({ system: SYS_REP, content: [{ type: 'text', text: repContext() + '\n\nRequest (Arabic): ' + txt }], maxTokens: 1200 })
+  callAI({ system: SYS_REP, content: [{ type: 'text', text: repContext() + '\n\nRequest (Arabic): ' + txt }], maxTokens: 1200, schema: SCH_ANY, tier: 'light' })
     .then(function (r) {
       if (!ST) return;
       var j = parseJSON(r.text);
@@ -2320,7 +2465,7 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   '(d) help with general teaching work that needs no data (lesson ideas, quiz questions, activities, wording of notices) — you do not need the data for this;\n' +
   '(e) propose structured edit operations when the teacher clearly asks to change data.\n' +
   '(f) photos: this same chat has 📷/🖼 buttons next to the text box. When the teacher wants to read an attendance sheet, a class name list or a grades sheet from a photo, tell them to tap 📷 or 🖼, press send (the app detects the type, the date and the weekday from the column headers by itself; the teacher may also pick the type manually); a review screen appears before anything is applied. Reports: use the query tools and show tables, which have Excel/PDF buttons.\n' +
-  'Output ONE JSON object only (no markdown fences): {"reply":"Arabic answer","summary":"","ops":[],"clarification":"","lookup":null,"navigate":""}.\n' +
+  'Output ONE JSON object only (no markdown fences): {"reply":"Arabic answer","summary":"","ops":[],"clarification":"","lookup":null,"navigate":"","remember":[],"forget":[]}.\n' +
   '- "reply": your answer. You may use **bold** and lines starting with "- " for lists. Keep it focused; never pad.\n' +
   '- Numbers and statistics: use ONLY the SETTINGS / OVERVIEW / DATA DIGEST in CONTEXT. Never invent students, grades or statistics. Refer to students as «number. name» (names may be replaced by «طالب N» when the teacher turned off name sharing). If the data does not contain the answer, say so.\n' +
   '- You CAN see every class: the selected class in full and all the other classes in compact form (section OTHER CLASSES). NEVER tell the teacher that you cannot access other classes — use that section, or "lookup" for a full digest.\n' +
@@ -2341,6 +2486,7 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   '- Recommendations should be concrete and short. Parent messages: polite, specific to that student\'s digest numbers, constructive; never mention other students.\n' +
   '- "ops": [] unless the teacher asks to CHANGE data. Each op may carry an optional "class":"exact class name" — without it the op applies to the SELECTED class; student numbers always refer to the roster of the class the op targets (see the digests). Global ops (add_class, rename_class, set_active_weeks, set_column_max, set_weeks_visibility) need no class. ' +
   'Never claim an edit is done: the teacher reviews and presses apply. When you give ops, "summary" is a short Arabic description and "reply" briefly says what will change.\n' +
+  '- "remember": ONLY when the teacher explicitly asks you to remember or always do something (تذكّر، احفظ، دائماً، من الآن) — put it as a short Arabic sentence (max 120 chars) about style, format, tone or defaults; never grades, student data or secrets. "forget": snippets of saved preferences the teacher asks to forget (انسَ…). Otherwise leave both [].\n' +
   '- If a request is ambiguous (which student/week/column?), set "clarification" to a short Arabic question and ops [].\n' +
   '- Use the conversation history to resolve references like "the same", "them", "the previous week".\n' +
   '- Never present something as a feature of the app unless it is in the APP GUIDE or the teacher already used it.\n\n' +
@@ -2831,7 +2977,7 @@ function viewChat() {
   var tools = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:11px;color:#94a3b8;">الفصل:' +
     '<select style="' + SEL + '" onchange="DAI.setCls(this.value)">' + classOptions() + '</select>' +
     'حتى الأسبوع:<select style="' + SEL + '" onchange="DAI.setWeek(this.value)">' + weekOptions(ST.week) + '</select>' +
-    '<span style="flex:1"></span>' + btn('🧹 محادثة جديدة', 'DAI.chatClear()', GHOST + 'padding:5px 9px;font-size:10px;') + '</div>';
+    '<span style="flex:1"></span>' + btn('🧠 ذاكرتي', "DAI.go('prefs')", GHOST + 'padding:5px 9px;font-size:10px;') + btn('🧹 جديدة', 'DAI.chatClear()', GHOST + 'padding:5px 9px;font-size:10px;') + '</div>';
   box().innerHTML = tools +
     '<div id="daiAlerts"></div>' +
     '<div id="daiChatList"></div>' +
@@ -2891,7 +3037,7 @@ function chatRenderList() {
     }
     if (m.nav) card += '<div style="margin-top:8px;">' + btn('↗ افتح صفحة «' + esc(APP_PAGES[m.nav]) + '»', 'DAI.chatGo(' + i + ')', GHOST + 'padding:7px 12px;font-size:11px;') + '</div>';
     h += '<div style="display:flex;justify-content:flex-end;margin:8px 0;"><div style="background:' + (m.err ? '#450a0a' : '#111c33') + ';border:1px solid ' + (m.err ? '#7f1d1d' : '#1e3a5f') + ';color:' + (m.err ? '#fca5a5' : '#e2e8f0') + ';border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:12px;line-height:1.95;max-width:94%;">' +
-      fmtMsg(m.text, i) + chatTablesHtml(m, i) + (m.clar ? '<div style="margin-top:6px;background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:8px;padding:6px 8px;">❓ ' + esc(m.clar) + '</div>' : '') + card +
+      fmtMsg(m.text, i) + chatTablesHtml(m, i) + (m.prefNote ? '<div style="margin-top:6px;font-size:11px;color:#6ee7b7;line-height:1.8;">' + esc(m.prefNote) + ' <button onclick="DAI.go(\'prefs\')" style="' + BTN + 'background:none;color:#93c5fd;font-size:11px;padding:0 4px;text-decoration:underline;">إدارة</button></div>' : '') + (m.clar ? '<div style="margin-top:6px;background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:8px;padding:6px 8px;">❓ ' + esc(m.clar) + '</div>' : '') + card +
       (m.err ? '' : '<div style="margin-top:6px;text-align:left;"><button onclick="DAI.chatCopy(' + i + ')" style="' + BTN + 'background:none;color:#64748b;font-size:10px;padding:2px 4px;">📋 نسخ</button></div>') +
       '</div></div>';
   });
@@ -2956,6 +3102,77 @@ function chatSendImages(txt) {
   chatSave();
   analyze();
 }
+/* ═════ ذاكرة التفضيلات: تُحفظ على هذا الجهاز فقط وتُرسل مع رسائل المحادثة لتتبّع أسلوبك ═════ */
+var PREF_KEY = 'dai_prefs_v1', PREF_MAX = 20, PREF_LEN = 200;
+var PREF_PRESETS = [
+  'أجب باختصار وبالنقاط',
+  'اكتب رسائل أولياء الأمور بأسلوب رسمي ودود',
+  'ابدأ دائماً بالأرقام ثم اشرح باختصار',
+  'اقترح خطوات علاج عملية قصيرة عند ذكر الطلاب الضعاف',
+  'استخدم اللهجة المصرية البسيطة في الشرح'
+];
+function prefClean(t) { return String(t == null ? '' : t).replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, PREF_LEN); }
+function prefNorm(t) { return prefClean(t).replace(/[\u064B-\u065F]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').toLowerCase(); }
+function prefsGet() {
+  try {
+    var o = JSON.parse(localStorage.getItem(PREF_KEY) || 'null');
+    if (o && Array.isArray(o.items)) return { on: o.on !== false, items: o.items.map(prefClean).filter(Boolean).slice(0, PREF_MAX) };
+  } catch (e) {}
+  return { on: true, items: [] };
+}
+function prefsSet(o) { try { localStorage.setItem(PREF_KEY, JSON.stringify({ on: o.on !== false, items: o.items })); } catch (e) {} }
+function prefAdd(text) {
+  var t = prefClean(text); if (t.length < 3) return false;
+  var o = prefsGet(), n = prefNorm(t);
+  if (o.items.some(function (x) { return prefNorm(x) === n; })) return false;
+  o.items.push(t); if (o.items.length > PREF_MAX) o.items.shift();
+  prefsSet(o); return true;
+}
+function prefForget(snippet) {
+  var n = prefNorm(snippet); if (n.length < 3) return 0;
+  var o = prefsGet(), before = o.items.length;
+  o.items = o.items.filter(function (x) { var m = prefNorm(x); return m.indexOf(n) < 0 && n.indexOf(m) < 0; });
+  prefsSet(o); return before - o.items.length;
+}
+function prefsPrompt() {
+  var o = prefsGet(); if (!o.on || !o.items.length) return '';
+  return '\n\nTEACHER PREFERENCES (written by the teacher; apply them silently to style, format, tone and defaults. They never override data accuracy, honesty, or the rules above):\n' +
+    o.items.map(function (x) { return '- ' + x; }).join('\n');
+}
+function viewPrefs() {
+  head('🧠 ذاكرة التفضيلات', 'chat');
+  var o = prefsGet();
+  var items = o.items.length ? o.items.map(function (x, i) {
+    return '<div style="display:flex;gap:8px;align-items:flex-start;background:#111c33;border:1px solid #1e3a5f;border-radius:10px;padding:8px 10px;margin-bottom:6px;">' +
+      '<span style="flex:1;font-size:12px;line-height:1.8;color:#e2e8f0;">' + esc(x) + '</span>' +
+      '<button onclick="DAI.prefDel(' + i + ')" title="حذف" style="' + BTN + 'background:none;color:#f87171;font-size:14px;padding:2px 6px;">✕</button></div>';
+  }).join('') : '<div style="font-size:12px;color:#94a3b8;line-height:1.9;padding:6px 2px;">لا توجد تفضيلات محفوظة بعد. أضف أولها بالأسفل، أو قل في المحادثة «تذكّر أن…» أو «دائماً…».</div>';
+  var presets = PREF_PRESETS.map(function (p, i) {
+    return '<button onclick="DAI.prefPreset(' + i + ')" style="' + BTN + 'background:#0b1220;border:1px solid #1e3a5f;color:#93c5fd;font-size:11px;padding:7px 10px;text-align:right;">+ ' + esc(p) + '</button>';
+  }).join('');
+  box().innerHTML =
+    '<label style="display:flex;gap:8px;align-items:center;font-size:12px;color:#cbd5e1;margin-bottom:10px;"><input type="checkbox" ' + (o.on ? 'checked' : '') + ' onchange="DAI.prefToggle(this.checked)"> استخدام التفضيلات في المحادثة</label>' +
+    '<div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">تفضيلاتي المحفوظة (' + o.items.length + '/' + PREF_MAX + ')</div>' + items +
+    '<div style="display:flex;gap:6px;margin:10px 0;"><input id="daiPrefIn" type="text" maxlength="' + PREF_LEN + '" placeholder="مثال: وقّع رسائلي باسم أ/ إيهاب" onkeydown="if(event.key===\'Enter\'){event.preventDefault();DAI.prefAddUi();}" style="' + SEL + 'flex:1;min-width:0;font-size:14px;padding:10px 12px;border-radius:10px;">' +
+    btn('إضافة', 'DAI.prefAddUi()', PRIMARY + 'padding:0 16px;border-radius:10px;') + '</div>' +
+    '<div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">اقتراحات سريعة</div><div style="display:flex;gap:6px;flex-wrap:wrap;">' + presets + '</div>' +
+    (o.items.length ? '<div style="margin-top:14px;">' + btn('🗑 مسح كل التفضيلات', 'DAI.prefClear()', 'background:#450a0a;color:#fca5a5;border:1px solid #7f1d1d;padding:8px 12px;font-size:11px;') + '</div>' : '') +
+    '<div style="margin-top:14px;padding:10px;background:#0b1220;border:1px solid #1e293b;border-radius:10px;font-size:10px;color:#94a3b8;line-height:1.9;">' +
+    '🔒 تُحفظ على هذا الجهاز فقط، وتُرسل لمزوّد الذكاء الاصطناعي مع رسائل المحادثة (ليتبع أسلوبك). لا تكتب فيها أسماء طلاب أو أرقاماً سرية. ' +
+    'ويحفظ المساعد تفضيلاً جديداً فقط عندما تطلب ذلك صراحة («تذكّر / دائماً / من الآن»)، وتستطيع قول «انسَ …» لحذفه. التفضيلات تخص الأسلوب والتنسيق ولا تغيّر دقة الأرقام.</div>';
+}
+function prefRefresh() { if (ST && ST.view === 'prefs') render(); }
+var PREF_TRIGGER = /تذكر|احفظ|دائما|دايما|من الان|لا تنس|(^|\s)انس(\s|$)|امسح|احذف/;
+function prefApplyFromModel(j, txt) {
+  var out = { saved: [], forgot: 0 };
+  if (!prefsGet().on) return out;
+  var t = prefNorm(txt);
+  if (!PREF_TRIGGER.test(t)) return out; /* لا نحفظ إلا بطلب صريح من المعلمة */
+  (Array.isArray(j.remember) ? j.remember : []).slice(0, 3).forEach(function (x) { if (typeof x === 'string' && prefAdd(x)) out.saved.push(prefClean(x)); });
+  (Array.isArray(j.forget) ? j.forget : []).slice(0, 3).forEach(function (x) { if (typeof x === 'string') out.forgot += prefForget(x); });
+  return out;
+}
+
 /* ═════ التنبيهات الاستباقية: تُحسب محلياً من بياناتك (بدون إرسال شيء للذكاء الاصطناعي ودون أي تكلفة) ═════ */
 function alertCls() {
   try { return (ST && ST.cls) || (typeof GS !== 'undefined' && GS.activeClass) || (DB.classes || [])[0] || ''; } catch (e) { return ''; }
@@ -3039,14 +3256,14 @@ function chatSend(textIn) {
   var hist = chatHistory();
   CHAT.msgs.push({ role: 'user', text: txt });
   CHAT.draft = ''; if (inp) { inp.value = ''; inp.style.height = ''; }
-  CHAT.busy = true; CHAT.status = ''; chatSave(); chatRenderList();
+  CHAT.busy = true; CHAT.status = (cfgGet().route && chatTier(txt) === 'light') ? '⚡ أفكّر بسرعة…' : ''; chatSave(); chatRenderList();
   var cls = ST.cls, week = ST.week;
   var ctx = chatCatalog(cls, week) + '\n' + otherClassesLine(cls) + '\n\n' + schoolContext(cls, week) + '\n\n' + classDigest(cls, week) + '\n\n' + otherDigests(cls, week);
   var extra = '', tabs = [];
   /* يستدعي النموذج؛ وإن طلب بيانات فصل آخر (lookup) نضيفها ونعيد الاستدعاء (حد أقصى مرتان) */
   var run = function (round) {
     var content = [{ type: 'text', text: 'CONTEXT (fresh, authoritative):\n' + ctx + extra + '\n\nTeacher message (Arabic): ' + txt }];
-    return callAI({ system: SYS_AGENT, history: hist, content: content, maxTokens: 6000 }).then(function (r) {
+    return callAI({ system: SYS_AGENT + prefsPrompt(), history: hist, content: content, maxTokens: 6000, schema: SCH_AGENT, tier: chatTier(txt) }).then(function (r) {
       var j = null;
       try { j = parseJSON(r.text); } catch (e) { j = null; }
       if (!j || typeof j !== 'object') {
@@ -3094,8 +3311,11 @@ function chatSend(textIn) {
       m.state = 'pending';
       if (!m.text) m.text = 'جهّزتُ التعديلات التالية للمراجعة:';
     }
+    var pf = prefApplyFromModel(j, txt);
+    if (pf.saved.length) m.prefNote = '🧠 حفظتُ في ذاكرتك: ' + pf.saved.join(' — ');
+    else if (pf.forgot) m.prefNote = '🧠 حذفتُ ' + pf.forgot + ' من تفضيلاتك المحفوظة';
     if (tabs.length) m.tables = tabs.slice(0, 6);
-    if (!m.text && !m.clar && !m.tables) m.text = 'لم أجد ما أضيفه. أعد الصياغة من فضلك.';
+    if (!m.text && !m.clar && !m.tables && !m.prefNote) m.text = 'لم أجد ما أضيفه. أعد الصياغة من فضلك.';
     CHAT.msgs.push(m);
   }).catch(function (e) {
     CHAT.msgs.push({ role: 'assistant', text: errMsg(e), err: true });
@@ -3258,6 +3478,7 @@ function chatSave() {
       if (m.nav) o.nav = m.nav;
       if (m.cls) o.cls = m.cls;
       if (m.summary) o.summary = m.summary;
+      if (m.prefNote) o.prefNote = m.prefNote;
       if (m.tables) o.tables = m.tables;
       if (m.groups || m.hadPlan) { o.hadPlan = 1; o.state = m.state; }
       return o;
@@ -3295,15 +3516,15 @@ window.DAI = {
   rotImg: function (i) { imgXform(i, 'rot'); }, enhImg: function (i) { imgXform(i, 'enh'); },
   note: function (v) { ST.note = v; },
   analyze: analyze,
-  setRowStu: function (i, v) { ST.tbl.rows[i].idx = parseInt(v, 10); ST.tbl.rows[i].conf = 'high'; render(); },
+  setRowStu: function (i, v) { var rr = ST.tbl.rows[i]; rr.idx = parseInt(v, 10); rr.conf = 'high'; rr.nameUnsure = false; render(); },
   setColCi: function (j, v) { ST.tbl.cols[j].ci = (v === 'x') ? null : parseInt(v, 10); render(); },
   setColType: function (j, v) { ST.tbl.cols[j].type = v; render(); },
   setColWeek: function (j, v) { ST.tbl.cols[j].week = parseInt(v, 10) || 1; render(); },
   mark: function (i, j) {
     var c = ST.tbl.rows[i].cells, o = { absent: 'present', present: 'unknown', unknown: 'absent' };
-    c[j] = o[c[j]] || 'absent'; render();
+    c[j] = o[c[j]] || 'absent'; if (ST.tbl.rows[i].doubt) delete ST.tbl.rows[i].doubt[j]; render();
   },
-  cell: function (i, j, v) { ST.tbl.rows[i].cells[j] = v; updateSummary(); },
+  cell: function (i, j, v) { ST.tbl.rows[i].cells[j] = v; if (ST.tbl.rows[i].doubt) delete ST.tbl.rows[i].doubt[j]; updateSummary(); },
   opt: function (k, v) { ST.opts[k] = !!v; updateSummary(); },
   applyTable: applyTable,
   namesText: function (v) { ST.names.text = v; namesSummary(); },
@@ -3333,6 +3554,11 @@ window.DAI = {
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   chatSend: function () { chatSend(); }, chatChip: function (i) { chatSend(CHAT_CHIPS[i]); },
   chatDraft: function (v) { CHAT.draft = v; }, chatMic: chatMic, chatClear: chatClear,
+  prefAddUi: function () { var el = document.getElementById('daiPrefIn'); if (!el) return; if (prefAdd(el.value)) prefRefresh(); else { el.value = ''; if (typeof showSnack === 'function') showSnack('⚠️ التفضيل فارغ أو مكرر'); } },
+  prefDel: function (i) { var o = prefsGet(); o.items.splice(i, 1); prefsSet(o); prefRefresh(); },
+  prefToggle: function (v) { var o = prefsGet(); o.on = !!v; prefsSet(o); },
+  prefPreset: function (i) { if (PREF_PRESETS[i]) { prefAdd(PREF_PRESETS[i]); prefRefresh(); } },
+  prefClear: function () { if (confirm('مسح كل التفضيلات المحفوظة؟')) { prefsSet({ on: prefsGet().on, items: [] }); prefRefresh(); } },
   alertToggle: alertToggle, alertHide: alertHide, alertDetail: alertDetail, alertAsk: alertAsk,
   chatFiles: chatAddFiles, chatRmImg: function (i) { CHAT.imgs.splice(i, 1); chatRenderAtt(); }, chatKind: function (k) { CHAT.imgKind = (CHAT.imgKind === k ? '' : k); CHAT.attHint = ''; chatRenderAtt(); },
   chatGo: chatGo, chatTableXls: chatTableXls, chatMdXls: chatMdXls, chatTablePdf: chatTablePdf, chatMdPdf: chatMdPdf, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
