@@ -892,7 +892,7 @@ function freshState() {
   if (!cls || (DB.classes || []).indexOf(cls) < 0) cls = (DB.classes || [])[0] || '';
   wk = Math.min(Math.max(1, parseInt(wk, 10) || 1), activeWeeks());
   return {
-    view: 'home', mode: null, cls: cls, week: wk, imgs: [], note: '', err: '',
+    view: hasKey() ? 'chat' : 'home', mode: null, cls: cls, week: wk, imgs: [], note: '', err: '',
     tbl: null, opts: { skipExisting: true, clearPresent: false },
     names: { text: '', mode: 'empty', start: 1, skipDup: true },
     cmd: { text: '', clar: '', summary: '', plan: null },
@@ -965,7 +965,7 @@ function head(title, back) {
   var bt = (typeof back === 'string') ? back : 'home';
   h.innerHTML = (back ? '<button onclick="DAI.go(\'' + bt + '\')" style="' + BTN + 'background:#1e293b;color:#93c5fd;padding:6px 10px;font-size:13px;">→</button>' : '<span style="font-size:20px;">🤖</span>') +
     '<span style="flex:1;font-weight:900;color:#e2e8f0;font-size:14px;">' + title + '</span>' +
-    (ST.view === 'home' ? '<button onclick="DAI.go(\'settings\')" style="' + BTN + 'background:none;color:#94a3b8;font-size:16px;padding:4px 8px;" title="الإعدادات">⚙️</button>' : '') +
+    ((ST.view === 'home' || ST.view === 'chat') ? '<button onclick="DAI.go(\'settings\')" style="' + BTN + 'background:none;color:#94a3b8;font-size:16px;padding:4px 8px;" title="الإعدادات">⚙️</button>' : '') +
     (undoStack.length ? '<button onclick="DAI.undoBar()" title="تراجع عن آخر تعديل" style="' + BTN + 'background:rgba(251,191,36,.15);color:#fcd34d;font-size:13px;padding:5px 9px;">↩</button>' : '') +
     '<button onclick="DAI.minimize()" title="تصغير لمتابعة التطبيق" style="' + BTN + 'background:none;color:#93c5fd;font-size:18px;padding:4px 8px;">➖</button>' +
     '<button onclick="DAI.close()" style="' + BTN + 'background:none;color:#f87171;font-size:18px;padding:4px 8px;">✕</button>';
@@ -1113,6 +1113,7 @@ function pickMode(m) {
 
 /* ───────── إدخال الصور ───────── */
 var MODE_INFO = {
+  auto: { t: 'تحليل تلقائي', d: 'صوّر الورقة وسأعرف نوعها (غياب / أسماء / درجات) وأقرأ التاريخ واليوم من رأس العمود.' },
   att: { t: 'ورقة الغياب', d: 'صوّر الورقة كاملة بوضوح وبإضاءة جيدة (يمكن أكثر من صورة إن كانت الورقة على أجزاء).' },
   names: { t: 'قائمة الأسماء', d: 'صوّر قائمة الفصل. ستراجع الأسماء وتعدّلها قبل إدراجها.' },
   grades: { t: 'كشف الدرجات', d: 'صوّر الكشف بحيث تظهر الأسماء وأعمدة الدرجات.' }
@@ -1190,19 +1191,23 @@ function analyze() {
     (cfgGet().sendRoster
       ? 'Class roster (hint only, to help read unclear handwriting — transcribe what is written; do NOT add roster students who are absent from the sheet):\n' + rosterText(cls) + '\n\n'
       : '\n');
+  var DATEF = 'Each column header may show a DATE and a DAY NAME (e.g. "الأحد 12/10" or "١٢/١٠"). Copy them per column: "date" as ASCII digits "D/M" or "D/M/YYYY" exactly as written (convert Arabic-Indic digits; never guess a missing year or day), "day" as the weekday name as written; use "" when absent.';
+  var pAtt = base + 'This is an ATTENDANCE sheet. Return exactly: {"columns":[{"label":"column header text; use \"عمود N\" if none","date":"","day":""}],' +
+    '"students":[{"no":<serial number printed on sheet or null>,"name":"name as written","marks":["absent"|"present"|"unknown",...]}]}.\n' +
+    '"marks" must have exactly one entry per column, in the same order as "columns". Absent is usually marked by غ / غائب / ✗ / a filled circle or colored cell; present by ✓ or the sheet legend\'s symbol; ' +
+    'if the sheet has a legend follow it. If a cell is empty: treat as "present" only when other students have explicit absence marks in that column; otherwise "unknown". ' + DATEF;
+  var pGr = base + 'This is a GRADES sheet. Return exactly: {"columns":[{"label":"column header","date":"","day":"","type":"hw|assess|beh|ex1|ex2|unknown"}],"students":[{"no":<serial or null>,"name":"name as written","values":["17"|"غ"|"م"|null,...]}]}.\n' +
+    'Include only columns that hold grades (skip serial/name/total/signature columns). "values" must have one entry per column; copy each value exactly as written (digits may be Arabic-Indic), use null if empty or unreadable. Do not compute anything. ' +
+    '"type" from the header words: واجب=hw, تقييم=assess, سلوك=beh, اختبار أول/١=ex1, اختبار ثاني/٢=ex2; use "unknown" when the header does not say. ' + DATEF;
+  var pNm = base + 'This is a student NAME LIST. Return exactly: {"names":["full name 1","full name 2",...]} — one string per student, in the order shown, without numbering or bullets. ' +
+    'Skip titles, class names, dates, headers and footers.';
   var prompt;
-  if (mode === 'att') {
-    prompt = base + 'This is an ATTENDANCE sheet. Return exactly: {"columns":[{"label":"column header text, e.g. date/day/period; use \\"عمود N\\" if none"}],' +
-      '"students":[{"no":<serial number printed on sheet or null>,"name":"name as written","marks":["absent"|"present"|"unknown",...]}]}.\n' +
-      '"marks" must have exactly one entry per column, in the same order as "columns". Absent is usually marked by غ / غائب / ✗ / a filled circle or colored cell; present by ✓ or the sheet legend\'s symbol; ' +
-      'if the sheet has a legend follow it. If a cell is empty: treat as "present" only when other students have explicit absence marks in that column; otherwise "unknown".';
-  } else if (mode === 'grades') {
-    prompt = base + 'This is a GRADES sheet. Return exactly: {"columns":[{"label":"column header"}],"students":[{"no":<serial or null>,"name":"name as written","values":["17"|"غ"|"م"|null,...]}]}.\n' +
-      'Include only columns that hold grades (skip serial/name/total/signature columns). "values" must have one entry per column; copy each value exactly as written (digits may be Arabic-Indic), use null if empty or unreadable. Do not compute anything.';
-  } else {
-    prompt = 'This is a student NAME LIST. Return exactly: {"names":["full name 1","full name 2",...]} — one string per student, in the order shown, without numbering or bullets. ' +
-      'Skip titles, class names, dates, headers and footers.' + (ST.note ? '\nTeacher note: ' + ST.note : '');
-  }
+  if (mode === 'att') prompt = pAtt;
+  else if (mode === 'grades') prompt = pGr;
+  else if (mode === 'names') prompt = pNm;
+  else prompt = base + 'FIRST decide what kind of sheet the image shows and return it in "kind": "att" = attendance (marks like ✓ ✗ غ per date/period), "grades" = numeric scores per column, "names" = a plain list of student names with no marks or scores. ' +
+    'Then return ONE JSON object containing "kind" plus the fields of that kind:\n' +
+    '[att] ' + pAtt.slice(base.length) + '\n[grades] ' + pGr.slice(base.length) + '\n[names] ' + pNm.slice(base.length);
   var content = imageBlocks(ST.imgs).concat([{ type: 'text', text: prompt }]);
   ST.view = 'loading'; ST.err = ''; render();
   callAI({ system: SYS_TABLE, content: content, maxTokens: 8000 })
@@ -1211,12 +1216,74 @@ function analyze() {
       var j;
       try { j = parseJSON(r.text); } catch (e) { throw new Error(r.truncated ? 'TRUNCATED' : 'BAD_JSON'); }
       if (r.truncated) throw new Error('TRUNCATED');
+      if (mode === 'auto') {
+        var kd = String((j && j.kind) || '');
+        if (!/^(att|grades|names)$/.test(kd)) throw new Error('BAD_JSON');
+        mode = kd; ST.mode = kd;
+        try { if (typeof showSnack === 'function') showSnack('🔎 النوع: ' + ({ att: 'غياب', grades: 'درجات', names: 'أسماء' })[kd]); } catch (e) {}
+      }
       if (mode === 'names') buildNames(j); else buildTable(j, mode);
     })
     .catch(function (e) {
       if (!ST) return;
       ST.view = 'input'; ST.err = errMsg(e); render();
     });
+}
+
+/* ───────── قراءة التاريخ/اليوم من رأس العمود وربطهما بالأسبوع ───────── */
+function digitsEn(s) {
+  return String(s == null ? '' : s).replace(/[\u0660-\u0669]/g, function (c) { return c.charCodeAt(0) - 1632; })
+    .replace(/[\u06F0-\u06F9]/g, function (c) { return c.charCodeAt(0) - 1776; });
+}
+function parseSheetDate(str) {
+  var t = digitsEn(str).trim(); if (!t) return null;
+  var m = /(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/.exec(t);
+  if (m) return { y: +m[1], m: +m[2], d: +m[3] };
+  m = /(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/.exec(t);
+  if (!m) return null;
+  var y = m[3] ? +m[3] : null; if (y !== null && y < 100) y += 2000;
+  var d = +m[1], mo = +m[2];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  return { y: y, m: mo, d: d };
+}
+/* 0=السبت … 6=الجمعة (نفس ترتيب التطبيق) */
+function dayIdxOf(str) {
+  var t = String(str || '').replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا');
+  if (/سبت/.test(t)) return 0; if (/احد/.test(t)) return 1; if (/اثنين|ثنين/.test(t)) return 2;
+  if (/ثلاث/.test(t)) return 3; if (/اربع/.test(t)) return 4; if (/خميس/.test(t)) return 5; if (/جمع/.test(t)) return 6;
+  return -1;
+}
+/* startDate = سبت الأسبوع 1 — نفس منطق التطبيق */
+function resolveColDate(dateStr, dayStr) {
+  var out = { week: null, dIdx: dayIdxOf(dayStr), warn: '', label: '' };
+  var day = String(dayStr || '').trim();
+  var pd = parseSheetDate(dateStr);
+  if (!pd) { out.label = day; return out; }
+  out.label = pd.d + '/' + pd.m + (day ? ' ' + day : '');
+  var sd = DB && DB.meta && DB.meta.startDate, start = sd ? new Date(sd) : null;
+  if (!start || isNaN(start.getTime())) { out.warn = 'حدّد «تاريخ بداية الفصل» من الإعدادات ليُربط التاريخ بالأسبوع تلقائياً'; return out; }
+  start.setHours(0, 0, 0, 0);
+  var aw = activeWeeks(), best = null, y0 = start.getFullYear();
+  (pd.y ? [pd.y] : [y0, y0 + 1, y0 - 1]).forEach(function (y) {
+    var dt = new Date(y, pd.m - 1, pd.d); dt.setHours(0, 0, 0, 0);
+    if (dt.getMonth() !== pd.m - 1) return;
+    var diff = Math.round((dt - start) / 86400000), inR = diff >= 0 && diff < aw * 7, sc = inR ? 0 : Math.abs(diff);
+    if (!best || sc < best.sc) best = { dt: dt, diff: diff, inR: inR, sc: sc };
+  });
+  if (!best) return out;
+  if (!best.inR) { out.warn = 'التاريخ ' + pd.d + '/' + pd.m + ' خارج أسابيع الفصل — راجع الأسبوع'; return out; }
+  out.week = Math.floor(best.diff / 7) + 1;
+  var actual = (best.dt.getDay() + 1) % 7;
+  if (out.dIdx >= 0 && out.dIdx !== actual) out.warn = 'اليوم المكتوب لا يطابق التاريخ — راجع';
+  if (out.dIdx < 0) out.dIdx = actual;
+  return out;
+}
+function colNote(info, extra) {
+  var p = [];
+  if (info.label) p.push(info.label + (info.week ? ' ← أسبوع ' + info.week : ''));
+  if (extra) p.push(extra);
+  if (info.warn) p.push(info.warn);
+  return p.join(' — ');
 }
 
 function buildNames(j) {
@@ -1239,10 +1306,45 @@ function buildTable(j, mode) {
   var ppw = Math.max(1, Number(DB.meta.periodsPerWeek) || 3);
   var arrS = DB.data[ST.cls] || [];
   var tcols = [];
-  for (var c = 0; c < n; c++) {
-    var lbl = (cols[c] && cols[c].label) ? String(cols[c].label) : ('عمود ' + (c + 1));
-    if (mode === 'att') tcols.push({ label: lbl, ci: c < ppw ? c : null });
-    else tcols.push(c === 0 ? { label: lbl, type: ST.gdef.type, week: ST.week } : { label: lbl, type: 'ignore', week: ST.week });
+  var infos = [];
+  for (var c0 = 0; c0 < n; c0++) infos.push(resolveColDate(cols[c0] && cols[c0].date, cols[c0] && cols[c0].day));
+  var lblOf = function (c) { return (cols[c] && cols[c].label) ? String(cols[c].label) : ('عمود ' + (c + 1)); };
+  if (mode === 'att') {
+    /* الأسبوع الأكثر تكراراً بين التواريخ المقروءة */
+    var cnt = {}, bestW = null;
+    infos.forEach(function (f) { if (f.week) { cnt[f.week] = (cnt[f.week] || 0) + 1; if (bestW === null || cnt[f.week] > cnt[bestW]) bestW = f.week; } });
+    if (bestW) ST.week = bestW;
+    var per = periodsFor(ST.cls, ST.week), real = per.some(function (p) { return p.period && !/^g\d+$/.test(String(p.period.id)); });
+    var usedCi = {};
+    for (var c = 0; c < n; c++) {
+      var f = infos[c], ci = null, ex = '';
+      if (f.week && f.week !== ST.week) ex = 'أسبوع آخر — تم تجاهله';
+      else if (real && f.dIdx >= 0) {
+        for (var q = 0; q < per.length; q++) { if (per[q].dayIdx === f.dIdx && !usedCi[q]) { ci = q; break; } }
+        if (ci === null) ex = 'لا توجد حصة لهذا الفصل في ذلك اليوم بالجدول';
+      } else ci = c < ppw ? c : null;
+      if (ci !== null) usedCi[ci] = true;
+      tcols.push({ label: lblOf(c), ci: ci, note: colNote(f, ex) });
+    }
+  } else {
+    var VT = /^(hw|assess|beh|ex1|ex2)$/, anyTyped = false, anyDated = false;
+    for (var c1 = 0; c1 < n; c1++) {
+      if (cols[c1] && VT.test(String(cols[c1].type || ''))) anyTyped = true;
+      if (infos[c1].week) anyDated = true;
+    }
+    var seen = {};
+    for (var c2 = 0; c2 < n; c2++) {
+      var f2 = infos[c2], ty = cols[c2] && VT.test(String(cols[c2].type || '')) ? cols[c2].type : '';
+      var tp, wk = f2.week || ST.week, ex2 = '';
+      if (anyTyped) tp = ty || 'ignore';
+      else if (anyDated) tp = ST.gdef.type;
+      else tp = c2 === 0 ? ST.gdef.type : 'ignore';
+      if (tp !== 'ignore') {
+        var sk = /^ex/.test(tp) ? tp : tp + wk;
+        if (seen[sk]) { tp = 'ignore'; ex2 = 'مكرر (نفس النوع والأسبوع)'; } else seen[sk] = true;
+      }
+      tcols.push({ label: lblOf(c2), type: tp, week: wk, note: colNote(f2, ex2) });
+    }
   }
   var rows = [];
   studs.forEach(function (s) {
@@ -1293,7 +1395,8 @@ function viewReviewTable() {
   /* ربط الأعمدة */
   h += '<div style="background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;margin-bottom:10px;"><div style="font-size:10px;color:#64748b;margin-bottom:6px;">ربط أعمدة الصورة بالتطبيق:</div>';
   ST.tbl.cols.forEach(function (c, j) {
-    h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap;"><span style="font-size:11px;color:#e2e8f0;min-width:78px;"><b>' + (j + 1) + '</b> · ' + esc(c.label) + '</span>';
+    h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap;"><span style="font-size:11px;color:#e2e8f0;min-width:78px;"><b>' + (j + 1) + '</b> · ' + esc(c.label) + '</span>' +
+      (c.note ? '<span style="font-size:10px;line-height:1.7;width:100%;color:' + (/راجع|خارج|لا توجد|مكرر|حدّد|تجاهل/.test(c.note) ? '#fbbf24' : '#6ee7b7') + ';">📅 ' + esc(c.note) + '</span>' : '');
     if (att) h += '<select style="' + SEL + '" onchange="DAI.setColCi(' + j + ',this.value)">' + periodOptions(c.ci) + '</select>';
     else {
       h += '<select style="' + SEL + '" onchange="DAI.setColType(' + j + ',this.value)"><option value="ignore"' + (c.type === 'ignore' ? ' selected' : '') + '>تجاهل</option>' +
@@ -1511,13 +1614,13 @@ function viewDone() {
     '<div style="font-size:13px;color:#e2e8f0;font-weight:800;line-height:1.9;margin-bottom:16px;">' + esc(ST.done || '') + '</div>' +
     '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">' +
     btn('↩ تراجع', 'DAI.undo(true)', 'background:rgba(251,191,36,.12);border:1px solid #d97706;color:#fcd34d;padding:10px 16px;font-size:12px;') +
-    btn('عملية أخرى', "DAI.go('home')", GHOST) + btn('إغلاق', 'DAI.close()', PRIMARY) + '</div></div>';
+    btn('عملية أخرى', "DAI.go('chat')", GHOST) + btn('إغلاق', 'DAI.close()', PRIMARY) + '</div></div>';
 }
 function doUndo(fromDone) {
   var u = undoLast();
   if (!u) return;
   if (typeof showSnack === 'function') showSnack('↩ تم التراجع عن: ' + u.label);
-  if (fromDone) { ST.view = 'home'; }
+  if (fromDone) { ST.view = hasKey() ? 'chat' : 'home'; }
   render();
 }
 
@@ -1924,14 +2027,32 @@ function repPrint(res, writeup) {
     (writeup ? '<div class="w">' + esc(writeup) + '</div>' : '') +
     '<table><thead><tr>' + th + '</tr></thead><tbody>' + tr + '</tbody></table>' +
     '<div class="f">العدد: ' + res.listed + (res.foot.length ? ' — ' + esc(res.foot.join(' ')) : '') + '</div></body></html>';
+  /* الإصلاح: الـ iframe بحجم 0×0 كان يطبع صفحة فارغة (خصوصاً على الموبايل).
+     الآن تُعرض معاينة حقيقية بحجم كامل مع زر «حفظ PDF» يطبع من داخلها. */
+  try { var old = document.getElementById('daiPrintOv'); if (old) old.remove(); } catch (e) {}
+  var ov = document.createElement('div');
+  ov.id = 'daiPrintOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:#0b1220;display:flex;flex-direction:column;direction:rtl;font-family:Cairo,Tahoma,Arial,sans-serif;';
+  var bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:10px;background:#111c33;border-bottom:1px solid #1e3a5f;flex-shrink:0;';
+  var bPrint = document.createElement('button');
+  bPrint.textContent = '📄 حفظ PDF / طباعة';
+  bPrint.style.cssText = 'flex:1;padding:11px;border:0;border-radius:10px;background:#6366f1;color:#fff;font-family:inherit;font-weight:800;font-size:14px;cursor:pointer;';
+  var bClose = document.createElement('button');
+  bClose.textContent = '✕ إغلاق';
+  bClose.style.cssText = 'padding:11px 16px;border:1px solid #475569;border-radius:10px;background:#1e293b;color:#e2e8f0;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer;';
+  bar.appendChild(bPrint); bar.appendChild(bClose);
   var fr = document.createElement('iframe');
-  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-  document.body.appendChild(fr);
+  fr.style.cssText = 'flex:1;width:100%;border:0;background:#fff;';
+  ov.appendChild(bar); ov.appendChild(fr);
+  document.body.appendChild(ov);
+  bClose.onclick = function () { try { ov.remove(); } catch (e) {} };
+  var doPrint = function () {
+    try { fr.contentWindow.focus(); fr.contentWindow.print(); }
+    catch (e) { if (typeof showSnack === 'function') showSnack('⚠️ تعذّرت الطباعة — جرّب من متصفح Chrome'); }
+  };
+  bPrint.onclick = doPrint;
   var d = fr.contentWindow.document; d.open(); d.write(html); d.close();
-  setTimeout(function () {
-    try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) {}
-    setTimeout(function () { try { fr.remove(); } catch (e) {} }, 60000);
-  }, 400);
 }
 
 /* ═════ الواجهة ═════ */
@@ -2147,7 +2268,7 @@ function repSet(k, v, quiet) {
    • عند طلب تعديل: يقترح عمليات تُعرض للمراجعة ولا تُطبَّق إلا بزر «تطبيق»، مع تراجع.
    • إدخال صوتي مباشر بالميكروفون.
    ═════════════════════════════════════════════════════════════════════ */
-var CHAT = { msgs: [], busy: false, rec: null, listening: false, draft: '', status: '' };
+var CHAT = { msgs: [], busy: false, rec: null, listening: false, draft: '', status: '', imgs: [], imgKind: '', attHint: '' };
 var CHAT_CHIPS = [
   'أعطني ملخصاً سريعاً عن حال فصولي الآن',
   'من الطلاب المتعثرون في هذا الفصل ولماذا؟',
@@ -2194,6 +2315,7 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   '(c) analyse the class data, compare classes, and give recommendations, remedial plans and parent messages;\n' +
   '(d) help with general teaching work that needs no data (lesson ideas, quiz questions, activities, wording of notices) — you do not need the data for this;\n' +
   '(e) propose structured edit operations when the teacher clearly asks to change data.\n' +
+  '(f) photos: this same chat has 📷/🖼 buttons next to the text box. When the teacher wants to read an attendance sheet, a class name list or a grades sheet from a photo, tell them to tap 📷 or 🖼, press send (the app detects the type, the date and the weekday from the column headers by itself; the teacher may also pick the type manually); a review screen appears before anything is applied. Reports: use the query tools and show tables, which have Excel/PDF buttons.\n' +
   'Output ONE JSON object only (no markdown fences): {"reply":"Arabic answer","summary":"","ops":[],"clarification":"","lookup":null,"navigate":""}.\n' +
   '- "reply": your answer. You may use **bold** and lines starting with "- " for lists. Keep it focused; never pad.\n' +
   '- Numbers and statistics: use ONLY the SETTINGS / OVERVIEW / DATA DIGEST in CONTEXT. Never invent students, grades or statistics. Refer to students as «number. name» (names may be replaced by «طالب N» when the teacher turned off name sharing). If the data does not contain the answer, say so.\n' +
@@ -2567,11 +2689,16 @@ function viewChat() {
   box().innerHTML = tools +
     '<div id="daiChatList"></div>' +
     '<div style="position:sticky;bottom:-18px;background:#0f172a;padding:8px 0 4px;margin-top:8px;border-top:1px solid #1e293b;">' +
+    '<div id="daiChatAtt"></div>' +
+    '<input id="daiChatCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="DAI.chatFiles(this)">' +
+    '<input id="daiChatGal" type="file" accept="image/*" multiple style="display:none" onchange="DAI.chatFiles(this)">' +
     '<div style="display:flex;gap:6px;align-items:flex-end;">' +
-    '<textarea id="daiChatIn" rows="2" placeholder="اسأل عن الطلاب أو عن التطبيق أو اطلب تعديلاً… (مثال: كيف أطبع الكشف؟ — اجعل سلوك الأسبوع 4 عشرة)" oninput="DAI.chatDraft(this.value)" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();DAI.chatSend();}" style="' + SEL + 'flex:1;box-sizing:border-box;resize:none;line-height:1.7;">' + esc(CHAT.draft) + '</textarea>' +
+    '<textarea id="daiChatIn" rows="2" placeholder="اسأل أو اطلب تعديلاً أو أرفق صورة 📷… (مثال: كيف أطبع الكشف؟ — اجعل سلوك الأسبوع 4 عشرة)" oninput="DAI.chatDraft(this.value)" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();DAI.chatSend();}" style="' + SEL + 'flex:1;box-sizing:border-box;resize:none;line-height:1.7;">' + esc(CHAT.draft) + '</textarea>' +
+    '<button onclick="document.getElementById(\'daiChatCam\').click()" title="التقاط صورة" style="' + BTN + 'background:#1d4ed8;color:#fff;padding:10px 11px;font-size:16px;">📷</button>' +
+    '<button onclick="document.getElementById(\'daiChatGal\').click()" title="صورة من المعرض" style="' + BTN + 'background:#0f766e;color:#fff;padding:10px 11px;font-size:16px;">🖼</button>' +
     '<button id="daiMicBtn" onclick="DAI.chatMic()" title="إدخال صوتي" style="' + BTN + 'background:' + (CHAT.listening ? '#dc2626' : '#0f766e') + ';color:#fff;padding:10px 12px;font-size:16px;">🎤</button>' +
     btn('➤', 'DAI.chatSend()', PRIMARY + 'padding:10px 14px;font-size:16px;') + '</div></div>';
-  chatRenderList();
+  chatRenderList(); chatRenderAtt();
   var b = box(); if (b) b.scrollTop = b.scrollHeight;
 }
 function chatRenderList() {
@@ -2626,10 +2753,67 @@ function chatRenderList() {
   var b = box(); if (b) b.scrollTop = b.scrollHeight;
 }
 
+var CHAT_KINDS = [['auto', '🔎 تلقائي'], ['att', '📋 غياب'], ['names', '👥 أسماء'], ['grades', '📝 درجات']];
+function chatInferKind(t) {
+  t = String(t || '');
+  if (/غياب|غائب|حضور/.test(t)) return 'att';
+  if (/أسماء|اسماء|قائمة|قايمة|إدراج|ادراج/.test(t)) return 'names';
+  if (/درجات|درجة|كشف|واجب|تقييم|سلوك|اختبار/.test(t)) return 'grades';
+  return '';
+}
+function chatInferGType(t) {
+  t = String(t || '');
+  if (/واجب/.test(t)) return 'hw';
+  if (/تقييم/.test(t)) return 'assess';
+  if (/سلوك/.test(t)) return 'beh';
+  if (/اختبار\s*(2|٢|الثاني|ثاني)/.test(t)) return 'ex2';
+  if (/اختبار/.test(t)) return 'ex1';
+  return '';
+}
+function chatRenderAtt() {
+  var el = document.getElementById('daiChatAtt'); if (!el) return;
+  if (!CHAT.imgs.length) { el.innerHTML = ''; return; }
+  var th = CHAT.imgs.map(function (im, i) {
+    return '<div style="position:relative;width:54px;height:54px;border-radius:8px;overflow:hidden;border:1px solid #334155;flex-shrink:0;"><img src="' + im.dataUrl + '" style="width:100%;height:100%;object-fit:cover;">' +
+      '<button onclick="DAI.chatRmImg(' + i + ')" style="position:absolute;top:1px;left:1px;background:rgba(0,0,0,.7);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:10px;cursor:pointer;">✕</button></div>';
+  }).join('');
+  var chips = CHAT_KINDS.map(function (k) {
+    var on = (CHAT.imgKind || 'auto') === k[0];
+    return '<button onclick="DAI.chatKind(\'' + k[0] + '\')" style="' + BTN + 'font-size:11px;padding:6px 10px;border:1px solid ' + (on ? '#6366f1' : '#1e3a5f') + ';background:' + (on ? '#312e81' : '#111c33') + ';color:' + (on ? '#e0e7ff' : '#93c5fd') + ';">' + k[1] + '</button>';
+  }).join('');
+  el.innerHTML = '<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:6px;">' + th + '</div>' +
+    '<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:10px;color:#94a3b8;">نوع الصورة:' + chips + '</div>' +
+    (CHAT.attHint ? '<div style="font-size:10px;color:#fbbf24;margin-bottom:6px;">⚠️ ' + esc(CHAT.attHint) + '</div>' : '');
+}
+function chatAddFiles(input) {
+  var files = Array.prototype.slice.call(input.files || []);
+  input.value = '';
+  var room = MAX_IMAGES - CHAT.imgs.length;
+  if (files.length > room) { if (typeof showSnack === 'function') showSnack('⚠️ الحد الأقصى ' + MAX_IMAGES + ' صور'); files = files.slice(0, Math.max(0, room)); }
+  Promise.all(files.map(prepImage)).then(function (arr) {
+    arr.forEach(function (a) { CHAT.imgs.push(a); });
+    CHAT.attHint = ''; chatRenderAtt();
+  }).catch(function () { CHAT.attHint = 'تعذّر قراءة الصورة. جرّب صورة أخرى.'; chatRenderAtt(); });
+}
+/* صور من المحادثة: تُوجَّه لنفس مسارات الغياب/الأسماء/الدرجات ثم تظهر شاشة المراجعة قبل التطبيق */
+function chatSendImages(txt) {
+  var kind = CHAT.imgKind || 'auto';
+  if (!ensureConsent()) { var c2 = document.getElementById('daiChatIn'); if (c2) c2.value = txt; return; }
+  if (CHAT.listening) chatMic();
+  var gt = chatInferGType(txt);
+  ST.mode = kind; ST.imgs = CHAT.imgs.slice(); ST.note = txt || ''; ST.err = ''; ST.tbl = null;
+  if (gt) ST.gdef.type = gt;
+  var label = (CHAT_KINDS.filter(function (k) { return k[0] === kind; })[0] || ['', ''])[1];
+  CHAT.msgs.push({ role: 'user', text: '📷 ' + ST.imgs.length + ' صورة — ' + label + (txt ? ': ' + txt : '') });
+  CHAT.imgs = []; CHAT.imgKind = ''; CHAT.attHint = ''; CHAT.draft = '';
+  chatSave();
+  analyze();
+}
 function chatSend(textIn) {
   if (CHAT.busy) return;
   var inp = document.getElementById('daiChatIn');
   var txt = String(textIn != null ? textIn : (inp ? inp.value : CHAT.draft) || '').trim();
+  if (CHAT.imgs.length) { if (inp) inp.value = ''; chatSendImages(txt); return; }
   if (!txt) return;
   if (!ensureConsent()) return;
   if (CHAT.listening) chatMic();
@@ -2930,6 +3114,7 @@ window.DAI = {
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   chatSend: function () { chatSend(); }, chatChip: function (i) { chatSend(CHAT_CHIPS[i]); },
   chatDraft: function (v) { CHAT.draft = v; }, chatMic: chatMic, chatClear: chatClear,
+  chatFiles: chatAddFiles, chatRmImg: function (i) { CHAT.imgs.splice(i, 1); chatRenderAtt(); }, chatKind: function (k) { CHAT.imgKind = (CHAT.imgKind === k ? '' : k); CHAT.attHint = ''; chatRenderAtt(); },
   chatGo: chatGo, chatTableXls: chatTableXls, chatMdXls: chatMdXls, chatTablePdf: chatTablePdf, chatMdPdf: chatMdPdf, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
   undo: function (fromDone) { doUndo(fromDone === true); }
 };
