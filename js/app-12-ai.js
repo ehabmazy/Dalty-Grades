@@ -2480,7 +2480,7 @@ function chatTableHtml(t, mi, ti) {
   return '<div style="margin:8px 0 4px;"><div style="font-size:11px;font-weight:800;color:#a5b4fc;margin-bottom:2px;">📊 ' + esc(t.title) + '</div>' +
     (t.note ? '<div style="font-size:9.5px;color:#64748b;margin-bottom:3px;">' + esc(t.note) + '</div>' : '') +
     '<div style="overflow-x:auto;background:#0b1220;border:1px solid #1e293b;border-radius:8px;"><table style="border-collapse:collapse;width:100%;background:#0b1220;color:#e2e8f0;"><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
-    '<div style="text-align:left;margin-top:2px;"><button onclick="DAI.chatTableXls(' + mi + ',' + ti + ')" style="' + BTN + 'background:none;color:#64748b;font-size:10px;padding:2px 4px;">⬇️ Excel</button></div></div>';
+    '<div style="text-align:left;margin-top:3px;display:flex;gap:6px;justify-content:flex-end;flex-direction:row-reverse;"><button onclick="DAI.chatTableXls(' + mi + ',' + ti + ')" style="' + XLS_BTN + '">⬇️ Excel</button><button onclick="DAI.chatTablePdf(' + mi + ',' + ti + ')" style="' + PDF_BTN + '">📄 PDF</button></div></div>';
 }
 function chatTablesHtml(m, mi) { return (m.tables || []).map(function (t, ti) { return chatTableHtml(t, mi, ti); }).join(''); }
 function chatTablesText(m) {
@@ -2505,27 +2505,57 @@ function chatHistory() {
   return h;
 }
 function fmtInline(x) { return esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
-/* يحوّل جداول الماركداون (| عمود | عمود |) التي يكتبها النموذج إلى جداول حقيقية */
-function mdTable(rows) {
-  var BD = 'border:1px solid #1e293b;', cells = function (ln) { return ln.trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); }); };
-  var head = cells(rows[0]), body = rows.slice(2).map(cells);
-  return '<div style="overflow-x:auto;margin:6px 0;background:#0b1220;border:1px solid #1e293b;border-radius:8px;"><table style="border-collapse:collapse;width:100%;background:#0b1220;color:#e2e8f0;"><thead><tr>' +
-    head.map(function (h) { return '<th style="padding:5px 7px;background:#1e293b;color:#cbd5e1;font-size:10px;white-space:nowrap;' + BD + '">' + fmtInline(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-    body.map(function (r, ri) { var bg = ri % 2 ? '#111a30' : '#0b1220'; return '<tr style="background:' + bg + ';">' + r.map(function (c) { return '<td style="padding:5px 7px;font-size:11px;background:' + bg + ';color:#e2e8f0;' + BD + 'text-align:center;">' + fmtInline(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
-    '</tbody></table></div>';
-}
-function fmtMsg(t) {
-  var lines = String(t || '').split('\n'), out = [], i = 0, isSep = function (l) { return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(l); };
+var XLS_BTN = 'border:1px solid #10b981;background:#065f46;color:#6ee7b7;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;touch-action:manipulation;font-size:11px;padding:5px 12px;';
+var PDF_BTN = 'border:1px solid #6366f1;background:#312e81;color:#c7d2fe;border-radius:8px;font-family:inherit;font-weight:700;cursor:pointer;touch-action:manipulation;font-size:11px;padding:5px 12px;';
+function mdCells(ln) { return ln.trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); }); }
+/* يفصل النص إلى أجزاء: نص عادي وجداول ماركداون (| عمود | عمود |) */
+function mdParse(t) {
+  var lines = String(t || '').split('\n'), out = [], i = 0;
+  var isRow = function (l) { return /^\s*\|.*\|\s*$/.test(l); };
+  var isSep = function (l) { return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(l); };
   while (i < lines.length) {
-    if (/^\s*\|.*\|\s*$/.test(lines[i]) && i + 1 < lines.length && isSep(lines[i + 1])) {
-      var blk = [lines[i], lines[i + 1]]; i += 2;
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { blk.push(lines[i]); i++; }
-      out.push({ tbl: mdTable(blk) });
-    } else { out.push({ txt: fmtInline(lines[i]) }); i++; }
+    if (isRow(lines[i]) && i + 1 < lines.length && isSep(lines[i + 1])) {
+      var head = mdCells(lines[i]), rows = []; i += 2;
+      while (i < lines.length && isRow(lines[i])) { rows.push(mdCells(lines[i])); i++; }
+      out.push({ tbl: { head: head, rows: rows } });
+    } else { out.push({ txt: lines[i] }); i++; }
   }
-  var h = '', prevTxt = false;
-  out.forEach(function (o) { if (o.tbl) { h += o.tbl; prevTxt = false; } else { h += (prevTxt ? '<br>' : '') + o.txt; prevTxt = true; } });
+  return out;
+}
+function fmtInline(x) { return esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
+function mdTableHtml(tb, mi, k) {
+  var BD = 'border:1px solid #1e293b;';
+  return '<div style="overflow-x:auto;margin:6px 0 2px;background:#0b1220;border:1px solid #1e293b;border-radius:8px;"><table style="border-collapse:collapse;width:100%;background:#0b1220;color:#e2e8f0;"><thead><tr>' +
+    tb.head.map(function (h) { return '<th style="padding:5px 7px;background:#1e293b;color:#cbd5e1;font-size:10px;white-space:nowrap;' + BD + '">' + fmtInline(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    tb.rows.map(function (r, ri) { var bg = ri % 2 ? '#111a30' : '#0b1220'; return '<tr style="background:' + bg + ';">' + r.map(function (c) { return '<td style="padding:5px 7px;font-size:11px;background:' + bg + ';color:#e2e8f0;' + BD + 'text-align:center;">' + fmtInline(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+    '</tbody></table></div>' +
+    (mi !== undefined ? '<div style="text-align:left;margin-bottom:6px;display:flex;gap:6px;justify-content:flex-end;flex-direction:row-reverse;"><button onclick="DAI.chatMdXls(' + mi + ',' + k + ')" style="' + XLS_BTN + '">⬇️ Excel</button><button onclick="DAI.chatMdPdf(' + mi + ',' + k + ')" style="' + PDF_BTN + '">📄 PDF</button></div>' : '');
+}
+function fmtMsg(t, mi) {
+  var segs = mdParse(t), h = '', prevTxt = false, k = 0;
+  segs.forEach(function (o) {
+    if (o.tbl) { h += mdTableHtml(o.tbl, mi, k++); prevTxt = false; }
+    else { h += (prevTxt ? '<br>' : '') + fmtInline(o.txt); prevTxt = true; }
+  });
   return h;
+}
+function chatTablePdf(mi, ti) {
+  var m = CHAT.msgs[mi], t = m && m.tables && m.tables[ti]; if (!t) return;
+  repPrint({ title: t.title, criteria: t.note || '', head: t.head, data: t.rows, foot: [], listed: t.rows.length, kind: 'chat' }, '');
+  try { if (typeof showSnack === 'function') showSnack('📄 في نافذة الطباعة اختر «حفظ كـ PDF»'); } catch (e) {}
+}
+function chatMdPdf(mi, k) {
+  var m = CHAT.msgs[mi]; if (!m) return;
+  var tabs = mdParse(m.text).filter(function (o) { return o.tbl; }), tb = tabs[k] && tabs[k].tbl; if (!tb) return;
+  var first = String(m.text || '').split('\n').filter(function (l) { return l.trim() && !/^\s*\|/.test(l); })[0] || '';
+  repPrint({ title: first.replace(/\*\*/g, '').slice(0, 60) || 'جدول المحادثة', criteria: '', head: tb.head, data: tb.rows, foot: [], listed: tb.rows.length, kind: 'chat' }, '');
+  try { if (typeof showSnack === 'function') showSnack('📄 في نافذة الطباعة اختر «حفظ كـ PDF»'); } catch (e) {}
+}
+function chatMdXls(mi, k) {
+  var m = CHAT.msgs[mi]; if (!m) return;
+  var tabs = mdParse(m.text).filter(function (o) { return o.tbl; }), tb = tabs[k] && tabs[k].tbl; if (!tb) return;
+  var first = String(m.text || '').split('\n').filter(function (l) { return l.trim() && !/^\s*\|/.test(l); })[0] || '';
+  repExcel({ title: first.replace(/\*\*/g, '').slice(0, 60) || 'جدول المحادثة', criteria: '', head: tb.head, data: tb.rows, foot: [], kind: 'chat' });
 }
 
 function viewChat() {
@@ -2587,7 +2617,7 @@ function chatRenderList() {
     }
     if (m.nav) card += '<div style="margin-top:8px;">' + btn('↗ افتح صفحة «' + esc(APP_PAGES[m.nav]) + '»', 'DAI.chatGo(' + i + ')', GHOST + 'padding:7px 12px;font-size:11px;') + '</div>';
     h += '<div style="display:flex;justify-content:flex-end;margin:8px 0;"><div style="background:' + (m.err ? '#450a0a' : '#111c33') + ';border:1px solid ' + (m.err ? '#7f1d1d' : '#1e3a5f') + ';color:' + (m.err ? '#fca5a5' : '#e2e8f0') + ';border-radius:14px 14px 14px 4px;padding:9px 12px;font-size:12px;line-height:1.95;max-width:94%;">' +
-      fmtMsg(m.text) + chatTablesHtml(m, i) + (m.clar ? '<div style="margin-top:6px;background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:8px;padding:6px 8px;">❓ ' + esc(m.clar) + '</div>' : '') + card +
+      fmtMsg(m.text, i) + chatTablesHtml(m, i) + (m.clar ? '<div style="margin-top:6px;background:#422006;border:1px solid #d97706;color:#fde68a;border-radius:8px;padding:6px 8px;">❓ ' + esc(m.clar) + '</div>' : '') + card +
       (m.err ? '' : '<div style="margin-top:6px;text-align:left;"><button onclick="DAI.chatCopy(' + i + ')" style="' + BTN + 'background:none;color:#64748b;font-size:10px;padding:2px 4px;">📋 نسخ</button></div>') +
       '</div></div>';
   });
@@ -2900,7 +2930,7 @@ window.DAI = {
   setSet: function (k, v) { if (!ST.sets) ST.sets = cfgGet(); ST.sets[k] = v; },
   chatSend: function () { chatSend(); }, chatChip: function (i) { chatSend(CHAT_CHIPS[i]); },
   chatDraft: function (v) { CHAT.draft = v; }, chatMic: chatMic, chatClear: chatClear,
-  chatGo: chatGo, chatTableXls: chatTableXls, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
+  chatGo: chatGo, chatTableXls: chatTableXls, chatMdXls: chatMdXls, chatTablePdf: chatTablePdf, chatMdPdf: chatMdPdf, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
   undo: function (fromDone) { doUndo(fromDone === true); }
 };
 
