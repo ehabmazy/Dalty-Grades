@@ -2199,6 +2199,12 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   '- Numbers and statistics: use ONLY the SETTINGS / OVERVIEW / DATA DIGEST in CONTEXT. Never invent students, grades or statistics. Refer to students as «number. name» (names may be replaced by «طالب N» when the teacher turned off name sharing). If the data does not contain the answer, say so.\n' +
   '- You CAN see every class: the selected class in full and all the other classes in compact form (section OTHER CLASSES). NEVER tell the teacher that you cannot access other classes — use that section, or "lookup" for a full digest.\n' +
   '- "lookup": when you need the full digest of ANOTHER class (or another week) to answer, set {"class":"exact class name","week":N}, leave "reply" empty and the app will call you again with that data (max 2 lookups per question). Do not use it when the selected class is enough.\n' +
+  '- "tool": for analysis questions the digest cannot answer exactly (who declined, who is weak in X, one student\'s full profile, comparing classes, week-by-week trend), set {"name":"...","args":{...}}, leave "reply" empty and the app will run it locally and call you again with TOOL RESULT (max 4 tools per question; one tool per turn). Tools: ' +
+  '(1) student_profile {"class":"","student":12 or name} — full profile: components vs class average, rank, absences, weekly percentages; ' +
+  '(2) query_students {"class":"","metric":"total|avg_assess|avg_hw|avg_beh|exams|absences|missing","op":"top|bottom|lt|lte|gt|gte|between","value":60,"value2":80,"limit":15} — percentages for grade metrics; ' +
+  '(3) declining {"class":"","last_n":3,"min_drop":5,"direction":"down|up"} — students whose weekly percentage fell (or rose) between the last N recorded weeks and the N before; ' +
+  '(4) compare_classes {} — all classes side by side; (5) weekly_series {"class":"","student":12 (optional)} — percentage per recorded week; (6) find_student {"name":"..."}. ' +
+  'Omit "class" for the selected class. Prefer a tool over guessing; use ONLY what TOOL RESULT returns and never invent numbers.\n' +
   '- "navigate": one page id from the APP GUIDE (or "") when opening that page would help; the teacher decides whether to tap the button. Never claim you opened it.\n' +
   '- Recommendations should be concrete and short. Parent messages: polite, specific to that student\'s digest numbers, constructive; never mention other students.\n' +
   '- "ops": [] unless the teacher asks to CHANGE data. Each op may carry an optional "class":"exact class name" — without it the op applies to the SELECTED class; student numbers always refer to the roster of the class the op targets (see the digests). Global ops (add_class, rename_class, set_active_weeks, set_column_max, set_weeks_visibility) need no class. ' +
@@ -2220,7 +2226,7 @@ var SYS_AGENT = 'You are "Dalty AI" (مساعد دفتري), the built-in assist
   'Never output students absent from the roster (except add_students). Never delete students unless explicitly asked.';
 
 function classDigest(cls, week) {
-  var arr = DB.data[cls] || [], lines = [], tots = [], below = 0, tm = totalMax(), half = tm / 2, priv = !cfgGet().sendRoster;
+  var arr = DB.data[cls] || [], lines = [], tots = [], below = 0, tm = recordedMax(cls), half = tm / 2, priv = !cfgGet().sendRoster;
   var ex = function (s, pre, w) { var v = s[pre + w]; if (!recorded(v)) return null; var n = (v === 'غ') ? 0 : Number(v); return isNaN(n) ? null : n / maxFor(pre + w) * 100; };
   arr.forEach(function (s, i) {
     if (!s || !(s.name || '').trim()) return;
@@ -2313,6 +2319,133 @@ function otherDigests(cls, week) {
 }
 function clampWeek(w, dflt) { w = parseInt(w, 10); if (!w) w = dflt; return Math.min(Math.max(1, w), activeWeeks()); }
 function validPage(p) { return typeof p === 'string' && Object.prototype.hasOwnProperty.call(APP_PAGES, p) ? p : ''; }
+/* ═════ أدوات المساعد: يطلبها النموذج عند الحاجة وتُنفَّذ محلياً على بيانات التطبيق ═════
+   لا يُرسل للنموذج إلا نتيجة الأداة (أسماء الطلاب تُستبدل بـ«طالب N» إن أوقفتِ مشاركة الأسماء) */
+var TOOL_LABELS = { student_profile: 'أراجع ملف الطالب', query_students: 'أفلتر الطلاب', declining: 'أقارن بين الأسابيع',
+  compare_classes: 'أقارن الفصول', weekly_series: 'أحسب تطور الأسابيع', find_student: 'أبحث عن الطالب' };
+var TOOL_METRICS = { total: 'المجموع', avg_assess: 'متوسط التقييم', avg_hw: 'متوسط الواجب', avg_beh: 'متوسط السلوك', exams: 'الاختبارات' };
+function toolClass(a) { var c = String((a && (a['class'] || a.cls)) || '').trim(); return (DB.classes || []).indexOf(c) >= 0 ? c : ST.cls; }
+function toolName(cls, i, s) { return (i + 1) + '. ' + (cfgGet().sendRoster ? (s.name || '').trim() : ('طالب ' + (i + 1))); }
+function toolStu(cls, ref) {
+  var arr = DB.data[cls] || [], n = parseInt(ref, 10);
+  if (String(ref).trim() !== '' && !isNaN(n) && String(n) === String(ref).trim()) return arr[n - 1] && (arr[n - 1].name || '').trim() ? { s: arr[n - 1], i: n - 1 } : null;
+  if (!cfgGet().sendRoster) return null;
+  var best = null, bs = 0.6;
+  namedStudents(cls).forEach(function (e) { var sc = studentNameScore(String(ref), e.s.name); if (sc >= bs) { bs = sc; best = e; } });
+  return best;
+}
+function toolPct(s, cls, metric) {
+  var m = metricOf(s, cls, { type: metric });
+  return m && m.max ? m.v / m.max * 100 : null;
+}
+function toolMissing(s, upTo) {
+  var miss = 0, w;
+  for (w = 1; w <= upTo; w++) ['a', 'h', 'bw'].forEach(function (p) { var v = s[p + w]; if (v !== 'م' && !recorded(v)) miss++; });
+  return miss;
+}
+function recordedWeeks(cls) {
+  var out = [], w;
+  for (w = 1; w <= activeWeeks(); w++) {
+    var any = namedStudents(cls).some(function (e) { return weekPctOf(e.s, w) !== null; });
+    if (any) out.push(w);
+  }
+  return out;
+}
+function toolStudentProfile(a, cls) {
+  var f = toolStu(cls, a.student);
+  if (!f) return 'لم أجد الطالب «' + a.student + '» في فصل ' + cls + (cfgGet().sendRoster ? '' : ' (الأسماء مخفية: استخدم رقم الطالب)') + '.';
+  var s = f.s, lines = [], list = namedStudents(cls);
+  if (!hasAnyGrade(s) || s._totalAbsent) return toolName(cls, f.i, s) + ': لا توجد درجات مرصودة بعد.';
+  lines.push('الطالب ' + toolName(cls, f.i, s) + ' — فصل ' + cls + ' (الدرجة العظمى المرصودة ' + recordedMax(cls) + ')');
+  Object.keys(TOOL_METRICS).forEach(function (k) {
+    var mine = metricOf(s, cls, { type: k }); if (!mine) { lines.push(TOOL_METRICS[k] + ': لم يُرصد'); return; }
+    var p = mine.v / mine.max * 100, ps = [];
+    list.forEach(function (o) { var q = toolPct(o.s, cls, k); if (q !== null) ps.push(q); });
+    var avg = ps.length ? ps.reduce(function (x, y) { return x + y; }, 0) / ps.length : null;
+    var rank = ps.length ? 1 + ps.filter(function (x) { return x > p + 1e-9; }).length : 0;
+    lines.push(TOOL_METRICS[k] + ': ' + r1(mine.v) + '/' + r1(mine.max) + ' (' + r1(p) + '٪، ' + levelOf(p) + ') — متوسط الفصل ' + (avg === null ? '-' : r1(avg) + '٪') + (k === 'total' ? ' — الترتيب ' + rank + ' من ' + ps.length : ''));
+  });
+  var ab = absCountOf(cls, s); lines.push('الغياب: ' + ab.a + ' فترة' + (ab.sk ? ' (+ مرض ' + ab.sk + ')' : ''));
+  var tr = studentTrend(s); lines.push('الاتجاه: ' + tr.txt);
+  var series = [], w; for (w = 1; w <= activeWeeks(); w++) { var p2 = weekPctOf(s, w); if (p2 !== null) series.push('أ' + w + ':' + r1(p2) + '٪'); }
+  if (series.length) lines.push('النسبة الأسبوعية (تقييم/واجب/سلوك): ' + series.join(' ، '));
+  return lines.join('\n');
+}
+function toolQuery(a, cls) {
+  var metric = String(a.metric || 'total'), op = String(a.op || 'bottom'), lim = Math.min(Math.max(parseInt(a.limit, 10) || 15, 1), 40);
+  var v1 = Number(a.value), v2 = Number(a.value2), rows = [], unit = '٪';
+  namedStudents(cls).forEach(function (e) {
+    var v = null;
+    if (metric === 'absences') { v = absCountOf(cls, e.s).a; unit = ' فترة'; }
+    else if (metric === 'missing') { v = toolMissing(e.s, activeWeeks()); unit = ' خلية'; }
+    else if (TOOL_METRICS[metric]) v = toolPct(e.s, cls, metric);
+    else return;
+    if (v !== null) rows.push({ e: e, v: v });
+  });
+  if (!rows.length) return 'لا توجد بيانات كافية لهذا المقياس في فصل ' + cls + ' (المقاييس: ' + Object.keys(TOOL_METRICS).concat(['absences', 'missing']).join(', ') + ').';
+  var out;
+  if (op === 'top') out = rows.slice().sort(function (x, y) { return y.v - x.v; }).slice(0, lim);
+  else if (op === 'bottom') out = rows.slice().sort(function (x, y) { return x.v - y.v; }).slice(0, lim);
+  else { out = rows.filter(function (r) { return cmpOp(op, r.v, v1, v2); }).sort(function (x, y) { return x.v - y.v; }); }
+  var total = out.length; out = out.slice(0, lim);
+  return 'فصل ' + cls + ' — ' + (TOOL_METRICS[metric] || (metric === 'absences' ? 'فترات الغياب' : 'الخلايا غير المرصودة')) + ' — ' + op + (op === 'top' || op === 'bottom' ? '' : ' ' + v1 + (op === 'between' ? '–' + v2 : '')) +
+    ' — المطابقون ' + total + ' من ' + rows.length + (total > out.length ? ' (عُرض ' + out.length + ')' : '') + ':\n' +
+    out.map(function (r) { return toolName(cls, r.e.i, r.e.s) + ' | ' + r1(r.v) + unit; }).join('\n');
+}
+function toolDeclining(a, cls) {
+  var n = Math.min(Math.max(parseInt(a.last_n, 10) || 3, 1), 6), minD = Number(a.min_drop); if (isNaN(minD)) minD = 5;
+  var dir = String(a.direction || 'down') === 'up' ? 1 : -1, rows = [];
+  namedStudents(cls).forEach(function (e) {
+    var pts = [], w; for (w = 1; w <= activeWeeks(); w++) { var p = weekPctOf(e.s, w); if (p !== null) pts.push(p); }
+    if (pts.length < 2 * n) return;
+    var avg = function (x) { return x.reduce(function (s1, s2) { return s1 + s2; }, 0) / x.length; };
+    var d = avg(pts.slice(-n)) - avg(pts.slice(-2 * n, -n));
+    if (dir < 0 ? d <= -minD : d >= minD) rows.push({ e: e, d: d, last: avg(pts.slice(-n)) });
+  });
+  rows.sort(function (x, y) { return dir < 0 ? x.d - y.d : y.d - x.d; });
+  if (!rows.length) return 'لا يوجد طلاب ' + (dir < 0 ? 'تراجعوا' : 'تحسّنوا') + ' بمقدار ' + minD + '٪ أو أكثر بين آخر ' + n + ' أسابيع مرصودة والـ' + n + ' التي قبلها (فصل ' + cls + ').';
+  return 'فصل ' + cls + ' — ' + (dir < 0 ? 'التراجع' : 'التحسن') + ' بين آخر ' + n + ' أسابيع مرصودة وما قبلها (' + rows.length + ' طالب):\n' +
+    rows.slice(0, 30).map(function (r) { return toolName(cls, r.e.i, r.e.s) + ' | ' + (r.d > 0 ? '+' : '') + r1(r.d) + '٪ | مستواه الحالي ' + r1(r.last) + '٪'; }).join('\n');
+}
+function toolCompare() {
+  return 'مقارنة الفصول (نسب مئوية من الدرجة العظمى المرصودة):\n' + (DB.classes || []).map(function (c) {
+    var list = namedStudents(c), o = {};
+    Object.keys(TOOL_METRICS).forEach(function (k) {
+      var ps = []; list.forEach(function (e) { var q = toolPct(e.s, c, k); if (q !== null) ps.push(q); });
+      o[k] = ps.length ? r1(ps.reduce(function (x, y) { return x + y; }, 0) / ps.length) + '٪' : '-';
+    });
+    var ab = list.map(function (e) { return absCountOf(c, e.s).a; }), abAvg = ab.length ? r1(ab.reduce(function (x, y) { return x + y; }, 0) / ab.length) : '-';
+    return c + ' (' + list.length + ' طالب): المجموع ' + o.total + ' | تقييم ' + o.avg_assess + ' | واجب ' + o.avg_hw + ' | سلوك ' + o.avg_beh + ' | اختبارات ' + o.exams + ' | غياب/طالب ' + abAvg;
+  }).join('\n');
+}
+function toolWeekly(a, cls) {
+  var out = [], f = a.student !== undefined && a.student !== '' ? toolStu(cls, a.student) : null;
+  if (a.student !== undefined && a.student !== '' && !f) return 'لم أجد الطالب «' + a.student + '» في فصل ' + cls + '.';
+  recordedWeeks(cls).forEach(function (w) {
+    if (f) { var p = weekPctOf(f.s, w); if (p !== null) out.push('أسبوع ' + w + ': ' + r1(p) + '٪'); }
+    else { var ps = []; namedStudents(cls).forEach(function (e) { var q = weekPctOf(e.s, w); if (q !== null) ps.push(q); }); if (ps.length) out.push('أسبوع ' + w + ': ' + r1(ps.reduce(function (x, y) { return x + y; }, 0) / ps.length) + '٪ (' + ps.length + ' طالب)'); }
+  });
+  return (f ? 'تطور ' + toolName(cls, f.i, f.s) : 'تطور متوسط الفصل ' + cls) + ' (تقييم/واجب/سلوك):\n' + (out.join('\n') || 'لا توجد أسابيع مرصودة.');
+}
+function toolFind(a) {
+  if (!cfgGet().sendRoster) return 'مشاركة الأسماء متوقفة — لا أستطيع البحث بالاسم. استخدم رقم الطالب.';
+  var q = String(a.name || ''), found = [];
+  (DB.classes || []).forEach(function (c) { namedStudents(c).forEach(function (e) { var sc = studentNameScore(q, e.s.name); if (sc >= 0.6) found.push({ c: c, e: e, sc: sc }); }); });
+  found.sort(function (x, y) { return y.sc - x.sc; });
+  return found.length ? 'المطابقون لـ«' + q + '»:\n' + found.slice(0, 8).map(function (f) { return f.c + ' | ' + toolName(f.c, f.e.i, f.e.s); }).join('\n') : 'لا يوجد طالب بهذا الاسم.';
+}
+function runChatTool(t) {
+  try {
+    var name = String((t && t.name) || ''), a = (t && t.args && typeof t.args === 'object') ? t.args : {}, cls = toolClass(a);
+    if (name === 'student_profile') return toolStudentProfile(a, cls);
+    if (name === 'query_students') return toolQuery(a, cls);
+    if (name === 'declining') return toolDeclining(a, cls);
+    if (name === 'compare_classes') return toolCompare();
+    if (name === 'weekly_series') return toolWeekly(a, cls);
+    if (name === 'find_student') return toolFind(a);
+    return 'أداة غير معروفة: ' + name + ' (المتاح: ' + Object.keys(TOOL_LABELS).join(', ') + ').';
+  } catch (e) { return 'تعذّر تنفيذ الأداة: ' + (e && e.message ? e.message : e); }
+}
 function chatHistory() {
   var h = [], m = CHAT.msgs.filter(function (x) { return !x.err; }).slice(-16);
   m.forEach(function (x) {
@@ -2426,6 +2559,12 @@ function chatSend(textIn) {
         var plain = String(r.text || '').trim();
         if (!plain) throw new Error('BAD_JSON');
         return { reply: plain, ops: [], clarification: '' };
+      }
+      if (j.tool && typeof j.tool === 'object' && round < 5) {
+        var tn = String(j.tool.name || '');
+        CHAT.status = '🔧 ' + (TOOL_LABELS[tn] || 'أحسب') + '…'; chatRenderList();
+        extra += '\n\nTOOL RESULT (' + tn + '):\n' + runChatTool(j.tool);
+        return run(round + 1);
       }
       var lk = j.lookup;
       if (lk && typeof lk === 'object' && round < 2) {
