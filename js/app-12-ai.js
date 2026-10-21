@@ -1494,6 +1494,7 @@ function buildTable(j, mode) {
   });
   if (!rows.length) throw new Error('BAD_JSON');
   ST.tbl = { cols: tcols, rows: rows };
+  ST.rvf = (mode === 'att') ? 'abs' : 'all'; ST.rvKeep = {}; ST.colsOpen = undefined;
   ST.view = 'reviewTable'; render();
 }
 
@@ -1517,6 +1518,21 @@ function periodOptions(sel) {
   for (var i = 0; i < ppw; i++) h += '<option value="' + i + '"' + (sel === i ? ' selected' : '') + '>حصة ' + (i + 1) + (ps[i] && ps[i].label ? ' (' + esc(ps[i].label) + ')' : '') + '</option>';
   return h;
 }
+/* تصفية صفوف المراجعة: الغائبون فقط / تحتاج مراجعة / الكل */
+function rowAbs(r) {
+  return r.cells.some(function (c, j) { var col = ST.tbl.cols[j]; return c === 'absent' && col && col.ci !== null && col.ci !== undefined; });
+}
+function rowFlag(r) {
+  if (r.idx < 0 || r.conf === 'mid' || r.nameUnsure || r._dup) return true;
+  if (r.doubt && Object.keys(r.doubt).length) return true;
+  var att = ST.mode === 'att';
+  return r.cells.some(function (c, j) {
+    var col = ST.tbl.cols[j]; if (!col) return false;
+    if (att) return c === 'unknown' && col.ci !== null && col.ci !== undefined;
+    if (col.type === 'ignore') return false;
+    var key = keyOf(col.type, col.week); return !!(key && normVal(c, maxFor(key)).bad);
+  });
+}
 function viewReviewTable() {
   var mode = ST.mode, att = mode === 'att';
   head(att ? 'مراجعة الغياب' : 'مراجعة الدرجات', true);
@@ -1539,7 +1555,9 @@ function viewReviewTable() {
   if (notes.length) h += '<div style="font-size:10px;line-height:1.9;margin-bottom:8px;background:#0b1220;border:1px solid #1e293b;border-radius:8px;padding:6px 8px;">' + notes.join('<br>') + '</div>';
   if (att) h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;font-size:11px;color:#94a3b8;">الأسبوع:<select style="' + SEL + '" onchange="DAI.setWeekRev(this.value)">' + weekOptions(ST.week) + '</select></div>';
   /* ربط الأعمدة */
-  h += '<div style="background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;margin-bottom:10px;"><div style="font-size:10px;color:#64748b;margin-bottom:6px;">ربط أعمدة الصورة بالتطبيق:</div>';
+  var colWarn = ST.tbl.cols.some(function (c) { return /راجع|خارج|لا توجد|مكرر|حدّد|تجاهل/.test(c.note || '') || (att && (c.ci === null || c.ci === undefined)); });
+  var colsOpen = ST.colsOpen === undefined ? colWarn : ST.colsOpen;
+  h += '<details ' + (colsOpen ? 'open ' : '') + 'ontoggle="DAI.colsOpen(this.open)" style="background:#0b1220;border:1px solid #1e293b;border-radius:10px;padding:8px;margin-bottom:10px;"><summary style="font-size:11px;color:#94a3b8;cursor:pointer;">ربط أعمدة الصورة بالتطبيق (' + ST.tbl.cols.length + ')' + (colWarn ? ' <span style="color:#fbbf24;">⚠️ تحتاج مراجعة</span>' : '') + '</summary><div style="margin-top:8px;">';
   ST.tbl.cols.forEach(function (c, j) {
     h += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap;"><span style="font-size:11px;color:#e2e8f0;min-width:78px;"><b>' + (j + 1) + '</b> · ' + esc(c.label) + '</span>' +
       (c.note ? '<span style="font-size:10px;line-height:1.7;width:100%;color:' + (/راجع|خارج|لا توجد|مكرر|حدّد|تجاهل/.test(c.note) ? '#fbbf24' : '#6ee7b7') + ';">📅 ' + esc(c.note) + '</span>' : '');
@@ -1551,13 +1569,25 @@ function viewReviewTable() {
     }
     h += '</div>';
   });
-  h += '</div>';
+  h += '</div></details>';
   /* خيارات */
   if (att) h += '<label style="display:block;font-size:11px;color:#cbd5e1;margin-bottom:8px;"><input type="checkbox" ' + (ST.opts.clearPresent ? 'checked' : '') + ' onchange="DAI.opt(\'clearPresent\',this.checked)"> إلغاء الغياب المسجَّل سابقاً لمن عُلِّم «حاضراً» في الصورة</label>';
   else h += '<label style="display:block;font-size:11px;color:#cbd5e1;margin-bottom:8px;"><input type="checkbox" ' + (ST.opts.skipExisting ? 'checked' : '') + ' onchange="DAI.opt(\'skipExisting\',this.checked)"> لا تستبدل الدرجات الموجودة (تعبئة الخانات الفارغة فقط)</label>';
+  /* تبويبات التصفية */
+  var nAbs = 0, nFlag = 0;
+  ST.tbl.rows.forEach(function (r) { if (rowAbs(r)) nAbs++; if (rowFlag(r)) nFlag++; });
+  var rvf = ST.rvf || (att ? 'abs' : 'all'); if (rvf === 'abs' && !nAbs) rvf = 'all';
+  var tabBtn = function (k, label, n) {
+    var on = rvf === k;
+    return '<button onclick="DAI.rvFilter(\'' + k + '\')" style="' + BTN + 'flex:1;font-size:11px;padding:8px 6px;white-space:nowrap;border:1px solid ' + (on ? '#6366f1' : '#1e3a5f') + ';background:' + (on ? '#312e81' : '#111c33') + ';color:' + (on ? '#e0e7ff' : '#93c5fd') + ';">' + label + ' (' + n + ')</button>';
+  };
+  h += '<div style="display:flex;gap:6px;margin-bottom:8px;">' + (att ? tabBtn('abs', '🔴 الغائبون', nAbs) : '') + tabBtn('flag', '⚠️ تحتاج مراجعة', nFlag) + tabBtn('all', '📋 الكل', ST.tbl.rows.length) + '</div>' +
+    '<div id="daiWarn"></div>';
   /* الصفوف */
-  var arrS = DB.data[ST.cls] || [];
+  var arrS = DB.data[ST.cls] || [], shown = 0;
   ST.tbl.rows.forEach(function (r, i) {
+    if (!(ST.rvKeep && ST.rvKeep[i]) && ((rvf === 'abs' && !rowAbs(r)) || (rvf === 'flag' && !rowFlag(r)))) return;
+    shown++;
     var cc = r.idx < 0 ? '#7f1d1d' : (r._dup ? '#6d28d9' : (r.conf === 'mid' || r.nameUnsure ? '#b45309' : '#1e293b'));
     h += '<div style="border:1px solid ' + cc + ';border-radius:10px;padding:7px 8px;margin-bottom:6px;background:#0b1220;">' +
       '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;"><span style="font-size:10px;color:#64748b;min-width:70px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(r.name) + '">' + esc(r.name) + '</span>' +
@@ -1582,7 +1612,8 @@ function viewReviewTable() {
     });
     h += '</div></div>';
   });
-  h += '<div id="daiSum" style="position:sticky;bottom:-18px;background:#0f172a;padding:10px 0 4px;border-top:1px solid #1e293b;"></div>';
+  if (!shown) h += '<div style="text-align:center;font-size:12px;color:#94a3b8;padding:18px 0;">' + (rvf === 'flag' ? '✅ لا توجد صفوف تحتاج مراجعة' : 'لا توجد صفوف هنا') + '</div>';
+  h += '<div id="daiSum" style="position:sticky;bottom:-18px;background:#0f172a;padding:8px 0 4px;border-top:1px solid #1e293b;"></div>';
   box().innerHTML = h;
   paneBind();
   updateSummary();
@@ -1591,20 +1622,27 @@ function updateSummary() {
   var el = document.getElementById('daiSum'); if (!el || !ST || !ST.tbl) return;
   reviewSave();
   var plan = planFromTable(curTable());
-  var n = plan.cells.length + plan.abs.length;
-  var h = '<div style="font-size:11px;color:#cbd5e1;line-height:1.9;margin-bottom:6px;">';
+  var n = plan.cells.length + plan.abs.length, t = '';
   if (ST.mode === 'att') {
     var add = plan.abs.filter(function (a) { return a.nu === 'abs'; }).length, del = plan.abs.length - add;
-    h += 'سيُسجَّل <b style="color:#fca5a5;">' + add + '</b> غياب' + (del ? ' ويُلغى <b>' + del + '</b>' : '') + (plan.skipped ? ' · تُجوهل ' + plan.skipped + ' (مرض مسجَّل)' : '');
+    t = 'سيُسجَّل <b style="color:#fca5a5;">' + add + '</b> غياب' + (del ? ' ويُلغى <b>' + del + '</b>' : '') + (plan.skipped ? ' · تُجوهل ' + plan.skipped + ' (مرض مسجَّل)' : '');
   } else {
-    h += 'سيُرصد <b style="color:#a5b4fc;">' + plan.cells.length + '</b> درجة' + (plan.over ? ' <span style="color:#fbbf24;">(منها ' + plan.over + ' استبدال)</span>' : '') + (plan.skipped ? ' · تُجوهل ' + plan.skipped + ' (موجودة/غير صالحة)' : '');
+    t = 'سيُرصد <b style="color:#a5b4fc;">' + plan.cells.length + '</b> درجة' + (plan.over ? ' <span style="color:#fbbf24;">(منها ' + plan.over + ' استبدال)</span>' : '') + (plan.skipped ? ' · تُجوهل ' + plan.skipped + ' (موجودة/غير صالحة)' : '');
   }
-  h += '</div>';
-  var dd = {}, dn = 0; ST.tbl.rows.forEach(function (r) { if (r.idx >= 0) { if (dd[r.idx]) dn++; dd[r.idx] = 1; } });
-  if (dn) h += '<div style="font-size:10px;color:#c4b5fd;margin-bottom:6px;">⚠️ ' + dn + ' صف يشير لطالب سبق اختياره — راجع الصفوف ذات الإطار البنفسجي</div>';
-  if (plan.warn.length) h += '<div style="font-size:10px;color:#fbbf24;margin-bottom:6px;">' + plan.warn.map(esc).join('<br>') + '</div>';
-  h += btn(n ? '✅ تطبيق (' + n + ')' : 'لا يوجد ما يُطبَّق', 'DAI.applyTable()', PRIMARY + 'width:100%;' + (n ? '' : 'opacity:.45;'), n ? '' : 'disabled');
-  el.innerHTML = h;
+  /* الشريط الثابت: سطر واحد فقط (الملخص + زر التطبيق) ليبقى معظم الشاشة قابلاً للتمرير */
+  el.innerHTML = '<div style="display:flex;gap:8px;align-items:center;"><div style="flex:1;min-width:0;font-size:11px;color:#cbd5e1;line-height:1.7;">' + t + '</div>' +
+    btn(n ? '✅ تطبيق (' + n + ')' : 'لا يوجد ما يُطبَّق', 'DAI.applyTable()', PRIMARY + 'padding:11px 16px;white-space:nowrap;flex-shrink:0;' + (n ? '' : 'opacity:.45;'), n ? '' : 'disabled') + '</div>';
+  /* التنبيهات تذهب لمنطقة عادية داخل الصفحة (قابلة للتمرير) */
+  var wEl = document.getElementById('daiWarn');
+  if (wEl) {
+    var dd = {}, dn = 0, items = [];
+    ST.tbl.rows.forEach(function (r) { if (r.idx >= 0) { if (dd[r.idx]) dn++; dd[r.idx] = 1; } });
+    if (dn) items.push('🟪 ' + dn + ' صف يشير لطالب سبق اختياره — راجع الصفوف ذات الإطار البنفسجي');
+    plan.warn.forEach(function (w) { items.push(esc(w)); });
+    wEl.innerHTML = !items.length ? '' : (items.length <= 2
+      ? '<div style="font-size:10px;color:#fbbf24;line-height:1.8;margin-bottom:8px;">' + items.join('<br>') + '</div>'
+      : '<details style="margin-bottom:8px;font-size:10px;color:#fbbf24;"><summary style="cursor:pointer;">⚠️ ' + items.length + ' تنبيهات</summary><div style="line-height:1.8;margin-top:4px;">' + items.join('<br>') + '</div></details>');
+  }
 }
 function applyTable() {
   var plan = planFromTable(curTable());
@@ -3501,7 +3539,7 @@ function idbDel(k) { return idb().then(function (db) { return new Promise(functi
 function reviewSave() {
   try {
     if (!ST || (ST.view !== 'reviewTable' && ST.view !== 'reviewNames')) return;
-    localStorage.setItem(RV_KEY, JSON.stringify({ t: Date.now(), view: ST.view, mode: ST.mode, cls: ST.cls, week: ST.week, note: ST.note, opts: ST.opts, names: ST.names, gdef: ST.gdef, tbl: ST.tbl, pane: ST.pane }));
+    localStorage.setItem(RV_KEY, JSON.stringify({ t: Date.now(), view: ST.view, mode: ST.mode, cls: ST.cls, week: ST.week, note: ST.note, opts: ST.opts, names: ST.names, gdef: ST.gdef, tbl: ST.tbl, pane: ST.pane, rvf: ST.rvf, colsOpen: ST.colsOpen }));
     if (ST.imgs && ST._imgsSaved !== ST.imgs) {
       ST._imgsSaved = ST.imgs;
       idbSet('review_imgs', ST.imgs.map(function (im) { return { dataUrl: im.dataUrl, name: im.name }; }));
@@ -3524,7 +3562,7 @@ function reviewRestore() {
         if (!ST) return;
         ST.mode = o.mode; ST.cls = o.cls; ST.week = o.week || ST.week; ST.note = o.note || '';
         if (o.opts) ST.opts = o.opts; if (o.names) ST.names = o.names; if (o.gdef) ST.gdef = o.gdef;
-        ST.tbl = o.tbl || null; ST.pane = o.pane || null;
+        ST.tbl = o.tbl || null; ST.pane = o.pane || null; ST.rvf = o.rvf; ST.colsOpen = o.colsOpen; ST.rvKeep = {};
         ST.imgs = (arr || []).map(function (im) { return { dataUrl: im.dataUrl, b64: String(im.dataUrl).split(',')[1], name: im.name }; });
         ST._imgsSaved = ST.imgs;
         if (o.view === 'reviewTable' && !ST.tbl) { ST.view = 'chat'; render(); return; }
@@ -3627,6 +3665,7 @@ window.DAI = {
   setColType: function (j, v) { ST.tbl.cols[j].type = v; render(); },
   setColWeek: function (j, v) { ST.tbl.cols[j].week = parseInt(v, 10) || 1; render(); },
   mark: function (i, j) {
+    ST.rvKeep = ST.rvKeep || {}; ST.rvKeep[i] = 1;
     var c = ST.tbl.rows[i].cells, o = { absent: 'present', present: 'unknown', unknown: 'absent' };
     c[j] = o[c[j]] || 'absent'; if (ST.tbl.rows[i].doubt) delete ST.tbl.rows[i].doubt[j]; render();
   },
@@ -3665,6 +3704,8 @@ window.DAI = {
   prefToggle: function (v) { var o = prefsGet(); o.on = !!v; prefsSet(o); },
   prefPreset: function (i) { if (PREF_PRESETS[i]) { prefAdd(PREF_PRESETS[i]); prefRefresh(); } },
   prefClear: function () { if (confirm('مسح كل التفضيلات المحفوظة؟')) { prefsSet({ on: prefsGet().on, items: [] }); prefRefresh(); } },
+  rvFilter: function (k) { ST.rvf = k; ST.rvKeep = {}; ST._lv = null; render(); },
+  colsOpen: function (v) { ST.colsOpen = !!v; reviewSave(); },
   paneToggle: function () { var p = paneState(); p.open = !p.open; paneRedraw(); },
   paneImg: function (i) { var p = paneState(); p.idx = i; p.sx = 0; p.sy = 0; paneRedraw(); },
   paneZoomBy: function (d) { var p = paneState(), k = 0, j; for (j = 0; j < PANE_Z.length; j++) if (PANE_Z[j] <= p.zoom) k = j; k = Math.max(0, Math.min(PANE_Z.length - 1, k + d)); paneSetZoom(PANE_Z[k]); reviewSave(); },
