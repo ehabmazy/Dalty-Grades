@@ -65,17 +65,17 @@ var SCH_COL = sObj({ label: S_STR, date: S_STR, day: S_STR, type: { type: 'strin
 var SCH_COL_ATT = sObj({ label: S_STR, date: S_STR, day: S_STR }, ['label']);
 var SCH_ATT = sObj({
   columns: sArr(SCH_COL_ATT),
-  students: sArr(sObj({ no: S_NNUM, name: S_STR, marks: sArr({ type: 'string', enum: ['absent', 'present', 'unknown'] }), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' } }, ['name', 'marks']))
+  students: sArr(sObj({ no: S_NNUM, name: S_STR, marks: sArr({ type: 'string', enum: ['absent', 'present', 'unknown'] }), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' }, y: S_NNUM, img: { type: ['integer', 'null'] } }, ['name', 'marks']))
 }, ['columns', 'students']);
 var SCH_GR = sObj({
   columns: sArr(SCH_COL),
-  students: sArr(sObj({ no: S_NNUM, name: S_STR, values: sArr(S_NSTR), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' } }, ['name', 'values']))
+  students: sArr(sObj({ no: S_NNUM, name: S_STR, values: sArr(S_NSTR), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' }, y: S_NNUM, img: { type: ['integer', 'null'] } }, ['name', 'values']))
 }, ['columns', 'students']);
 var SCH_NM = sObj({ names: sArr(S_STR) }, ['names']);
 var SCH_AUTO = sObj({
   kind: { type: 'string', enum: ['att', 'grades', 'names'] },
   columns: sArr(SCH_COL),
-  students: sArr(sObj({ no: S_NNUM, name: S_STR, marks: sArr(S_STR), values: sArr(S_NSTR), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' } }, ['name'])),
+  students: sArr(sObj({ no: S_NNUM, name: S_STR, marks: sArr(S_STR), values: sArr(S_NSTR), doubt: sArr({ type: 'integer' }), name_unsure: { type: 'boolean' }, y: S_NNUM, img: { type: ['integer', 'null'] } }, ['name'])),
   names: sArr(S_STR)
 }, ['kind']);
 /* تعليمات حرّة البنية (ops متعددة الأشكال): مخطط الحقول العليا فقط */
@@ -317,7 +317,7 @@ function prepImage(file) {
     var url = URL.createObjectURL(file);
     var img = new Image();
     img.onload = function () {
-      var max = 2000, w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      var max = 2600, w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
       var sc = Math.min(1, max / Math.max(w, h));
       var c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(w * sc)); c.height = Math.max(1, Math.round(h * sc));
@@ -325,7 +325,7 @@ function prepImage(file) {
       x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
       x.drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      var d = c.toDataURL('image/jpeg', 0.85);
+      var d = c.toDataURL('image/jpeg', 0.9);
       res({ dataUrl: d, b64: d.split(',')[1], name: file.name || 'image' });
     };
     img.onerror = function () { URL.revokeObjectURL(url); rej(new Error('IMG')); };
@@ -1060,7 +1060,7 @@ function open(mode) {
 function closeAI() {
   if (_abort) { try { _abort.abort(); } catch (e) {} }
   var o = ov(); if (o) o.remove();
-  ST = null;
+  ST = null; reviewClear();
   hideMini(); AI_OPEN = false; chatSave(); try { updateBadge(); } catch (e) {}
 }
 
@@ -1077,7 +1077,7 @@ function head(title, back) {
 
 function render() {
   if (!ST || !box()) return;
-  var v = ST.view;
+  var v = ST.view, isRev = (v === 'reviewTable' || v === 'reviewNames'), keepTop = (isRev && ST._lv === v) ? box().scrollTop : 0;
   if (v === 'home') viewHome();
   else if (v === 'settings') viewSettings();
   else if (v === 'input') viewInput();
@@ -1091,7 +1091,8 @@ function render() {
   else if (v === 'rep') viewRep();
   else if (v === 'repOut') viewRepOut();
   else if (v === 'done') viewDone();
-  box().scrollTop = 0;
+  box().scrollTop = keepTop; ST._lv = v;
+  if (isRev) reviewSave(); else if (v !== 'loading') reviewClear();
 }
 
 /* ───────── الرئيسية ───────── */
@@ -1298,12 +1299,12 @@ function analyze() {
       ? 'Class roster (hint only, to help read unclear handwriting — transcribe what is written; do NOT add roster students who are absent from the sheet):\n' + rosterText(cls) + '\n\n'
       : '\n');
   var DATEF = 'Each column header may show a DATE and a DAY NAME (e.g. "الأحد 12/10" or "١٢/١٠"). Copy them per column: "date" as ASCII digits "D/M" or "D/M/YYYY" exactly as written (convert Arabic-Indic digits; never guess a missing year or day), "day" as the weekday name as written; use "" when absent.';
-  var DOUBTF = ' Honesty about uncertainty: in each student\'s "doubt" list the 0-based column indexes whose mark/value you could NOT read with confidence (blurry, overwritten, ambiguous digit such as 1/7 or 3/8), and set "name_unsure" to true when the name is hard to read. Never guess silently; an empty list means you are confident.';
+  var DOUBTF = ' Honesty about uncertainty: in each student\'s "doubt" list the 0-based column indexes whose mark/value you could NOT read with confidence (blurry, overwritten, ambiguous digit such as 1/7 or 3/8), and set "name_unsure" to true when the name is hard to read. Never guess silently; an empty list means you are confident. Also give each student "y" = the vertical centre of that student\'s row as a fraction of the image height (0 = top edge, 1 = bottom edge, e.g. 0.42) and "img" = the 0-based index of the image that row appears in (0 for a single image); use null when unsure. Read every digit literally: never normalise a value to look plausible, keep decimals such as 7.5 exactly, and when two handwritten digits are confusable (1/7, 3/8, 0/6) list that column in "doubt".';
   var pAtt = base + 'This is an ATTENDANCE sheet. Return exactly: {"columns":[{"label":"column header text; use \"عمود N\" if none","date":"","day":""}],' +
-    '"students":[{"no":<serial number printed on sheet or null>,"name":"name as written","marks":["absent"|"present"|"unknown",...],"doubt":[],"name_unsure":false}]}.\n' +
+    '"students":[{"no":<serial number printed on sheet or null>,"name":"name as written","marks":["absent"|"present"|"unknown",...],"doubt":[],"name_unsure":false,"y":0.42,"img":0}]}.\n' +
     '"marks" must have exactly one entry per column, in the same order as "columns". Absent is usually marked by غ / غائب / ✗ / a filled circle or colored cell; present by ✓ or the sheet legend\'s symbol; ' +
     'if the sheet has a legend follow it. If a cell is empty: treat as "present" only when other students have explicit absence marks in that column; otherwise "unknown". ' + DATEF + DOUBTF;
-  var pGr = base + 'This is a GRADES sheet. Return exactly: {"columns":[{"label":"column header","date":"","day":"","type":"hw|assess|beh|ex1|ex2|unknown"}],"students":[{"no":<serial or null>,"name":"name as written","values":["17"|"غ"|"م"|null,...],"doubt":[],"name_unsure":false}]}.\n' +
+  var pGr = base + 'This is a GRADES sheet. Return exactly: {"columns":[{"label":"column header","date":"","day":"","type":"hw|assess|beh|ex1|ex2|unknown"}],"students":[{"no":<serial or null>,"name":"name as written","values":["17"|"غ"|"م"|null,...],"doubt":[],"name_unsure":false,"y":0.42,"img":0}]}.\n' +
     'Include only columns that hold grades (skip serial/name/total/signature columns). "values" must have one entry per column; copy each value exactly as written (digits may be Arabic-Indic), use null if empty or unreadable. Do not compute anything. ' +
     '"type" from the header words: واجب=hw, تقييم=assess, سلوك=beh, اختبار أول/١=ex1, اختبار ثاني/٢=ex2; use "unknown" when the header does not say. ' + DATEF + DOUBTF;
   var pNm = base + 'This is a student NAME LIST. Return exactly: {"names":["full name 1","full name 2",...]} — one string per student, in the order shown, without numbering or bullets. ' +
@@ -1393,6 +1394,8 @@ function colNote(info, extra) {
   return p.join(' — ');
 }
 
+function rowY(s) { var v = typeof s.y === 'number' ? s.y : parseFloat(s.y); return (isFinite(v) && v >= 0 && v <= 1) ? v : null; }
+function rowImg(s) { var v = parseInt(s.img, 10); return v >= 0 ? v : 0; }
 /* أقرب اقتراحين من أسماء الفصل (لتصحيح المطابقة بنقرة) */
 function topCands(nm, arr, skipIdx) {
   var sc = [];
@@ -1402,6 +1405,7 @@ function topCands(nm, arr, skipIdx) {
 }
 function rowNote(r, i) {
   var arr = DB.data[ST.cls] || [], out = [], ch = '';
+  var loc = typeof r.y === 'number' ? '<button onclick="DAI.locate(' + i + ')" title="أرِني هذا الصف في الصورة (تقريبي)" style="' + BTN + 'background:#14532d;color:#bbf7d0;font-size:10px;padding:3px 9px;">🎯 في الصورة</button>' : '';
   if (r.idx < 0) out.push('<span style="color:#fca5a5;">لم يُطابَق مع أي طالب</span>');
   else if (r._dup) out.push('<span style="color:#c4b5fd;">⚠️ نفس الطالب في صف آخر</span>');
   else if (r.conf === 'mid') out.push('<span style="color:#fbbf24;">مطابقة تقريبية — تأكد</span>');
@@ -1409,8 +1413,8 @@ function rowNote(r, i) {
   if (r.idx < 0 || r.conf === 'mid' || r.nameUnsure || r._dup) (r.cands || []).forEach(function (c) {
     if (c.i !== r.idx && arr[c.i]) ch += '<button onclick="DAI.setRowStu(' + i + ',' + c.i + ')" style="' + BTN + 'background:#172554;color:#bfdbfe;border:1px solid #1e40af;font-size:10px;padding:3px 8px;">هل تقصد: ' + (c.i + 1) + '. ' + esc(arr[c.i].name) + '؟</button>';
   });
-  if (!out.length && !ch) return '';
-  return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:10px;margin-bottom:5px;">' + out.join(' · ') + ch + '</div>';
+  if (!out.length && !ch && !loc) return '';
+  return '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:10px;margin-bottom:5px;">' + loc + out.join(' · ') + ch + '</div>';
 }
 function buildNames(j) {
   var names = (j && j.names) || [];
@@ -1486,7 +1490,7 @@ function buildTable(j, mode) {
     var m = matchStudent(nm, s.no, arrS);
     var dset = {};
     (Array.isArray(s.doubt) ? s.doubt : []).forEach(function (x) { var k = parseInt(x, 10); if (k >= 0 && k < n) dset[k] = true; });
-    rows.push({ name: nm, no: s.no, idx: m.idx, conf: m.conf, cells: cells, doubt: dset, nameUnsure: s.name_unsure === true, cands: topCands(nm, arrS, m.idx) });
+    rows.push({ name: nm, no: s.no, idx: m.idx, conf: m.conf, cells: cells, doubt: dset, nameUnsure: s.name_unsure === true, cands: topCands(nm, arrS, m.idx), y: rowY(s), img: rowImg(s) });
   });
   if (!rows.length) throw new Error('BAD_JSON');
   ST.tbl = { cols: tcols, rows: rows };
@@ -1516,7 +1520,7 @@ function periodOptions(sel) {
 function viewReviewTable() {
   var mode = ST.mode, att = mode === 'att';
   head(att ? 'مراجعة الغياب' : 'مراجعة الدرجات', true);
-  var h = '';
+  var h = paneHtml();
   var unm = ST.tbl.rows.filter(function (r) { return r.idx < 0; }).length;
   h += '<div style="font-size:11px;color:#94a3b8;line-height:1.9;margin-bottom:8px;">قرأتُ <b style="color:#e2e8f0;">' + ST.tbl.rows.length + '</b> صفاً' + (unm ? ' — <span style="color:#fbbf24;">' + unm + ' لم يُطابَق مع طالب (اختره يدوياً أو اتركه)</span>' : '') + '.</div>';
   var arrR = DB.data[ST.cls] || [], cntIdx = {}, dupN = 0, doubtN = 0, unsureN = 0;
@@ -1580,10 +1584,12 @@ function viewReviewTable() {
   });
   h += '<div id="daiSum" style="position:sticky;bottom:-18px;background:#0f172a;padding:10px 0 4px;border-top:1px solid #1e293b;"></div>';
   box().innerHTML = h;
+  paneBind();
   updateSummary();
 }
 function updateSummary() {
   var el = document.getElementById('daiSum'); if (!el || !ST || !ST.tbl) return;
+  reviewSave();
   var plan = planFromTable(curTable());
   var n = plan.cells.length + plan.abs.length;
   var h = '<div style="font-size:11px;color:#cbd5e1;line-height:1.9;margin-bottom:6px;">';
@@ -1614,7 +1620,7 @@ function viewReviewNames() {
   head('مراجعة الأسماء', true);
   var arr = DB.data[ST.cls] || [];
   var locked = !!(DB.meta && DB.meta.namesLocked);
-  var h = '<div style="font-size:11px;color:#94a3b8;line-height:1.9;margin-bottom:6px;">عدّل الأسماء مباشرة (اسم في كل سطر). الفصل: <b style="color:#e2e8f0;">' + esc(ST.cls) + '</b> — فيه الآن ' + arr.filter(function (s) { return (s.name || '').trim(); }).length + ' اسماً.</div>' +
+  var h = paneHtml() + '<div style="font-size:11px;color:#94a3b8;line-height:1.9;margin-bottom:6px;">عدّل الأسماء مباشرة (اسم في كل سطر). الفصل: <b style="color:#e2e8f0;">' + esc(ST.cls) + '</b> — فيه الآن ' + arr.filter(function (s) { return (s.name || '').trim(); }).length + ' اسماً.</div>' +
     (locked ? '<div style="color:#fca5a5;font-size:11px;margin-bottom:8px;">🔒 الأسماء مقفلة في هذا التطبيق. افتح القفل من صفحة الدرجات أولاً.</div>' : '') +
     '<textarea id="daiNames" rows="10" oninput="DAI.namesText(this.value)" style="' + SEL + 'width:100%;box-sizing:border-box;resize:vertical;line-height:1.8;">' + esc(ST.names.text) + '</textarea>' +
     '<div style="margin:8px 0;font-size:11px;color:#cbd5e1;line-height:2;">' +
@@ -1625,6 +1631,7 @@ function viewReviewNames() {
     '<div id="daiNamesSum" style="font-size:11px;color:#a5b4fc;margin-bottom:8px;line-height:1.9;"></div>' +
     btn('✅ إدراج الأسماء', 'DAI.applyNames()', PRIMARY + 'width:100%;' + (locked ? 'opacity:.45;' : ''), locked ? 'disabled' : '');
   box().innerHTML = h;
+  paneBind();
   namesSummary();
 }
 function namesList() { return parseNamesText(ST.names.text); }
@@ -3429,6 +3436,105 @@ function imgXform(i, kind) {
   img.src = im.dataUrl;
 }
 
+/* ═════════════ لوحة الصورة داخل المراجعة (للمقارنة دون مغادرة التطبيق) ═════════════ */
+var PANE_H = [26, 38, 52], PANE_Z = [100, 150, 200, 300, 400, 500];
+function paneState() { if (!ST.pane) ST.pane = { open: true, idx: 0, zoom: 100, h: 38, sx: 0, sy: 0 }; return ST.pane; }
+function paneHtml() {
+  if (!ST || !ST.imgs || !ST.imgs.length) return '';
+  var p = paneState(); if (p.idx >= ST.imgs.length) p.idx = 0;
+  var sb = 'background:#1e293b;color:#93c5fd;font-size:12px;padding:6px 11px;flex-shrink:0;';
+  var bar = '<div style="display:flex;gap:5px;align-items:center;overflow-x:auto;margin-bottom:5px;"><button onclick="DAI.paneToggle()" style="' + BTN + sb + '">🖼 الصورة ' + (p.open ? '▴' : '▾') + '</button>';
+  if (p.open) {
+    if (ST.imgs.length > 1) bar += ST.imgs.map(function (im, i) { return '<button onclick="DAI.paneImg(' + i + ')" style="' + BTN + sb + (i === p.idx ? 'background:#4338ca;color:#fff;' : '') + '">' + (i + 1) + '</button>'; }).join('');
+    bar += '<button onclick="DAI.paneZoomBy(-1)" style="' + BTN + sb + '" title="تصغير">➖</button><button onclick="DAI.paneZoomBy(1)" style="' + BTN + sb + '" title="تكبير">➕</button>' +
+      '<button onclick="DAI.paneFit()" style="' + BTN + sb + '" title="ملاءمة العرض">⤢</button><button onclick="DAI.paneSize()" style="' + BTN + sb + '" title="ارتفاع الصورة">↕</button>';
+  }
+  bar += '</div>';
+  var view = '';
+  if (p.open) view = '<div id="daiImgView" onscroll="DAI.paneScroll(this)" style="height:' + p.h + 'vh;overflow:auto;background:#000;border:1px solid #334155;border-radius:10px;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;">' +
+    '<div id="daiImgInner" style="position:relative;width:' + p.zoom + '%;"><img src="' + ST.imgs[p.idx].dataUrl + '" draggable="false" style="width:100%;display:block;user-select:none;-webkit-user-select:none;">' +
+    '<div id="daiImgHi" style="position:absolute;left:0;right:0;display:none;background:rgba(250,204,21,.28);border-top:2px solid #facc15;border-bottom:2px solid #facc15;pointer-events:none;"></div></div></div>';
+  return '<div id="daiImgPane" style="position:sticky;top:-12px;z-index:6;background:#0f172a;padding:4px 0 6px;margin-bottom:8px;border-bottom:1px solid #1e293b;">' + bar + view + '</div>';
+}
+function paneSetZoom(z) {
+  var p = paneState(), v = document.getElementById('daiImgView'), n = document.getElementById('daiImgInner');
+  z = Math.max(100, Math.min(500, Math.round(z)));
+  if (v && n) {
+    var fx = (v.scrollLeft + v.clientWidth / 2) / (n.scrollWidth || 1), fy = (v.scrollTop + v.clientHeight / 2) / (n.scrollHeight || 1);
+    n.style.width = z + '%';
+    v.scrollLeft = fx * n.scrollWidth - v.clientWidth / 2; v.scrollTop = fy * n.scrollHeight - v.clientHeight / 2;
+    p.sx = v.scrollLeft; p.sy = v.scrollTop;
+  }
+  p.zoom = z;
+}
+function paneBind() {
+  var v = document.getElementById('daiImgView'); if (!v || !ST) return;
+  var p = paneState(); v.scrollLeft = p.sx || 0; v.scrollTop = p.sy || 0;
+  var d0 = 0, z0 = 100;
+  var dist = function (t) { var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY; return Math.sqrt(dx * dx + dy * dy); };
+  v.addEventListener('touchstart', function (e) { if (e.touches.length === 2) { d0 = dist(e.touches); z0 = paneState().zoom; } }, { passive: true });
+  v.addEventListener('touchmove', function (e) { if (e.touches.length === 2 && d0) { e.preventDefault(); paneSetZoom(z0 * dist(e.touches) / d0); } }, { passive: false });
+  v.addEventListener('touchend', function () { d0 = 0; }, { passive: true });
+  v.addEventListener('dblclick', function () { paneSetZoom(paneState().zoom > 100 ? 100 : 250); });
+}
+function paneRedraw() { var el = document.getElementById('daiImgPane'); if (el) { el.outerHTML = paneHtml(); paneBind(); } reviewSave(); }
+function paneLocate(i) {
+  var r = ST && ST.tbl && ST.tbl.rows[i]; if (!r || typeof r.y !== 'number') return;
+  var p = paneState(), changed = !p.open || (r.img < ST.imgs.length && r.img !== p.idx);
+  p.open = true; if (r.img < ST.imgs.length) p.idx = r.img;
+  if (changed || !document.getElementById('daiImgView')) paneRedraw();
+  if (p.zoom < 200) paneSetZoom(220);
+  var v = document.getElementById('daiImgView'), n = document.getElementById('daiImgInner'), hi = document.getElementById('daiImgHi'); if (!v || !n) return;
+  v.scrollTop = r.y * n.scrollHeight - v.clientHeight / 2; p.sy = v.scrollTop;
+  if (hi) {
+    hi.style.top = Math.max(0, r.y - 0.02) * 100 + '%'; hi.style.height = '4%'; hi.style.display = 'block';
+    clearTimeout(paneLocate._t); paneLocate._t = setTimeout(function () { var h2 = document.getElementById('daiImgHi'); if (h2) h2.style.display = 'none'; }, 6000);
+  }
+}
+
+/* ═════════════ حفظ المراجعة: لو أُعيد تحميل التطبيق (مثلاً بعد فتح الصورة في المعرض) تعود كما كانت ═════════════ */
+var RV_KEY = 'dalty_ai_review_v1';
+function idb() { return new Promise(function (res, rej) { try { var q = indexedDB.open('dalty_ai', 1); q.onupgradeneeded = function () { q.result.createObjectStore('kv'); }; q.onsuccess = function () { res(q.result); }; q.onerror = function () { rej(q.error); }; } catch (e) { rej(e); } }); }
+function idbSet(k, v) { return idb().then(function (db) { return new Promise(function (res) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = function () { res(true); }; tx.onerror = function () { res(false); }; }); }).catch(function () { return false; }); }
+function idbGet(k) { return idb().then(function (db) { return new Promise(function (res) { var q = db.transaction('kv', 'readonly').objectStore('kv').get(k); q.onsuccess = function () { res(q.result || null); }; q.onerror = function () { res(null); }; }); }).catch(function () { return null; }); }
+function idbDel(k) { return idb().then(function (db) { return new Promise(function (res) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(k); tx.oncomplete = function () { res(true); }; tx.onerror = function () { res(false); }; }); }).catch(function () { return false; }); }
+function reviewSave() {
+  try {
+    if (!ST || (ST.view !== 'reviewTable' && ST.view !== 'reviewNames')) return;
+    localStorage.setItem(RV_KEY, JSON.stringify({ t: Date.now(), view: ST.view, mode: ST.mode, cls: ST.cls, week: ST.week, note: ST.note, opts: ST.opts, names: ST.names, gdef: ST.gdef, tbl: ST.tbl, pane: ST.pane }));
+    if (ST.imgs && ST._imgsSaved !== ST.imgs) {
+      ST._imgsSaved = ST.imgs;
+      idbSet('review_imgs', ST.imgs.map(function (im) { return { dataUrl: im.dataUrl, name: im.name }; }));
+    }
+  } catch (e) {}
+}
+function reviewClear() { try { localStorage.removeItem(RV_KEY); } catch (e) {} idbDel('review_imgs'); }
+function reviewRestore() {
+  var o = null; try { o = JSON.parse(localStorage.getItem(RV_KEY) || 'null'); } catch (e) {}
+  if (!o) return;
+  if (Date.now() - (o.t || 0) > 12 * 3600 * 1000 || (o.view !== 'reviewTable' && o.view !== 'reviewNames')) { reviewClear(); return; }
+  var tries = 0;
+  (function wait() {
+    if (ST) return;
+    if (window.DB && DB.classes && DB.classes.length && document.body) {
+      if (DB.classes.indexOf(o.cls) < 0) { reviewClear(); return; }
+      idbGet('review_imgs').then(function (arr) {
+        if (ST) return;
+        open();
+        if (!ST) return;
+        ST.mode = o.mode; ST.cls = o.cls; ST.week = o.week || ST.week; ST.note = o.note || '';
+        if (o.opts) ST.opts = o.opts; if (o.names) ST.names = o.names; if (o.gdef) ST.gdef = o.gdef;
+        ST.tbl = o.tbl || null; ST.pane = o.pane || null;
+        ST.imgs = (arr || []).map(function (im) { return { dataUrl: im.dataUrl, b64: String(im.dataUrl).split(',')[1], name: im.name }; });
+        ST._imgsSaved = ST.imgs;
+        if (o.view === 'reviewTable' && !ST.tbl) { ST.view = 'chat'; render(); return; }
+        ST.view = o.view; render();
+        if (typeof showSnack === 'function') showSnack('↩️ استُعيد تحليلك السابق — لم يُطبَّق منه شيء بعد');
+      });
+    } else if (tries++ < 40) setTimeout(wait, 500);
+  })();
+}
+
 /* ═════════════ تصغير المساعد + حفظ المحادثة + تراجع سريع ═════════════ */
 var AI_OPEN = false;
 var CHAT_STORE = 'dalty_ai_chat_v1';
@@ -3495,8 +3601,8 @@ function chatRestore() {
     return !!o.open;
   } catch (e) { return false; }
 }
-document.addEventListener('visibilitychange', function () { if (document.hidden) chatSave(); });
-window.addEventListener('pagehide', chatSave);
+document.addEventListener('visibilitychange', function () { if (document.hidden) { chatSave(); reviewSave(); } });
+window.addEventListener('pagehide', function () { chatSave(); reviewSave(); });
 /* الضغط على شريط الأيقونات السفلي أثناء فتح المساعد يصغّره لتتابع الصفحة */
 document.addEventListener('click', function (e) {
   var o = ov(); if (!o || o.style.display === 'none') return;
@@ -3527,7 +3633,7 @@ window.DAI = {
   cell: function (i, j, v) { ST.tbl.rows[i].cells[j] = v; if (ST.tbl.rows[i].doubt) delete ST.tbl.rows[i].doubt[j]; updateSummary(); },
   opt: function (k, v) { ST.opts[k] = !!v; updateSummary(); },
   applyTable: applyTable,
-  namesText: function (v) { ST.names.text = v; namesSummary(); },
+  namesText: function (v) { ST.names.text = v; reviewSave(); namesSummary(); },
   namesMode: function (m) { ST.names.mode = m; namesSummary(); },
   namesStart: function (v) { ST.names.start = Math.max(1, parseInt(v, 10) || 1); namesSummary(); },
   namesDup: function (b) { ST.names.skipDup = !!b; namesSummary(); },
@@ -3559,6 +3665,13 @@ window.DAI = {
   prefToggle: function (v) { var o = prefsGet(); o.on = !!v; prefsSet(o); },
   prefPreset: function (i) { if (PREF_PRESETS[i]) { prefAdd(PREF_PRESETS[i]); prefRefresh(); } },
   prefClear: function () { if (confirm('مسح كل التفضيلات المحفوظة؟')) { prefsSet({ on: prefsGet().on, items: [] }); prefRefresh(); } },
+  paneToggle: function () { var p = paneState(); p.open = !p.open; paneRedraw(); },
+  paneImg: function (i) { var p = paneState(); p.idx = i; p.sx = 0; p.sy = 0; paneRedraw(); },
+  paneZoomBy: function (d) { var p = paneState(), k = 0, j; for (j = 0; j < PANE_Z.length; j++) if (PANE_Z[j] <= p.zoom) k = j; k = Math.max(0, Math.min(PANE_Z.length - 1, k + d)); paneSetZoom(PANE_Z[k]); reviewSave(); },
+  paneFit: function () { paneSetZoom(100); var v = document.getElementById('daiImgView'); if (v) { v.scrollTop = 0; v.scrollLeft = 0; } reviewSave(); },
+  paneSize: function () { var p = paneState(), k = PANE_H.indexOf(p.h); p.h = PANE_H[(k + 1) % PANE_H.length]; paneRedraw(); },
+  paneScroll: function (el) { var p = paneState(); p.sx = el.scrollLeft; p.sy = el.scrollTop; },
+  locate: paneLocate,
   alertToggle: alertToggle, alertHide: alertHide, alertDetail: alertDetail, alertAsk: alertAsk,
   chatFiles: chatAddFiles, chatRmImg: function (i) { CHAT.imgs.splice(i, 1); chatRenderAtt(); }, chatKind: function (k) { CHAT.imgKind = (CHAT.imgKind === k ? '' : k); CHAT.attHint = ''; chatRenderAtt(); },
   chatGo: chatGo, chatTableXls: chatTableXls, chatMdXls: chatMdXls, chatTablePdf: chatTablePdf, chatMdPdf: chatMdPdf, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
@@ -3583,6 +3696,7 @@ document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && ov() && ov().style.display !== 'none') minimizeAI();
 });
 (function () { if (chatRestore()) { AI_OPEN = true; setTimeout(function () { if (!ST) showMini(); }, 900); } })();
+reviewRestore();
 var tries = 0;
 (function tryMount() { if (!mountButton()) { if (tries++ < 40) setTimeout(tryMount, 500); } else { setTimeout(updateBadge, 2500); } })();
 setInterval(function () { try { updateBadge(); } catch (e) {} }, 120000);
