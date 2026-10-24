@@ -11,7 +11,9 @@ function renderStats(){
     var sts=(DB.data[cls]||[]).filter(function(s){return s.name;});
     var tots=sts.map(function(s){return calcStudent(s,cls).total;}).filter(function(t){return t!=="غ";});
     var avg=tots.length?Math.round(tots.reduce(function(a,b){return a+b;},0)/tots.length):0;
-    var above60=tots.filter(function(t){return t>=60;}).length;
+    var _pp=(DB.meta&&DB.meta.repCfg&&Number(DB.meta.repCfg.pass))||50;
+    var _rm=recordedMax(cls);
+    var above60=tots.filter(function(t){return _rm>0&&t/_rm*100>=_pp;}).length; // ناجحون = نسبة ≥ حد النجاح من الدرجة المرصودة
     var absPer=totalClassAbsencePeriods(cls);
     html+='<div class="stats-card">';
     html+='<div class="stats-cls">'+esc(cls)+'</div>';
