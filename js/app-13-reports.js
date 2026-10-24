@@ -8,7 +8,7 @@
 (function () {
 'use strict';
 
-var RP = { cls: null, prev: null, view: 'dash', si: null, miss: 'a', sort: {}, last: null };
+var RP = { cls: null, prev: null, view: 'dash', si: null, miss: 'a', fuF: 'all', sort: {}, last: null };
 
 /* ── الإعدادات الافتراضية ── */
 var DEF = { pass: 50, excel: 85, absWatch: 3, absAlert: 6, drop: 15 };
@@ -93,6 +93,7 @@ function buildModel(cls, C) {
     var r = { s: s, si: si, id: s.id, name: String(s.name).trim(), cls: cls, all: !!s._totalAbsent };
     var c = calcStudent(s, cls);
     r.calc = c;
+    r.fu = (DB.follow && DB.follow[cls] && DB.follow[cls][s.id]) || null;   // سجل المتابعة {d:تاريخ, n:سبب/ملاحظة}
     r.total = c.total;
     r.hasBeh = typeof c.avgBeh === 'number';
     r.pct = r.all ? null : (rm > 0 ? c.total / rm * 100 : 0);
@@ -389,13 +390,13 @@ function tableHtml(t, mode) {
 }
 function tdHtml(c, col, scr) {
   var o = (c && typeof c === 'object') ? c : { t: c };
-  var inner = o.h != null ? o.h : E(o.t == null ? '' : o.t);
+  var inner = (!scr && o.p != null) ? E(o.p) : (o.h != null ? o.h : E(o.t == null ? '' : o.t));
   if (scr && o.go) inner = '<a class="rp-go" onclick="RP2.go(' + o.go[0] + ',' + o.go[1] + ')">' + inner + '</a>';
   var st = '';
   if (o.c) st += 'color:' + o.c + ';';
   if (o.bg) st += 'background:' + o.bg + ';';
   if (o.b) st += 'font-weight:900;';
-  return '<td class="' + ((col && col.nm) ? 'nm' : '') + ((col && col.a === 'r') ? ' tr' : '') + ((o.h != null || o.wrap) ? ' wr' : '') + '"' + (st ? ' style="' + st + '"' : '') + '>' + inner + '</td>';
+  return '<td class="' + ((col && col.nm) ? 'nm' : '') + ((col && col.a === 'r') ? ' tr' : '') + ((o.wrap || (o.h != null && !o.nowr)) ? ' wr' : '') + '"' + (st ? ' style="' + st + '"' : '') + '>' + inner + '</td>';
 }
 
 function blocksHtml(blocks, mode) {
@@ -913,6 +914,54 @@ function R_miss(x) {
   return { title: t + ' — ' + x.cls, sub: kn[K], blocks: B, land: true };
 }
 
+/* ⑤-ب الطلبة المتعثرون (مع تأشير المتابعة وتدوين السبب) */
+var FU_REASONS = ['ضعف في المهارات الأساسية', 'غياب متكرر', 'عدم تسليم الواجبات', 'ظروف أسرية', 'ضعف التركيز', 'قلق الاختبار', 'صعوبات تعلّم', 'مشكلات سلوكية'];
+function fdate(ts) { var d = new Date(ts); return isNaN(d) ? '' : d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear(); }
+function R_weak(x) {
+  var ms = x.models(), C0 = x.cfg, t = 'الطلبة المتعثرون', all = x.all;
+  var rows = flat(ms).filter(function (r) { return r.all || r.pct < C0.pass || r.pri === 3 || (r.fu && (r.fu.d || r.fu.n)); });
+  var B = [];
+  var done = rows.filter(function (r) { return r.fu && r.fu.d; }).length;
+  B.push({ type: 'kpis', items: [
+    { i: '🆘', l: 'المتعثرون', v: rows.length, c: rows.length ? FAIL : '#10b981' },
+    { i: '✅', l: 'تمت متابعتهم', v: done, c: '#10b981' },
+    { i: '⏳', l: 'لم يُتابَعوا', v: rows.length - done, c: rows.length - done ? '#f59e0b' : '#10b981' } ] });
+  if (!rows.length) {
+    B.push({ type: 'note', t: 'لا يوجد طلبة متعثرون حالياً 🎉' });
+    return { title: t, sub: all ? 'كل الفصول' : x.cls, blocks: B };
+  }
+  var F = RP.fuF;
+  var chips = '<div class="rp-sub">' + [['all', 'الكل (' + rows.length + ')'], ['todo', 'لم يُتابَع (' + (rows.length - done) + ')'], ['done', 'تمت متابعته (' + done + ')']].map(function (q) {
+    return '<button class="rp-chip' + (q[0] === F ? ' on' : '') + '" onclick="RP2.fuFilter(\'' + q[0] + '\')">' + q[1] + '</button>';
+  }).join('') + '</div><datalist id="rpReasons">' + FU_REASONS.map(function (q) { return '<option value="' + E(q) + '">'; }).join('') + '</datalist>';
+  B.push({ type: 'html', html: chips });
+  var list = rows.filter(function (r) { var d = !!(r.fu && r.fu.d); return F === 'all' || (F === 'done' ? d : !d); })
+    .sort(function (a, b) {
+      var da = a.fu && a.fu.d ? 1 : 0, db = b.fu && b.fu.d ? 1 : 0;
+      return da - db || b.score - a.score || (a.pct == null ? -1 : b.pct == null ? 1 : a.pct - b.pct);
+    });
+  var cols = []; if (all) cols.push({ h: 'الفصل' });
+  cols.push({ h: 'الاسم', nm: 1, a: 'r' }, { h: 'تمت المتابعة' }, { h: '%' }, { h: 'الغياب' }, { h: 'أسباب التعثر', a: 'r', s: false }, { h: 'سبب / ملاحظتي', a: 'r' }, { h: 'تاريخ المتابعة' });
+  B.push({ type: 'table', id: 'weak' + (all ? '_all' : ''), title: 'قائمة المتعثرين (' + list.length + ')', cols: cols, empty: 'لا يوجد طلاب في هذه القائمة.',
+    rows: list.map(function (r) {
+      var m = ms.filter(function (q) { return q.cls === r.cls; })[0], ci = DB.classes.indexOf(r.cls);
+      var on = !!(r.fu && r.fu.d), note = (r.fu && r.fu.n) || '';
+      var ck = C(on ? '☑' : '☐', { v: on ? 1 : 0, p: on ? '☑' : '☐', nowr: 1,
+        h: '<input type="checkbox" class="rp-ck"' + (on ? ' checked' : '') + ' onchange="RP2.fu(' + ci + ',' + r.si + ',this.checked)">' });
+      var o = [];
+      if (all) o.push(C(r.cls));
+      var why = tagHtml(m, r.flags) || '<span class="rp-tag" style="color:#10b981">لا أسباب حالية</span>';
+      o.push(NM(r), ck, r.all ? C('غائب كلي', { c: FAIL, b: 1 }) : pctCell(r.pct, m), C(r.abs, { c: r.abs >= C0.absAlert ? FAIL : r.abs >= C0.absWatch ? '#f59e0b' : undefined }),
+        C(flagText(m, r.flags) || 'لا أسباب حالية', { h: why }),
+        C(note, { p: note || '—',
+          h: '<input type="text" class="rp-fi" list="rpReasons" placeholder="اكتب سبب التعثر…" value="' + E(note) + '" onchange="RP2.fuNote(' + ci + ',' + r.si + ',this.value)">' }),
+        C(on ? fdate(r.fu.d) : '—', { v: on ? r.fu.d : null }));
+      return o;
+    }),
+    note: 'المتعثر = دون حد النجاح (' + C0.pass + '%) أو غائب كلياً أو أولويته «عاجل». يبقى الطالب في القائمة بعد تجاوزه إن سبق تأشير متابعته أو تدوين سببه. «أسباب التعثر» تُستنتج تلقائياً، وخانة «سبب / ملاحظتي» لتدوين تقديرك.' });
+  return { title: t, sub: (all ? 'كل الفصول' : x.cls) + ' — حد النجاح ' + C0.pass + '%', blocks: B, land: true };
+}
+
 /* ⑫ تقرير الطالب (بطاقة الطالب / ولي الأمر) */
 function R_stu(x, si) {
   var m = x.model(x.cls), C0 = x.cfg, t = 'تقرير الطالب';
@@ -972,6 +1021,7 @@ var REPORTS = [
   { id: 'sheet', g: 1, ic: '📑', t: 'كشف الطلاب',         fn: R_sheet, all: true },
   { id: 'rank',  g: 1, ic: '🏆', t: 'الترتيب والمتفوقون', fn: R_rank, all: true },
   { id: 'risk',  g: 1, ic: '🚨', t: 'متابعة الطلاب',      fn: R_risk, all: true },
+  { id: 'weak',  g: 1, ic: '🆘', t: 'الطلبة المتعثرون',   fn: R_weak, all: true },
   { id: 'comp',  g: 1, ic: '🧩', t: 'تحليل المكوّنات',    fn: R_comp },
   { id: 'trend', g: 1, ic: '📈', t: 'التطور الأسبوعي',    fn: R_trend },
   { id: 'exam',  g: 1, ic: '📝', t: 'الاختبارات',         fn: R_exam },
@@ -1078,7 +1128,6 @@ function buildNav() {
     { p: 'absence', icon: '📋', lbl: 'الغياب', extra: '' },
     { p: 'sick', icon: '🤒', lbl: 'المرضى', extra: '' },
     { p: 'dict', icon: '🎤', lbl: 'الإملاء', extra: '' },
-    { p: 'stats', icon: '📊', lbl: 'إحصائيات', extra: '' },
     { p: 'curric', icon: '📖', lbl: 'توزيع المنهج', extra: '' },
     { p: 'settings', icon: '⚙️', lbl: 'الإعدادات', extra: '' },
     { p: 'backup', icon: '💾', lbl: 'النسخ الاحتياطي', extra: '' },
@@ -1116,6 +1165,18 @@ function cfgSave() {
 function cfgReset() { delete DB.meta.repCfg; saveDB(); cfgClose(); render(true); showSnack('تمت إعادة القيم الافتراضية'); }
 function cfgClose() { var m = $('rpModal'); if (m) m.remove(); }
 
+/* سجل المتابعة: DB.follow[الفصل][معرّف الطالب] = { d: وقت التأشير, n: السبب/الملاحظة } */
+function fuRec(ci, si, create) {
+  var cls = DB.classes[ci], s = cls && DB.data[cls] && DB.data[cls][si];
+  if (!s) return null;
+  if (!DB.follow) DB.follow = {};
+  if (!DB.follow[cls]) DB.follow[cls] = {};
+  var o = DB.follow[cls][s.id];
+  if (!o && create) o = DB.follow[cls][s.id] = {};
+  return { cls: cls, id: s.id, o: o };
+}
+function fuTidy(g) { var o = DB.follow[g.cls][g.id]; if (o && !o.d && !o.n) delete DB.follow[g.cls][g.id]; }
+
 /* ═══════════════ واجهة الأحداث العامة ═══════════════ */
 window.RP2 = {
   view: function (v) { RP.view = v; render(); var b = $('repBody'); if (b) b.scrollTop = 0; },
@@ -1141,6 +1202,18 @@ window.RP2 = {
     render(); var b = $('repBody'); if (b) b.scrollTop = 0;
   },
   pick: function (v) { RP.si = Number(v); render(true); },
+  fuFilter: function (f) { RP.fuF = f; render(true); },
+  fu: function (ci, si, on) {
+    var g = fuRec(ci, si, true); if (!g) return;
+    if (on) g.o.d = Date.now(); else delete g.o.d;
+    fuTidy(g); saveDB(); render(true);
+  },
+  fuNote: function (ci, si, v) {
+    var g = fuRec(ci, si, true); if (!g) return;
+    v = String(v || '').trim();
+    if (v) g.o.n = v; else delete g.o.n;
+    fuTidy(g); saveDB(); render(true);
+  },
   missComp: function (k) { RP.miss = k; render(true); },
   print: function () {
     if (!RP.last) { showSnack('لا يوجد تقرير للطباعة'); return; }
