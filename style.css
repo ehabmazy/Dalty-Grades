@@ -2686,13 +2686,15 @@ tr.hl-abs td{background:#fff7ed!important;}
 /* ═══ الشريط العلوي: تمرير أفقي سلس + حركة ظهور (v79) ═══ */
 /* ☰ ثابت خارج منطقة التمرير، والأزرار داخل .tb-scroll */
 .app-topbar .top-hamburger{position:relative;z-index:5;background:#0b1629;}
+.app-topbar{overflow:hidden;max-width:100vw;}
 .tb-scroll{
-  flex:1 1 auto;min-width:0;height:100%;display:flex;align-items:center;
+  flex:1 1 0px;width:0;min-width:0;height:100%;display:flex;align-items:center;
   overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;
   scroll-behavior:smooth;-webkit-overflow-scrolling:touch;
   scrollbar-width:none;overscroll-behavior-x:contain;
-  scroll-snap-type:x proximity;touch-action:pan-x;
+  scroll-snap-type:x proximity;
 }
+.app-topbar>.top-hamburger,.app-topbar>.top-user-area{flex:0 0 auto;}
 .tb-scroll::-webkit-scrollbar{display:none;}
 .tb-scroll>*{flex-shrink:0;}
 .tb-scroll .tb-menu-wrap,.tb-scroll #tbDictBtns{scroll-snap-align:start;}
