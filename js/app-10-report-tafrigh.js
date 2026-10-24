@@ -1073,7 +1073,7 @@ function tfrWeekToggle(w){
 }
 window.tfrWeeksAll=tfrWeeksAll; window.tfrWeeksNone=tfrWeeksNone; window.tfrWeekToggle=tfrWeekToggle;
 
-function tfrCalc(s, selWeeks){
+function tfrCalc(s, selWeeks, cls){
   var aSum=0,aC=0,hSum=0,hC=0;
   var weeks={};
   selWeeks.forEach(function(w){
@@ -1101,7 +1101,22 @@ function tfrCalc(s, selWeeks){
   var hasEx2=s.ex2!==undefined&&s.ex2!==''&&s.ex2!==null&&s.ex2!==0;
   var exam=hasEx2?Math.min(ex1+ex2,30):Math.min(ex1*2,30);
   var total=avgA+avgH+beh+exam;
-  return {weeks:weeks, avgA:avgA, avgH:avgH, beh:beh, exam:exam, total:total, ex1:ex1, ex2:ex2};
+  // المتوسطات والمجموع تُؤخذ من صفحة الدرجات (calcStudent) لتطابق الأعمدة المرصودة.
+  // الأسابيع المحددة تؤثر على الأعمدة الأسبوعية المعروضة فقط.
+  var cs=null;
+  try{ cs=calcStudent(s,cls||TFR.cls); }catch(err){ cs=null; }
+  var maxT=70;
+  try{ maxT=recordedMax(cls||TFR.cls)||70; }catch(err){}
+  if(cs){
+    if(s._totalAbsent){
+      return {weeks:weeks, avgA:'غ', avgH:'غ', beh:'غ', exam:'غ', total:'غ', max:maxT, absent:true, fail:false, ex1:ex1, ex2:ex2};
+    }
+    avgA=cs.avgAssess; avgH=cs.avgHw;
+    beh=(typeof cs.avgBeh==='number')?cs.avgBeh:0;
+    exam=cs.exTotal||0;
+    total=cs.total;
+  }
+  return {weeks:weeks, avgA:avgA, avgH:avgH, beh:beh, exam:exam, total:total, max:maxT, absent:false, fail:total<maxT/2, ex1:ex1, ex2:ex2};
 }
 
 // ══════════════════════════════════════════════════════
@@ -1122,7 +1137,7 @@ function tfrBuildClassData(cls, selWeeks){
   var weeklyCount=selWeeks.length*perWeek;
 
   var rows=students.map(function(s,idx){
-    var r=tfrCalc(s,selWeeks);
+    var r=tfrCalc(s,selWeeks,cls);
     var cells=[];
     selWeeks.forEach(function(w){
       var wd=r.weeks[w];
@@ -1135,8 +1150,8 @@ function tfrBuildClassData(cls, selWeeks){
     if(C.showAvgHw)     cells.push({v:r.avgH,type:'avgH'});
     if(C.showAvgBeh)    cells.push({v:r.beh,type:'avgB'});
     if(C.showExam)      cells.push({v:r.exam,type:'ex'});
-    cells.push({v:r.total,type:r.total<35?'fail':'tot'});
-    return {n:idx+1,name:s.name,cells:cells,fail:r.total<35};
+    cells.push({v:r.total,type:r.fail?'fail':'tot'});
+    return {n:idx+1,name:s.name,cells:cells,fail:r.fail};
   });
 
   var hdr1=[],hdr2=[];
@@ -1153,9 +1168,10 @@ function tfrBuildClassData(cls, selWeeks){
   if(C.showAvgHw)     hdr2.push({label:'م.و<br>/10',bg:'#14532d',color:'#67e8f9'});
   if(C.showAvgBeh)    hdr2.push({label:'م.سلوك<br>/10',bg:'#14532d',color:'#c4b5fd'});
   if(C.showExam)      hdr2.push({label:'اخت<br>/30',bg:'#14532d',color:'#fdba74'});
-  hdr2.push({label:'المج<br>/70',bg:'#78350f',color:'#fef3c7'});
+  var maxT=70; try{maxT=recordedMax(cls)||70;}catch(e){}
+  hdr2.push({label:'المج<br>/'+maxT,bg:'#78350f',color:'#fef3c7'});
 
-  return {cls:cls,rows:rows,hdr1:hdr1,hdr2:hdr2,weeklyCount:weeklyCount,selWeeks:selWeeks,
+  return {cls:cls,maxT:maxT,rows:rows,hdr1:hdr1,hdr2:hdr2,weeklyCount:weeklyCount,selWeeks:selWeeks,
           students:students.length};
 }
 
@@ -1242,11 +1258,11 @@ function _tfrPopupMain(){
   }
   // تنسيق شرطي لقسم المتوسطات والمجموع
   var CF_MAP={avgA:["avg",20],avgH:["avg",10],avgB:["beh",10],ex:["ex",30],tot:["tot",70],fail:["tot",70]};
-  function cfStyle(v,type){
+  function cfStyle(v,type,maxT){
     var CF=DATA.cf, m=CF_MAP[type];
     if(!CF||!CF.levels||!m||!CF.scopes[m[0]])return "";
     if(v===null||v===undefined||v===""||v==="غ"||v==="م")return "";
-    var pct=(Number(v)/m[1])*70;
+    var pct=(Number(v)/((type==='tot'||type==='fail')&&maxT?maxT:m[1]))*70;
     var lv=CF.levels.slice().sort(function(a,b){return b.from-a.from;}).find(function(l){return pct>=l.from;});
     return lv?"background:"+lv.bg+"!important;color:"+lv.color+"!important;":"";
   }
@@ -1295,13 +1311,13 @@ function _tfrPopupMain(){
         if(s)cls+=' sum-c';
         if(i===D.weeklyCount)cls+=' sum-first';
         if(i===row.cells.length-1)cls+=' sum-last';
-        var st=cfStyle(c.v,c.type);
+        var st=cfStyle(c.v,c.type,D.maxT);
         h+='<td class="'+cls+'"'+(st?' style="'+st+'"':'')+'>'+fmtV(c.v)+'</td>';
       });
       h+='</tr>';
     });
     h+='</tbody></table></div>';
-    h+='<div class="note">📌 المج = م.تقييم(20) + م.واجب(10) + م.سلوك(10) + اختبارات(30) = 70 | الأسابيع: '+D.selWeeks.join("،")+'</div>';
+    h+='<div class="note">📌 المج = م.تقييم(20) + م.واجب(10) + م.سلوك(10) + اختبارات(30) — من '+D.maxT+' بحسب الأعمدة المرصودة | الأسابيع: '+D.selWeeks.join("،")+'</div>';
     h+='<div class="sigs"><div class="sig"><div class="sig-t">توقيع معلم المادة</div><div class="sig-n">ا/ '+esc(DATA.teacher||"................")+'</div></div>'
       +'<div class="sig"><div class="sig-t">توقيع المشرف</div><div class="sig-n">&nbsp;</div></div>'
       +'<div class="sig"><div class="sig-t">مدير المدرسة</div><div class="sig-n">&nbsp;</div></div></div></div>';
@@ -1531,10 +1547,12 @@ function renderTafrighPage(){
     try{return new Date(d).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'});}catch(e){return d;}
   }
 
-  var allCalc=students.map(function(s){return {s:s,r:tfrCalc(s,selWeeks)};});
-  var totals=allCalc.map(function(x){return x.r.total;});
+  var allCalc=students.map(function(s){return {s:s,r:tfrCalc(s,selWeeks,cls)};});
+  var maxT=70; try{maxT=recordedMax(cls)||70;}catch(e){}
+  var valid=allCalc.filter(function(x){return !x.r.absent;});
+  var totals=valid.map(function(x){return x.r.total;});
   var avg=totals.length?Math.round(totals.reduce(function(a,b){return a+b;},0)/totals.length):0;
-  var pass=totals.filter(function(t){return t>=35;}).length;
+  var pass=valid.filter(function(x){return !x.r.fail;}).length;
 
   var TF=TFR.font||{};
   var tfFamily=TF.family||'Cairo,sans-serif';
@@ -1563,9 +1581,9 @@ function renderTafrighPage(){
   h+='<div style="background:#060e1d;border-bottom:1px solid #1e3a5f;padding:5px 14px;display:flex;gap:14px;flex-shrink:0;flex-wrap:wrap;">';
   h+='<span style="font-size:9.5px;color:#60a5fa;">👥 الطلاب: <strong style="color:#f1f5f9;">'+students.length+'</strong></span>';
   h+='<span style="font-size:9.5px;color:#60a5fa;">📅 أسابيع: <strong style="color:#f1f5f9;">'+selWeeks.length+'</strong></span>';
-  h+='<span style="font-size:9.5px;color:#60a5fa;">📊 المتوسط: <strong style="color:#34d399;">'+avg+'/70</strong></span>';
+  h+='<span style="font-size:9.5px;color:#60a5fa;">📊 المتوسط: <strong style="color:#34d399;">'+avg+'/'+maxT+'</strong></span>';
   h+='<span style="font-size:9.5px;color:#60a5fa;">✅ ناجح: <strong style="color:#4ade80;">'+pass+'</strong></span>';
-  h+='<span style="font-size:9.5px;color:#60a5fa;">❌ راسب: <strong style="color:#f87171;">'+(students.length-pass)+'</strong></span>';
+  h+='<span style="font-size:9.5px;color:#60a5fa;">❌ راسب: <strong style="color:#f87171;">'+(valid.length-pass)+'</strong></span>';
   h+='</div>';
 
   if(!selWeeks.length){
@@ -1600,7 +1618,7 @@ function renderTafrighPage(){
   var sumFirstB='border-right:'+GOLD+';';   // بداية قسم المتوسطات (RTL: الحافة اليمنى)
   var sumLastB='border-left:'+GOLD+';';     // نهاية القسم بعد عمود المجموع
   if(sumSpan>0) h+='<th colspan="'+sumSpan+'" style="background:#14532d;color:#fde68a;border:1px solid #3b82f6;border-top:'+GOLD+';'+sumFirstB+'padding:5px 2px;">⭐ المتوسطات والمجموع</th>';
-  h+='<th rowspan="2" style="background:#451a03;color:#fcd34d;border:1px solid #3b82f6;border-top:'+GOLD+';'+sumLastB+(sumSpan>0?'':sumFirstB)+'padding:5px 3px;min-width:36px;">المج<br/>/70</th>';
+  h+='<th rowspan="2" style="background:#451a03;color:#fcd34d;border:1px solid #3b82f6;border-top:'+GOLD+';'+sumLastB+(sumSpan>0?'':sumFirstB)+'padding:5px 3px;min-width:36px;">المج<br/>/'+maxT+'</th>';
   h+='</tr>';
 
   // صف 2
@@ -1619,7 +1637,7 @@ function renderTafrighPage(){
 
   allCalc.forEach(function(item,idx){
     var s=item.s, r=item.r;
-    var isFail=r.total<35;
+    var isFail=r.fail;
     var rowBg=idx%2===0?'#ffffff':'#f8fafc';
     h+='<tr>';
     h+='<td style="text-align:center;font-size:'+tfHeaderSize+'px;background:'+rowBg+';border:1px solid #bfdbfe;color:#64748b;">'+(idx+1)+'</td>';
@@ -1648,7 +1666,7 @@ function renderTafrighPage(){
     if(C.showAvgHw)     h+=_sumTd(r.avgH,10,'avg','background:#d1fae5;color:#065f46;');
     if(C.showAvgBeh)    h+=_sumTd(r.beh,10,'beh','background:#ede9fe;color:#4c1d95;');
     if(C.showExam)      h+=_sumTd(r.exam,30,'ex','background:#ffedd5;color:#7c2d12;');
-    var _cfT=tfrCFGetStyle(r.total,70,'tot'); h+='<td style="text-align:center;font-weight:900;font-size:'+tfTotalSize+'px;'+(_cfT||(isFail?'background:#fee2e2;color:#b91c1c;':'background:#fef3c7;color:#92400e;'))+'border:1px solid #bfdbfe;'+sumLastB+_sf+_bb+'">'+r.total+'</td>';
+    var _cfT=tfrCFGetStyle(r.total,maxT,'tot'); h+='<td style="text-align:center;font-weight:900;font-size:'+tfTotalSize+'px;'+(_cfT||(isFail?'background:#fee2e2;color:#b91c1c;':'background:#fef3c7;color:#92400e;'))+'border:1px solid #bfdbfe;'+sumLastB+_sf+_bb+'">'+r.total+'</td>';
     h+='</tr>';
   });
 
@@ -1769,6 +1787,20 @@ function tfrColsBarToggle(){
 }
 
 // ── شريط بيانات الكشف ──
+// يسحب بيانات الكشف من الإعدادات ويحدّث حقول الشريط فوراً
+function tfrSyncMetaFromSettings(){
+  var m=(DB&&DB.meta)||{};
+  TFR.teacherName=m.teacherName||'';
+  TFR.subject=m.subject||'';
+  TFR.schoolYear=m.schoolYear||'';
+  TFR.term=Number(m.semester)===2?'الفصل الدراسي الثاني':'الفصل الدراسي الأول';
+  var map={tfr_teacher:TFR.teacherName,tfr_subject:TFR.subject,tfr_term:TFR.term,tfr_syear:TFR.schoolYear};
+  Object.keys(map).forEach(function(id){var el=document.getElementById(id);if(el)el.value=map[id];});
+  renderTafrighPage();
+  if(typeof showSnack==='function') showSnack('✅ تم تحديث بيانات الكشف من الإعدادات');
+}
+window.tfrSyncMetaFromSettings=tfrSyncMetaFromSettings;
+
 function tfrMetaBarToggle(){
   _tfrBarToggle('tfrMetaBar','tbTfrMetaBtn',function(bar){
     function inp(id,lbl,val,ev,w){
@@ -1785,7 +1817,7 @@ function tfrMetaBarToggle(){
     h+=inp('tfr_subject','المادة',TFR.subject,'TFR.subject=this.value',90);
     h+=inp('tfr_term','الفصل الدراسي',TFR.term,'TFR.term=this.value',140);
     h+=inp('tfr_syear','العام الدراسي',TFR.schoolYear,'TFR.schoolYear=this.value',110);
-    h+='<button onclick="TFR.teacherName=DB.meta.teacherName||TFR.teacherName;TFR.subject=DB.meta.subject||TFR.subject;TFR.schoolYear=DB.meta.schoolYear||TFR.schoolYear;TFR.term=(Number(DB.meta.semester)===2?\'الفصل الدراسي الثاني\':\'الفصل الدراسي الأول\');renderTafrighPage();" '
+    h+='<button onclick="tfrSyncMetaFromSettings()" '
      +'style="padding:4px 10px;border-radius:6px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid #3b82f6;background:rgba(59,130,246,.15);color:#93c5fd;white-space:nowrap;align-self:flex-end;">🔄 من الإعدادات</button>';
     h+='</div>';
     bar.innerHTML=h;
@@ -1844,11 +1876,12 @@ function tfrExportExcel(){
 
       var hdrRow=['م','اسم الطالب'];
       selWeeks.forEach(function(w){hdrRow.push('تقييم أ'+w+'\n/20','واجب أ'+w+'\n/10');});
-      hdrRow.push('م.تقييم\n/20','م.واجب\n/10','م.سلوك\n/10','اختبارات\n/30','الإجمالي\n/70');
+      var _mx=70; try{_mx=recordedMax(cls)||70;}catch(e){}
+      hdrRow.push('م.تقييم\n/20','م.واجب\n/10','م.سلوك\n/10','اختبارات\n/30','الإجمالي\n/'+_mx);
 
       var dataRows=[];
       students.forEach(function(s,idx){
-        var r=tfrCalc(s,selWeeks);
+        var r=tfrCalc(s,selWeeks,cls);
         var row=[idx+1,s.name];
         selWeeks.forEach(function(w){
           var wd=r.weeks[w];
@@ -1864,11 +1897,12 @@ function tfrExportExcel(){
       dataRows.forEach(function(r){aoa.push(r);});
 
       // Stats footer
-      var totals=students.map(function(s){return tfrCalc(s,selWeeks).total;});
+      var _calcs=students.map(function(s){return tfrCalc(s,selWeeks,cls);}).filter(function(r){return !r.absent;});
+      var totals=_calcs.map(function(r){return r.total;});
       var avg=totals.length?Math.round(totals.reduce(function(a,b){return a+b;},0)/totals.length):0;
-      var pass=totals.filter(function(t){return t>=35;}).length;
+      var pass=_calcs.filter(function(r){return !r.fail;}).length;
       aoa.push([]);
-      aoa.push(['إجمالي الطلاب: '+students.length+' | ناجح: '+pass+' | راسب: '+(students.length-pass)+' | متوسط: '+avg+'/70']);
+      aoa.push(['إجمالي الطلاب: '+students.length+' | ناجح: '+pass+' | راسب: '+(_calcs.length-pass)+' | متوسط: '+avg+'/'+_mx]);
 
       var ws=XLSX.utils.aoa_to_sheet(aoa);
 
