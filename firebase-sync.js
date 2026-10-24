@@ -539,45 +539,88 @@ function openSyncPanel() {
    جلب يدوي من Firebase
    ════════════════════════════════════════ */
 function pullFromFirebase() {
-  if (!_fbRef) { alert("Firebase غير متصل"); return; }
-  showSyncStatus("syncing", "⬇️ جاري الجلب...");
+  if (!_fbRef) { alert("Firebase غير جاهز"); return; }
+
+  /* تأكد أن المسار هو مسار المستخدم المسجّل (قد يتأخر الضبط بعد تسجيل الدخول) */
+  try {
+    var _u = (firebase.auth && firebase.auth().currentUser) || window._currentAuthUser || null;
+    if (_u && _u.uid && typeof setFirebaseUserPath === "function") {
+      var _want = "dalty_grades/users/" + String(_u.uid).replace(/[.#$\/\[\]]/g, "_") + "/data";
+      if (FB_PATH !== _want) { setFirebaseUserPath(_u.uid); }
+    } else if (!_u && FB_PATH.indexOf("/users/") === -1) {
+      showSyncStatus("error", "❌ سجّل الدخول أولاً ثم أعد المحاولة");
+      return;
+    }
+  } catch (e) {}
+
+  if (!navigator.onLine) { showSyncStatus("error", "❌ لا يوجد اتصال بالإنترنت"); return; }
+  showSyncStatus("syncing", "⏳ جاري الجلب...");
+
+  /* مهلة 20 ثانية حتى لا يبقى الزر معلّقاً */
+  var _done = false;
+  var _timeout = setTimeout(function () {
+    if (_done) return;
+    _done = true;
+    showSyncStatus("error", "❌ انتهت المهلة — تحقق من الشبكة وأعد المحاولة");
+  }, 20000);
 
   _fbRef.once("value")
     .then(function (snapshot) {
+      if (_done) return;
+      _done = true; clearTimeout(_timeout);
+
       var remote = snapshot.val();
       if (!remote) {
-        showSyncStatus("warn", "⚠️ لا توجد بيانات في السحابة");
+        showSyncStatus("warn", "⚠️ لا توجد بيانات على السحابة");
         return;
       }
 
       var clean = restoreKeys(Object.assign({}, remote));
+      var remoteTs = clean._ts || Date.now();
       delete clean._ts;
       delete clean._device;
 
       if (!clean || typeof clean !== "object" || !clean.data || !clean.classes) {
-        alert("⚠️ النسخة الموجودة في السحابة تالفة أو غير مكتملة — تم إلغاء الجلب حفاظاً على بياناتك المحلية.");
-        showSyncStatus("warn", "⚠️ نسخة سحابية تالفة — تم الإلغاء");
+        alert("⚠️ البيانات على السحابة غير مكتملة أو غير صالحة، لم يتم استبدال بياناتك المحلية.");
+        showSyncStatus("warn", "⚠️ نسخة السحابة غير صالحة — لم تُستبدل");
         return;
       }
 
       clean = repairDB(clean);
 
-      if (!confirm("⚠️ سيتم استبدال بياناتك الحالية ببيانات السحابة. متأكد؟")) return;
+      if (!confirm("هل تريد استبدال بياناتك الحالية بآخر نسخة من السحابة؟")) {
+        showSyncStatus("ok", "تم الإلغاء");
+        return;
+      }
 
-      localStorage.setItem(_localStoreKey(), JSON.stringify(clean));
-      try { localStorage.removeItem(UNSYNCED_KEY); } catch (e) {} /* المستخدم اختار صراحةً نسخة السحابة */
+      /* حدّث الذاكرة أولاً: فشل الحفظ المحلي (امتلاء التخزين) لا يجب أن يمنع التحديث */
       window.DB = clean;
-      if (typeof window._photosHydrate === "function") window._photosHydrate();
+      _lastSaveTS = remoteTs;
+      var _stored = true;
+      try { localStorage.setItem(_localStoreKey(), JSON.stringify(clean)); }
+      catch (e) { _stored = false; console.warn("[Dalty Sync] تعذر الحفظ المحلي:", e); }
+      try { localStorage.removeItem(UNSYNCED_KEY); } catch (e) {}
+      try { if (typeof window._photosHydrate === "function") window._photosHydrate(); } catch (e) {}
 
-      if (typeof window.renderGrades  === "function") window.renderGrades();
-      if (typeof window.renderAbsence === "function") window.renderAbsence();
-      if (typeof window.renderWeekly  === "function") window.renderWeekly();
-      if (typeof window.renderSick    === "function") window.renderSick();
+      ["renderGrades", "renderAbsence", "renderWeekly", "renderSick", "renderHomePage"].forEach(function (fn) {
+        try { if (typeof window[fn] === "function") window[fn](); } catch (e) { console.warn(fn, e); }
+      });
 
-      showSyncStatus("ok", "✅ تم الجلب");
-      setTimeout(function () { showSyncStatus("ok", "☁️ متزامن"); }, 3000);
+      if (_stored) {
+        showSyncStatus("ok", "✅ تم الجلب");
+        setTimeout(function () { showSyncStatus("ok", "تم الحفظ"); }, 3000);
+      } else {
+        showSyncStatus("warn", "⚠️ تم الجلب لكن مساحة التخزين ممتلئة — اعمل نسخة احتياطية");
+      }
     })
     .catch(function (err) {
-      showSyncStatus("error", "❌ " + err.message);
+      if (_done) return;
+      _done = true; clearTimeout(_timeout);
+      var code = (err && err.code) || "";
+      var msg = (err && err.message) || String(err);
+      if (/permission/i.test(code + msg)) msg = "لا توجد صلاحية قراءة (permission denied) — سجّل الخروج ثم الدخول من جديد";
+      else if (/network|unavailable|offline/i.test(code + msg)) msg = "تعذر الاتصال بالسحابة";
+      console.error("[Dalty Sync] pull error:", err);
+      showSyncStatus("error", "❌ " + msg);
     });
 }
