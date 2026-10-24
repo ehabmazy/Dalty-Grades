@@ -647,41 +647,32 @@ function renderEditBar(){
   var bar=document.getElementById('editBar');
   if(!bar)return;
   var p=_currentPage;
-  var isWeekly=(p==='weekly');
-  var isSick=(p==='sick');
-  var canUndo=(p==='dict');
-  var canPaste=(p==='grades'||p==='dict'||p==='weekly');
-  var h='';
-  // تراجع / إعادة
-  h+='<span class="edit-bar-lbl">تعديل:</span>';
-  h+='<button class="edit-bar-btn'+(canUndo?'':' muted')+'" onclick="tbSmartUndo()">↩ تراجع</button>';
-  h+='<button class="edit-bar-btn muted" onclick="tbSmartRedo()">↪ إعادة</button>';
-  h+='<div class="edit-bar-sep"></div>';
-  // بيانات
-  h+='<span class="edit-bar-lbl">بيانات:</span>';
-  h+='<button class="edit-bar-btn'+(canPaste?'':' muted')+'" onclick="tbSmartPaste()">📋 لصق</button>';
-  h+='<button class="edit-bar-btn" onclick="gradesExportExcel();editBarClose();">⬇ Excel الدرجات</button>';
-  h+='<button class="edit-bar-btn" style="background:#064e3b;color:#6ee7b7;" onclick="gradesExportCustom();editBarClose();">📄 كشف مخصص</button>';
-  if(isWeekly){
-    h+='<button class="edit-bar-btn" onclick="weeklyExport();editBarClose();">⬇ Excel الأسبوعي</button>';
-    h+='<button class="edit-bar-btn" onclick="weeklyConfirmClearWeek();editBarClose();">🗑 مسح الأسبوع</button>';
-    h+='<button class="edit-bar-btn" onclick="weeklyAddStudent();editBarClose();">➕ إضافة طالب</button>';
-    h+='<button class="edit-bar-btn" onclick="weeklyMarkAllAbsent();editBarClose();">🚫 تغيب الكل</button>';
-  }
-  if(isSick){
-    h+='<button class="edit-bar-btn" onclick="sickExport();editBarClose();">⬇ Excel المرضى</button>';
-  }
+  function B(label,fn,cls,sty){return '<button class="edit-bar-btn'+(cls?' '+cls:'')+'"'+(sty?' style="'+sty+'"':'')+' onclick="'+fn+'">'+label+'</button>';}
+  var h='',data='';
+  // أزرار تعمل فقط في الصفحة الحالية
   if(p==='dict'){
-    h+='<button class="edit-bar-btn" onclick="dExport();editBarClose();">⬇ Excel الإملاء</button>';
-    h+='<button class="edit-bar-btn danger" onclick="if(confirm(\'مسح السجل؟\')){DS.log=[];renderDict();editBarClose();}">🗑 مسح السجل</button>';
+    data+=B('↩ تراجع','tbSmartUndo()');
+    data+=B('⬇ Excel الإملاء','dExport();editBarClose();');
+    data+=B('🗑 مسح السجل',"if(confirm('مسح السجل؟')){DS.log=[];renderDict();editBarClose();}",'danger');
+  }else if(p==='grades'){
+    data+=B('📋 لصق','tbSmartPaste()');
+    data+=B('⬇ Excel الدرجات','gradesExportExcel();editBarClose();');
+    data+=B('📄 كشف مخصص','gradesExportCustom();editBarClose();','','background:#064e3b;color:#6ee7b7;');
+  }else if(p==='weekly'){
+    data+=B('📋 لصق','tbSmartPaste()');
+    data+=B('⬇ Excel الأسبوعي','weeklyExport();editBarClose();');
+    data+=B('🗑 مسح الأسبوع','weeklyConfirmClearWeek();editBarClose();');
+    data+=B('➕ إضافة طالب','weeklyAddStudent();editBarClose();');
+    data+=B('🚫 تغيب الكل','weeklyMarkAllAbsent();editBarClose();');
+  }else if(p==='sick'){
+    data+=B('⬇ Excel المرضى','sickExport();editBarClose();');
   }
-  h+='<div class="edit-bar-sep"></div>';
-  // مظهر
+  if(data){h+='<span class="edit-bar-lbl">'+(p==='dict'?'تعديل وبيانات:':'بيانات:')+'</span>'+data+'<div class="edit-bar-sep"></div>';}
+  // مظهر + مسح الكل (تعمل في كل صفحات التحرير)
   h+='<span class="edit-bar-lbl">مظهر:</span>';
-  h+='<button class="edit-bar-btn" onclick="openFontSettings();editBarClose();">⚙ الخط</button>';
-  h+='<button class="edit-bar-btn" onclick="openTfrFontSettings();editBarClose();">📋 خط التفريغ</button>';
+  h+=B('⚙ الخط','openFontSettings();editBarClose();');
   h+='<div class="edit-bar-sep"></div>';
-  h+='<button class="edit-bar-btn danger" onclick="if(confirm(\'مسح كل البيانات نهائياً؟\')){localStorage.removeItem(\'grades_v6\');location.reload();}">🗑 مسح الكل</button>';
+  h+=B('🗑 مسح الكل',"if(confirm('مسح كل البيانات نهائياً؟')){localStorage.removeItem('grades_v6');location.reload();}",'danger');
   bar.innerHTML=h;
 }
 

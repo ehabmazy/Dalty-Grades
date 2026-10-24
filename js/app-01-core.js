@@ -243,13 +243,13 @@ function switchPage(p){
 
 // ══ تنظيم الشريط العلوي: كل صفحة تعرض الأزرار التي تعمل فيها فقط ══
 var _TB_EDIT_PAGES={grades:1,weekly:1,sick:1,dict:1};
-var _TB_CLS_PAGES={grades:1,weekly:1,sick:1,sched:1};
+var _TB_CLS_PAGES={grades:1,weekly:1,sick:1}; // الجدول مشترك لكل الفصول
 function tbOrganize(p){
   var e=document.getElementById('tbMenuEdit'),c=document.getElementById('tbMenuCls');
   if(e)e.style.display=_TB_EDIT_PAGES[p]?'flex':'none';
   if(c)c.style.display=_TB_CLS_PAGES[p]?'flex':'none';
   if(!_TB_EDIT_PAGES[p]&&typeof editBarClose==='function')editBarClose();
-  var bar=document.querySelector('.app-topbar');
+  var bar=document.getElementById('tbScroll');
   if(bar){
     bar.scrollLeft=0;
     // أعد تشغيل حركة الظهور للأزرار الظاهرة
@@ -265,13 +265,13 @@ function tbOrganize(p){
   }
 }
 function _tbUpdateFade(){
-  var bar=document.querySelector('.app-topbar'); if(!bar)return;
+  var bar=document.getElementById('tbScroll'); if(!bar)return;
   var max=bar.scrollWidth-bar.clientWidth, pos=Math.abs(bar.scrollLeft);
   if(max>4&&pos<max-4)bar.classList.add('tb-more-l'); else bar.classList.remove('tb-more-l');
 }
 (function(){
   function init(){
-    var bar=document.querySelector('.app-topbar'); if(!bar)return;
+    var bar=document.getElementById('tbScroll'); if(!bar)return;
     bar.addEventListener('scroll',_tbUpdateFade,{passive:true});
     window.addEventListener('resize',_tbUpdateFade);
     // اسحب الزر النشط ليظهر عند الفتح
