@@ -2524,6 +2524,8 @@ function renderHomePage(){
     +'<div class="home-clock" id="h-clock">00:00:00</div>'
     +'<div class="home-clock-divider"></div>'
     +'</div>'
+    // صف مربعات الحصص (التالية والقادمة) بين الساعة والحلقة
+    +'<div id="h-cards-scroll" style="display:none;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0;"></div>'
     // Ring card
     +'<div class="home-ring-section">'
     +'<div class="home-ring-card">'
@@ -2555,7 +2557,6 @@ function renderHomePage(){
     +_buildCurricStrip()
     // ── شريط العد التنازلي للاختبارات والإجازات
     +_buildCurricCountdown()
-    +'<div id="h-cards-scroll" style="display:none;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0;"></div>'
     // Alarm card
     +'<div id="homeAlarmCard" style="display:none;margin:0 16px 12px;background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;padding:12px 16px;cursor:pointer;" onclick="switchPage(\'notifs\');bnSetActive(\'notifs\');">'
     +'<div style="display:flex;align-items:center;gap:12px;">'
@@ -2575,10 +2576,12 @@ function renderHomePage(){
     +'</div>'
     +'</div>'
     +'<div style="height:16px;"></div>'
-    // ── شبكة التنقل الكاملة — تظهر دائماً أسفل المنبه ──
-    +'<div id="h-nav-grid-wrap" style="flex-shrink:0;padding:0 12px 12px;direction:rtl;">'
-    +'<div style="font-size:9px;color:#334155;font-weight:800;letter-spacing:.6px;margin-bottom:8px;padding-right:2px;">⚡ التنقل السريع</div>'
-    +'<div id="h-nav-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;"></div>'
+    // ── شبكة التنقل: درج جانبي مخفي يُسحب من الحافة اليسرى ──
+    +'<div id="h-nav-overlay" onclick="_hnavClose()"></div>'
+    +'<div id="h-nav-handle" onclick="_hnavOpen()" title="التنقل السريع">›</div>'
+    +'<div id="h-nav-drawer">'
+    +'<div style="font-size:11px;color:#64748b;font-weight:800;letter-spacing:.6px;margin:2px 4px 12px;">⚡ التنقل السريع</div>'
+    +'<div id="h-nav-grid"></div>'
     +'</div>'
     +'</div>'// end home-body
     +_buildUpcomingStrip()
@@ -2619,10 +2622,52 @@ var _HNG_ALL = [
   { id:'share',    icon:'🔗', lbl:'مشاركة',            fn:function(){ copyViewerLink();                              } }
 ];
 
+function _hnavOpen(){
+  var d=document.getElementById('h-nav-drawer'),o=document.getElementById('h-nav-overlay'),h=document.getElementById('h-nav-handle');
+  if(!d)return; d.classList.add('open'); if(o)o.classList.add('open'); if(h)h.style.opacity='0';
+}
+function _hnavClose(){
+  var d=document.getElementById('h-nav-drawer'),o=document.getElementById('h-nav-overlay'),h=document.getElementById('h-nav-handle');
+  if(d)d.classList.remove('open'); if(o)o.classList.remove('open'); if(h)h.style.opacity='';
+}
+function _hnavInitSwipe(){
+  if(window._hnavSwipeInit)return; window._hnavSwipeInit=true;
+  var sx=0,sy=0,tracking=false,fromEdge=false;
+  document.addEventListener('touchstart',function(e){
+    var d=document.getElementById('h-nav-drawer'); if(!d||!d.offsetParent&&getComputedStyle(d).position!=='fixed')return;
+    var t=e.touches[0]; sx=t.clientX; sy=t.clientY; tracking=true;
+    fromEdge=sx<=28; // بدء السحب من الحافة اليسرى
+  },{passive:true});
+  document.addEventListener('touchend',function(e){
+    if(!tracking)return; tracking=false;
+    var d=document.getElementById('h-nav-drawer'); if(!d)return;
+    var t=e.changedTouches[0]; var dx=t.clientX-sx, dy=Math.abs(t.clientY-sy);
+    var isOpen=d.classList.contains('open');
+    if(!isOpen&&fromEdge&&dx>45&&dy<60){ if(document.getElementById('page_home')&&document.getElementById('page_home').classList.contains('active'))_hnavOpen(); }
+    else if(isOpen&&dx<-45&&dy<60){ _hnavClose(); }
+  },{passive:true});
+}
+
 function _buildHomeNavCards(){
   var grid = document.getElementById('h-nav-grid');
   if(!grid) return;
   grid.innerHTML = '';
+  _hnavInitSwipe();
+  if(!document.getElementById('_hnavCSS')){
+    var st0=document.createElement('style'); st0.id='_hnavCSS';
+    st0.textContent=
+      '#h-nav-overlay{position:fixed;inset:0;background:rgba(2,6,23,.55);opacity:0;pointer-events:none;transition:opacity .25s;z-index:1190;}'+
+      '#h-nav-overlay.open{opacity:1;pointer-events:auto;}'+
+      '#h-nav-handle{position:fixed;left:0;top:50%;transform:translateY(-50%);width:16px;height:72px;'+
+        'background:rgba(30,58,95,.55);color:#93c5fd;border-radius:0 12px 12px 0;display:flex;align-items:center;'+
+        'justify-content:center;font-size:16px;font-weight:900;cursor:pointer;z-index:1180;transition:opacity .2s;}'+
+      '#h-nav-drawer{position:fixed;left:0;top:0;bottom:0;width:78%;max-width:320px;background:#0b1220;'+
+        'border-right:1px solid #1e3a5f;padding:calc(env(safe-area-inset-top,0px) + 14px) 12px 16px;overflow-y:auto;'+
+        'direction:rtl;transform:translateX(-105%);transition:transform .28s ease;z-index:1200;box-shadow:6px 0 24px rgba(0,0,0,.45);}'+
+      '#h-nav-drawer.open{transform:translateX(0);}'+
+      '#h-nav-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}';
+    document.head.appendChild(st0);
+  }
 
   // CSS مرة واحدة
   if(!document.getElementById('_hncCSS')){
@@ -2646,7 +2691,7 @@ function _buildHomeNavCards(){
     var btn = document.createElement('button');
     btn.className = 'hnc-btn';
     btn.id = 'hnc_' + item.id;
-    btn.addEventListener('click', item.fn);
+    btn.addEventListener('click', function(){ _hnavClose(); item.fn(); });
 
     var iconEl = document.createElement('span');
     iconEl.className = 'hnc-icon';
