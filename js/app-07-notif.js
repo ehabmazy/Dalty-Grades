@@ -1947,23 +1947,6 @@ function _homeTick(){
     if(ringNextRow)ringNextRow.style.display='none';
   }
 
-  // مزامنة اسم الفصل في مربع توزيع المنهج مع الحصة الجارية
-  var _stripCls=el('h-strip-class'),_ringCls=el('h-cur-class');
-  if(_stripCls&&_ringCls){_stripCls.textContent=_ringCls.textContent;_stripCls.style.color=_ringCls.style.color||'#c4b5fd';}
-  var _sCd=el('h-strip-cd'),_sLb=el('h-strip-cdlbl'),_sBd=el('h-strip-badge');
-  var _rCd=document.querySelector('#h-ring-body .home-ring-countdown'),_rLb=document.querySelector('#h-ring-body .home-ring-countdown-lbl');
-  if(_sCd){
-    if(_rCd){
-      _sCd.textContent=_rCd.textContent; if(_sLb)_sLb.textContent=_rLb?_rLb.textContent:'';
-      var _c=_rCd.style.color||'#38bdf8'; if(_sBd)_sBd.style.background='linear-gradient(160deg,#0b1220,#111c33)';
-      _sCd.style.color=_c; if(_sLb)_sLb.style.color='#94a3b8';
-      if(_sBd)_sBd.style.border='1.5px solid '+_c;
-    }else{
-      _sCd.textContent='—'; if(_sLb)_sLb.textContent='لا حصة';
-      if(_sBd)_sBd.style.border='1.5px solid #1e3a5f';
-    }
-  }
-
   // ── حقن CSS الكروت مرة واحدة ───────────────────────────
   if(!document.getElementById('_hpcCSS')){
     var _hpcSt=document.createElement('style');
@@ -2114,8 +2097,7 @@ function _curricWeekInfo(w){
 
 function _buildCurricStrip(){
   var autoWeek=_curricCurrentWeek();
-  var w=window._curricPopupWeek||(autoWeek||1);
-  window._curricPopupWeek=w;
+  var w=autoWeek||window._curricPopupWeek||1; // دائماً الأسبوع الحالي (مزامنة)
   var info=_curricWeekInfo(w);
   if(!info)return '';
 
@@ -2159,9 +2141,9 @@ function _buildCurricStrip(){
 
   return '<div class="home-curric-strip" onclick="showCurricPopup()" title="توزيع المنهج — انقر للتفاصيل">'
     +'<div class="home-curric-strip-inner">'
-    +'<div class="home-curric-week-badge" id="h-strip-badge" style="background:linear-gradient(160deg,#1e3a8a,#2563eb);min-width:78px;">'
-    +'<div class="wcb-num" id="h-strip-cd" style="font-size:20px;letter-spacing:1px;font-variant-numeric:tabular-nums;">--:--</div>'
-    +'<div class="wcb-lbl" id="h-strip-cdlbl">متبقي</div>'
+    +'<div class="home-curric-week-badge" style="background:linear-gradient(160deg,'+unitColor+'dd,'+unitColor+');">' 
+    +'<div class="wcb-num">'+w+'</div>'
+    +'<div class="wcb-lbl">'+esc(weekLabel)+'</div>'
     +'</div>'
     +'<div class="home-curric-info" style="text-align:center;justify-content:center;">'
     +'<div class="home-curric-daydate-row" style="justify-content:center;">'
@@ -2169,7 +2151,7 @@ function _buildCurricStrip(){
     +'<span style="color:#4c1d95;font-size:12px;margin:0 4px;">|</span>'
     +'<span class="home-curric-datestr">'+todayDate+'</span>'
     +'</div>'
-    +'<div style="font-size:15px;font-weight:900;color:#c4b5fd;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;">🏫 <span id="h-strip-class">—</span></div>'
+    +(unitLesson?'<div style="font-size:12px;font-weight:800;color:#c4b5fd;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;">'+esc(unitLesson)+'</div>':'')
     +(tagHtml?'<div style="margin-top:3px;text-align:center;">'+tagHtml+'</div>':'')
     +'</div>'
     +'<div class="home-curric-arrow">›</div>'
@@ -2180,7 +2162,7 @@ function _buildCurricStrip(){
 function showCurricPopup(){
   closeCurricPopup();
   var autoWeek=_curricCurrentWeek();
-  if(!window._curricPopupWeek)window._curricPopupWeek=autoWeek||1;
+  window._curricPopupWeek=autoWeek||window._curricPopupWeek||1;
   var ov=document.createElement('div');
   ov.className='curric-popup-overlay';
   ov.id='curricPopupOverlay';
@@ -2542,10 +2524,6 @@ function renderHomePage(){
     +'<div class="home-clock" id="h-clock">00:00:00</div>'
     +'<div class="home-clock-divider"></div>'
     +'</div>'
-    // Curric week strip
-    +_buildCurricStrip()
-    // ── شريط العد التنازلي للاختبارات والإجازات
-    +_buildCurricCountdown()
     // Ring card
     +'<div class="home-ring-section">'
     +'<div class="home-ring-card">'
@@ -2573,6 +2551,10 @@ function renderHomePage(){
     +'<div class="home-ring-next-when" id="h-ring-next-when">—</div>'
     +'</div>'
     +'</div></div>'
+    // Curric week strip
+    +_buildCurricStrip()
+    // ── شريط العد التنازلي للاختبارات والإجازات
+    +_buildCurricCountdown()
     +'<div id="h-cards-scroll" style="display:none;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;-webkit-overflow-scrolling:touch;flex-shrink:0;"></div>'
     // Alarm card
     +'<div id="homeAlarmCard" style="display:none;margin:0 16px 12px;background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;padding:12px 16px;cursor:pointer;" onclick="switchPage(\'notifs\');bnSetActive(\'notifs\');">'
