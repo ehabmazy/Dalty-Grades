@@ -1198,15 +1198,14 @@ function _tfrPrintCss(){
   '.page{width:100%;height:100%;padding:4mm 3mm;display:flex;flex-direction:column;background:white;}',
   // رأس
   '.hdr{flex:0 0 auto;border:1.5px solid #1e40af;border-radius:4px;padding:4px 10px;margin-bottom:4px;background:#eff6ff;}',
-  '.hdr-top{display:flex;justify-content:space-between;align-items:center;}',
-  '.hdr-school{font-size:14px;font-weight:900;color:#0f2a5e;text-align:right;}',
-  // الشعار يمتد على ارتفاع سطرين: اسم المدرسة + عنوان الكشف
-  '.hdr.has-logo{display:flex;align-items:stretch;gap:8px;min-height:15mm;}',
-  '.hdr-logo{flex:0 0 22mm;position:relative;}',
-  '.hdr-logo img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;}',
-  '.hdr-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:center;}',
-  '.hdr-cls{font-size:13px;font-weight:900;color:#0f2a5e;text-align:left;}',
+  // الرأس: اسم المدرسة أقصى اليمين — اسم الفصل + العنوان في المنتصف — الشعار على اليسار
+  '.hdr{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:stretch;gap:8px;min-height:15mm;}',
+  '.hdr-school{font-size:14px;font-weight:900;color:#0f2a5e;text-align:right;align-self:center;}',
+  '.hdr-mid{display:flex;flex-direction:column;justify-content:center;align-items:center;}',
+  '.hdr-cls{font-size:14px;font-weight:900;color:#0f2a5e;text-align:center;}',
   '.hdr-sub{font-size:13px;font-weight:900;color:#1e40af;text-align:center;margin-top:3px;}',
+  '.hdr-logo{position:relative;width:22mm;justify-self:end;}',
+  '.hdr-logo img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;}',
   // الجدول
   '.tbl-wrap{flex:1 1 0;min-height:0;overflow:hidden;}',
   'table{border-collapse:collapse;width:100%;direction:rtl;table-layout:fixed;}',
@@ -1286,9 +1285,11 @@ function _tfrPopupMain(){
     var cap=Math.max(5,wkW*3.78/1.4);
     var base={ts:Math.min(S.ts,cap),hs:S.hs,ns:S.ns,tot:S.tot,fw:S.fw};
     var h='<div class="page" data-ts="'+base.ts+'" data-hs="'+base.hs+'" data-ns="'+base.ns+'" data-tot="'+base.tot+'" data-sts="'+S.ts+'" style="font-family:'+S.fam+';--fw:'+S.fw+';">';
-    var _lg=DATA.logo?'<div class="hdr-logo"><img src="'+DATA.logo+'" alt=""></div>':'';
-    h+='<div class="hdr'+(_lg?' has-logo':'')+'">'+_lg+'<div class="hdr-main"><div class="hdr-top"><div class="hdr-school">'+esc(DATA.school)+'</div><div class="hdr-cls">'+esc(D.cls)+'</div></div>';
-    h+='<div class="hdr-sub">كشف درجات مادة'+(DATA.subject?' — '+esc(DATA.subject):'')+(DATA.term?' — '+esc(DATA.term):'')+(DATA.syear?' — '+esc(DATA.syear):'')+'</div></div></div>';
+    var _lg=DATA.logo?'<div class="hdr-logo"><img src="'+DATA.logo+'" alt=""></div>':'<div></div>';
+    h+='<div class="hdr"><div class="hdr-school">'+esc(DATA.school)+'</div>'
+      +'<div class="hdr-mid"><div class="hdr-cls">'+esc(D.cls)+'</div>'
+      +'<div class="hdr-sub">كشف درجات مادة'+(DATA.subject?' — '+esc(DATA.subject):'')+(DATA.term?' — '+esc(DATA.term):'')+(DATA.syear?' — '+esc(DATA.syear):'')+'</div></div>'
+      +_lg+'</div>';
     h+='<div class="tbl-wrap"><table style="font-family:'+S.fam+';"><colgroup><col style="width:6mm;"><col style="width:'+S.nw+'mm;">';
     for(var ci=0;ci<num;ci++){
       var cw=ci<wkN?wkW:(ci===num-1?totW:sumW);
