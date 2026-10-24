@@ -238,7 +238,51 @@ function switchPage(p){
     var vbBtn=document.getElementById('tbViewBtn');
     if(vbBtn)vbBtn.classList.remove('active');
   }
+  if(typeof tbOrganize==='function')tbOrganize(p);
 }
+
+// ══ تنظيم الشريط العلوي: كل صفحة تعرض الأزرار التي تعمل فيها فقط ══
+var _TB_EDIT_PAGES={grades:1,weekly:1,sick:1,dict:1};
+var _TB_CLS_PAGES={grades:1,weekly:1,sick:1,sched:1};
+function tbOrganize(p){
+  var e=document.getElementById('tbMenuEdit'),c=document.getElementById('tbMenuCls');
+  if(e)e.style.display=_TB_EDIT_PAGES[p]?'flex':'none';
+  if(c)c.style.display=_TB_CLS_PAGES[p]?'flex':'none';
+  if(!_TB_EDIT_PAGES[p]&&typeof editBarClose==='function')editBarClose();
+  var bar=document.querySelector('.app-topbar');
+  if(bar){
+    bar.scrollLeft=0;
+    // أعد تشغيل حركة الظهور للأزرار الظاهرة
+    var ws=bar.querySelectorAll('.tb-menu-wrap');
+    for(var i=0;i<ws.length;i++){ws[i].style.animation='none';}
+    void bar.offsetWidth;
+    var k=0;
+    for(var j=0;j<ws.length;j++){
+      if(ws[j].style.display==='none')continue;
+      ws[j].style.animation='tbIn .38s cubic-bezier(.22,1,.36,1) '+(k*0.05)+'s both';k++;
+    }
+    setTimeout(_tbUpdateFade,60);
+  }
+}
+function _tbUpdateFade(){
+  var bar=document.querySelector('.app-topbar'); if(!bar)return;
+  var max=bar.scrollWidth-bar.clientWidth, pos=Math.abs(bar.scrollLeft);
+  if(max>4&&pos<max-4)bar.classList.add('tb-more-l'); else bar.classList.remove('tb-more-l');
+}
+(function(){
+  function init(){
+    var bar=document.querySelector('.app-topbar'); if(!bar)return;
+    bar.addEventListener('scroll',_tbUpdateFade,{passive:true});
+    window.addEventListener('resize',_tbUpdateFade);
+    // اسحب الزر النشط ليظهر عند الفتح
+    bar.addEventListener('click',function(ev){
+      var b=ev.target.closest&&ev.target.closest('.tb-menu-btn'); if(!b)return;
+      try{b.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'});}catch(e){}
+    });
+    setTimeout(_tbUpdateFade,300);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init); else init();
+})();
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 
 // SECTION 2: DATA MODEL & STORAGE
