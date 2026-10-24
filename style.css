@@ -2610,3 +2610,74 @@ tr.hl-abs td{background:#fff7ed!important;}
 /* خانة الملاحظات بجوار اسم الطالب في صفحة الدرجات */
 .grades-page .tw .td-notes{min-width:90px;width:110px;padding:2px 3px;}
 .grades-page .tw .td-notes .ni{width:100%;min-width:0;box-sizing:border-box;text-overflow:ellipsis;}
+
+/* ══════════════════════════════════════════════════════
+   REPORTS v2 — مركز التقارير (js/app-13-reports.js)
+   ══════════════════════════════════════════════════════ */
+#repBody{-webkit-overflow-scrolling:touch;}
+.rp-head{position:sticky;top:-12px;z-index:20;background:#0b1629;margin:-12px -12px 10px;padding:10px 12px 8px;border-bottom:1px solid #1e3a5f;}
+.rp-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;align-items:center;}
+.rp-chips::-webkit-scrollbar{display:none;}
+.rp-chip{flex:0 0 auto;background:#111d33;border:1px solid #1e3a5f;color:#94a3b8;border-radius:16px;padding:6px 12px;font:700 11px Cairo,sans-serif;cursor:pointer;white-space:nowrap;}
+.rp-chip.on{background:#1d4ed8;border-color:#3b82f6;color:#fff;}
+.rp-sep{flex:0 0 1px;align-self:stretch;background:#1e3a5f;margin:3px 2px;}
+.rp-ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.rp-sel{font-size:11px!important;padding:5px 8px!important;max-width:100%;}
+.rp-btn{background:#111d33;border:1px solid #1e3a5f;color:#cbd5e1;border-radius:8px;padding:5px 10px;font:700 11px Cairo,sans-serif;cursor:pointer;white-space:nowrap;}
+.rp-btn.pri{background:#1d4ed8;border-color:#3b82f6;color:#fff;}
+.rp-btn:active{transform:scale(.97);}
+.rp-sub{margin:0 0 10px;display:flex;gap:6px;flex-wrap:wrap;}
+.rp-ctx{font-size:10px;color:#64748b;margin:0 0 10px;line-height:1.7;}
+.rp-note{font-size:11px;color:#94a3b8;padding:8px 10px;border:1px dashed #334155;border-radius:8px;margin:8px 0;line-height:1.7;}
+.rp-note.warn{border-color:#92400e;background:rgba(245,158,11,.08);color:#fbbf24;}
+.rp-h{font-size:14px;font-weight:900;color:#60a5fa;margin:14px 0 6px;}
+.rp-kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;margin-bottom:14px;}
+.rp-kpi{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:10px 6px;text-align:center;}
+.rp-kpi-i{font-size:18px;line-height:1.2;}
+.rp-kpi-l{font-size:10px;color:#64748b;margin-top:2px;}
+.rp-kpi-v{font-size:18px;font-weight:900;color:#f1f5f9;margin-top:2px;}
+.rp-kpi-s{font-size:9px;color:#64748b;margin-top:1px;}
+.rp-blk{margin-bottom:14px;}
+.rp-bt{font-size:12px;font-weight:900;color:#94a3b8;margin:0 0 8px;}
+.rp-bars{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:10px 12px;}
+.rp-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.rp-bar:last-child{margin-bottom:0;}
+.rp-bl{flex:0 0 96px;font-size:10px;color:#cbd5e1;}
+.rp-btr{flex:1;height:12px;background:#0f172a;border-radius:6px;overflow:hidden;display:block;}
+.rp-btr i{display:block;height:100%;border-radius:6px;transition:width .3s;}
+.rp-bv{flex:0 0 82px;font-size:10px;color:#94a3b8;text-align:left;}
+.rp-svg{width:100%;height:auto;background:#1e293b;border:1px solid #334155;border-radius:10px;}
+.rp-grid{stroke:#334155;stroke-width:.6;}
+.rp-ax{font-size:8px;fill:#64748b;}
+.rp-lg{font-size:10px;color:#94a3b8;margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;}
+.rp-lg i{display:inline-block;width:12px;height:3px;border-radius:2px;margin-left:5px;vertical-align:middle;}
+.rp-tw{overflow-x:auto;border:1px solid #334155;border-radius:10px;background:#1e293b;}
+.rp-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:10.5px;}
+.rp-tbl th{background:#0f2a5e;color:#e2e8f0;padding:8px 6px;font-weight:700;white-space:nowrap;border-bottom:1px solid #2d4a8e;position:sticky;top:0;}
+.rp-tbl td{padding:6px;text-align:center;color:#cbd5e1;background:#1e293b;border-bottom:1px solid #263449;white-space:nowrap;}
+.rp-tbl td.tr,.rp-tbl th.nm,.rp-tbl td.nm{text-align:right;}
+.rp-tbl tbody tr:nth-child(even) td{background:#192437;}
+.rp-tbl tbody tr:hover td{background:#1f2f4a;}
+.rp-tbl .ix{width:26px;min-width:26px;color:#64748b;position:sticky;right:0;background:#1e293b;z-index:2;}
+.rp-tbl th.ix{background:#0f2a5e;z-index:3;}
+.rp-tbl td.nm{position:sticky;right:26px;background:#1e293b;z-index:1;font-weight:700;color:#e2e8f0;max-width:150px;overflow:hidden;text-overflow:ellipsis;}
+.rp-tbl th.nm{position:sticky;right:26px;z-index:3;}
+.rp-tbl tbody tr:nth-child(even) td.nm,.rp-tbl tbody tr:nth-child(even) td.ix{background:#192437;}
+.rp-tbl tfoot td{background:#0f2a5e;color:#fff;font-weight:900;}
+.rp-tbl td.wr{white-space:normal;min-width:150px;text-align:right;line-height:1.9;}
+.rp-go{cursor:pointer;color:inherit;text-decoration:none;}
+.rp-go:active{opacity:.6;}
+.rp-tn{font-size:10px;color:#64748b;margin-top:5px;line-height:1.7;}
+.rp-empty{font-size:11px;color:#64748b;padding:12px;text-align:center;border:1px dashed #334155;border-radius:10px;}
+.rp-ul{margin:0;padding:10px 26px 10px 12px;background:#1e293b;border:1px solid #334155;border-radius:10px;font-size:11px;color:#cbd5e1;line-height:2;}
+.rp-tag{display:inline-block;border:1px solid currentColor;border-radius:9px;padding:0 7px;margin:1px 0 1px 3px;font-size:9.5px;font-weight:700;white-space:nowrap;}
+.rp-sign{display:none;}
+.rp-modal{position:absolute;inset:0;background:rgba(0,0,0,.65);z-index:600;display:flex;align-items:center;justify-content:center;padding:16px;}
+.rp-mbox{background:#0f1b30;border:1px solid #1e3a5f;border-radius:14px;padding:16px;width:100%;max-width:380px;max-height:100%;overflow-y:auto;}
+.rp-mt{font-size:14px;font-weight:900;color:#60a5fa;margin-bottom:12px;}
+.rp-f{display:block;margin-bottom:10px;}
+.rp-f span{display:block;font-size:11px;font-weight:700;color:#cbd5e1;margin-bottom:3px;}
+.rp-f input{width:100%;box-sizing:border-box;background:#0b1629;border:1px solid #334155;color:#f1f5f9;border-radius:8px;padding:8px;font:700 13px Cairo,sans-serif;}
+.rp-f small{display:block;font-size:9px;color:#64748b;margin-top:2px;}
+.rp-mb{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;}
+@media(max-width:420px){.rp-kpis{grid-template-columns:repeat(3,1fr);gap:6px;}.rp-kpi{padding:7px 3px;}.rp-kpi-i{font-size:14px;}.rp-kpi-v{font-size:15px;}.rp-bl{flex-basis:84px;}}
