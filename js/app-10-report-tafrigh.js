@@ -1007,6 +1007,7 @@ var TFR = {
   cols: {showAssess:true, showHw:true, showBeh:true, showAvgAssess:true, showAvgHw:true, showAvgBeh:true, showExam:true}
 };
 (function(){try{var tf=JSON.parse(localStorage.getItem('tfr_font_v1'));if(tf)TFR.font=Object.assign(TFR.font,tf);}catch(e){}}());
+(function(){try{TFR.logo=localStorage.getItem('tfr_logo_v1')||'';}catch(e){TFR.logo='';}}());
 (function(){try{var tc=JSON.parse(localStorage.getItem('tfr_cols_v1'));if(tc)TFR.cols=Object.assign(TFR.cols,tc);}catch(e){}}());
 
 // تهيئة بيانات كشف التفريغ من الإعدادات (تُنفَّذ مرة واحدة عند أول فتح للصفحة)
@@ -1199,6 +1200,11 @@ function _tfrPrintCss(){
   '.hdr{flex:0 0 auto;border:1.5px solid #1e40af;border-radius:4px;padding:4px 10px;margin-bottom:4px;background:#eff6ff;}',
   '.hdr-top{display:flex;justify-content:space-between;align-items:center;}',
   '.hdr-school{font-size:14px;font-weight:900;color:#0f2a5e;text-align:right;}',
+  // الشعار يمتد على ارتفاع سطرين: اسم المدرسة + عنوان الكشف
+  '.hdr.has-logo{display:flex;align-items:stretch;gap:8px;min-height:15mm;}',
+  '.hdr-logo{flex:0 0 22mm;position:relative;}',
+  '.hdr-logo img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;}',
+  '.hdr-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:center;}',
   '.hdr-cls{font-size:13px;font-weight:900;color:#0f2a5e;text-align:left;}',
   '.hdr-sub{font-size:13px;font-weight:900;color:#1e40af;text-align:center;margin-top:3px;}',
   // الجدول
@@ -1280,8 +1286,9 @@ function _tfrPopupMain(){
     var cap=Math.max(5,wkW*3.78/1.4);
     var base={ts:Math.min(S.ts,cap),hs:S.hs,ns:S.ns,tot:S.tot,fw:S.fw};
     var h='<div class="page" data-ts="'+base.ts+'" data-hs="'+base.hs+'" data-ns="'+base.ns+'" data-tot="'+base.tot+'" data-sts="'+S.ts+'" style="font-family:'+S.fam+';--fw:'+S.fw+';">';
-    h+='<div class="hdr"><div class="hdr-top"><div class="hdr-school">'+esc(DATA.school)+'</div><div class="hdr-cls">'+esc(D.cls)+'</div></div>';
-    h+='<div class="hdr-sub">كشف درجات مادة'+(DATA.subject?' — '+esc(DATA.subject):'')+(DATA.term?' — '+esc(DATA.term):'')+(DATA.syear?' — '+esc(DATA.syear):'')+'</div></div>';
+    var _lg=DATA.logo?'<div class="hdr-logo"><img src="'+DATA.logo+'" alt=""></div>':'';
+    h+='<div class="hdr'+(_lg?' has-logo':'')+'">'+_lg+'<div class="hdr-main"><div class="hdr-top"><div class="hdr-school">'+esc(DATA.school)+'</div><div class="hdr-cls">'+esc(D.cls)+'</div></div>';
+    h+='<div class="hdr-sub">كشف درجات مادة'+(DATA.subject?' — '+esc(DATA.subject):'')+(DATA.term?' — '+esc(DATA.term):'')+(DATA.syear?' — '+esc(DATA.syear):'')+'</div></div></div>';
     h+='<div class="tbl-wrap"><table style="font-family:'+S.fam+';"><colgroup><col style="width:6mm;"><col style="width:'+S.nw+'mm;">';
     for(var ci=0;ci<num;ci++){
       var cw=ci<wkN?wkW:(ci===num-1?totW:sumW);
@@ -1509,6 +1516,7 @@ function tfrPrint(allClasses){
     classes:classes,
     subject:TFR.subject||'',term:TFR.term||'',syear:TFR.schoolYear||'',teacher:TFR.teacherName||'',
     school:DB.meta.schoolName||'Dalty Grades',
+    logo:TFR.logo||'',
     font:{family:(TF.family||'Cairo,sans-serif').replace(/"/g,"'"),tableSize:TF.tableSize||10,headerSize:TF.headerSize||9,
           nameSize:TF.nameSize||10,totalSize:TF.totalSize||12,weight:TF.weight||700,nameWidth:TF.nameWidth||45},
     cf:JSON.parse(JSON.stringify(TFR_CF))
@@ -1787,6 +1795,34 @@ function tfrColsBarToggle(){
 }
 
 // ── شريط بيانات الكشف ──
+// ── شعار الكشف: يرفعه المستخدم (مثل شعار الوزارة أو المدرسة) ويُحفظ على الجهاز ──
+function tfrLogoPick(inp){
+  var file=inp&&inp.files&&inp.files[0];
+  if(!file)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    var img=new Image();
+    img.onload=function(){
+      var H=Math.min(img.height,200), W=Math.round(img.width*H/img.height);
+      var c=document.createElement('canvas'); c.width=W; c.height=H;
+      c.getContext('2d').drawImage(img,0,0,W,H);
+      TFR.logo=c.toDataURL('image/png');
+      try{localStorage.setItem('tfr_logo_v1',TFR.logo);}catch(e){}
+      var bar=document.getElementById('tfrMetaBar'); if(bar&&bar.classList.contains('open')) _tfrRenderMetaBar(bar);
+      if(typeof showSnack==='function') showSnack('✅ تم حفظ الشعار وسيظهر في الطباعة');
+    };
+    img.onerror=function(){alert('تعذّر قراءة الصورة');};
+    img.src=rd.result;
+  };
+  rd.readAsDataURL(file);
+}
+function tfrLogoClear(){
+  TFR.logo='';
+  try{localStorage.removeItem('tfr_logo_v1');}catch(e){}
+  var bar=document.getElementById('tfrMetaBar'); if(bar&&bar.classList.contains('open')) _tfrRenderMetaBar(bar);
+}
+window.tfrLogoPick=tfrLogoPick; window.tfrLogoClear=tfrLogoClear;
+
 // يسحب بيانات الكشف من الإعدادات ويحدّث حقول الشريط فوراً
 function tfrSyncMetaFromSettings(){
   var m=(DB&&DB.meta)||{};
@@ -1801,8 +1837,7 @@ function tfrSyncMetaFromSettings(){
 }
 window.tfrSyncMetaFromSettings=tfrSyncMetaFromSettings;
 
-function tfrMetaBarToggle(){
-  _tfrBarToggle('tfrMetaBar','tbTfrMetaBtn',function(bar){
+function _tfrRenderMetaBar(bar){
     function inp(id,lbl,val,ev,w){
       return '<div style="display:flex;flex-direction:column;gap:2px;">'
         +'<span style="font-size:7.5px;color:#64748b;font-weight:700;">'+lbl+'</span>'
@@ -1820,8 +1855,16 @@ function tfrMetaBarToggle(){
     h+='<button onclick="tfrSyncMetaFromSettings()" '
      +'style="padding:4px 10px;border-radius:6px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid #3b82f6;background:rgba(59,130,246,.15);color:#93c5fd;white-space:nowrap;align-self:flex-end;">🔄 من الإعدادات</button>';
     h+='</div>';
+    h+='<div style="display:flex;align-items:center;gap:6px;align-self:flex-end;">'
+      +'<label style="padding:4px 10px;border-radius:6px;font-size:9px;font-weight:700;cursor:pointer;border:1px solid #f59e0b;background:rgba(245,158,11,.15);color:#fcd34d;white-space:nowrap;">🖼 '+(TFR.logo?'تغيير الشعار':'رفع شعار')
+      +'<input type="file" accept="image/*" onchange="tfrLogoPick(this)" style="display:none;"></label>';
+    if(TFR.logo) h+='<img src="'+TFR.logo+'" alt="" style="height:24px;background:#fff;border-radius:4px;padding:1px;">'
+      +'<button onclick="tfrLogoClear()" title="حذف الشعار" style="padding:3px 8px;border-radius:6px;font-size:9px;font-family:inherit;cursor:pointer;border:1px solid #7f1d1d;background:rgba(127,29,29,.3);color:#fca5a5;">✕</button>';
+    h+='</div>';
     bar.innerHTML=h;
-  });
+}
+function tfrMetaBarToggle(){
+  _tfrBarToggle('tfrMetaBar','tbTfrMetaBtn',_tfrRenderMetaBar);
 }
 
 window.tfrClsBarToggle=tfrClsBarToggle;
