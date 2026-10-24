@@ -743,7 +743,8 @@ function renderDictClsBar(){
 function renderClsBar(){
   var bar=document.getElementById('clsBar');
   if(!bar||!DB||!DB.classes)return;
-  var current=(GS&&GS.activeClass)||(WKS&&WKS.activeClass)||(DB.classes[0]||'');
+  var _pg=(typeof _currentPage!=='undefined')?_currentPage:'';
+  var current=((_pg==='weekly'||_pg==='sched')?(WKS&&WKS.activeClass):(GS&&GS.activeClass))||(GS&&GS.activeClass)||(WKS&&WKS.activeClass)||(DB.classes[0]||'');
   var isGrades=typeof _currentPage!=='undefined'&&_currentPage==='grades';
   var h='<span class="cls-bar-lbl">الفصول:</span>';
   DB.classes.forEach(function(cls){
@@ -766,11 +767,6 @@ function tbUpdateEditMenu(){
   // تحديث editBar إذا كان مفتوحاً
   var bar=document.getElementById('editBar');
   if(bar&&bar.classList.contains('open'))renderEditBar();
-}
-function buildClsDropdown(){
-  // تحديث clsBar إذا كان مفتوحاً
-  var bar=document.getElementById('clsBar');
-  if(bar&&bar.classList.contains('open'))renderClsBar();
 }
 
 // ══ PAGES BAR (الجداول) ══
@@ -1447,6 +1443,9 @@ document.addEventListener('click',function(e){
   if(!e.target.closest('.tb-menu-wrap'))tbClose();
 });
 function buildClsDropdown(){
+  // تحديث clsBar إذا كان مفتوحاً
+  var _bar=document.getElementById('clsBar');
+  if(_bar&&_bar.classList.contains('open')&&typeof renderClsBar==='function')renderClsBar();
   var dd=document.getElementById("ddCls");
   if(!dd||!DB||!DB.classes)return;
   var current=GS?GS.activeClass:(DB.classes[0]||"");
@@ -1458,13 +1457,19 @@ function buildClsDropdown(){
   dd.innerHTML=parts.join("");
 }
 function switchToClass(cls){
+  if(!cls)return;
   if(window.GS)GS.activeClass=cls;
   if(window.WKS)WKS.activeClass=cls;
   if(window.SKS)SKS.activeClass=cls;
   if(window.AS)AS.activeClass=cls;
   if(window.DS)DS.activeClass=cls;
-  var map={grades:renderGrades,weekly:renderWeekly,absence:renderAbsence,sick:renderSick,dict:renderDict,sched:renderSched,stats:renderStats};
-  if(map[_currentPage])map[_currentPage]();
+  // لا نبني الخريطة مباشرة: بعض دوال العرض (مثل renderStats) قد لا تكون معرّفة
+  // فيتوقف التبديل بخطأ ReferenceError قبل إعادة الرسم
+  var fnName={grades:'renderGrades',weekly:'renderWeekly',absence:'renderAbsence',sick:'renderSick',dict:'renderDict',sched:'renderSched',stats:'renderStats'}[_currentPage];
+  try{
+    if(fnName&&typeof window[fnName]==='function')window[fnName]();
+  }catch(e){console.error('switchToClass render error:',e);}
+  try{if(typeof buildClsDropdown==='function')buildClsDropdown();}catch(e){}
 }
 function doUndo(){
   if(_currentPage==='dict'){if(window.DS&&DS.undo&&DS.undo.length){if(dUndo())showSnack('✅ تراجع');renderDict();}else{showSnack('⚠️ لا يوجد شيء للتراجع');}return;}

@@ -885,33 +885,7 @@ function showDemoData() {
   // expose globally
   window.portalShow = portalShow;
 
-  // Also inject nav buttons into g99 sidebar
-  window.addEventListener('load', function(){
-    // Wait for sidebar to be rendered then inject portal nav links
-    setTimeout(function(){
-      var sbnav = document.querySelector('#appSidebar .sidebar-nav');
-      if(!sbnav) return;
-      
-      var sep = document.createElement('div');
-      sep.style.cssText = 'height:1px;background:#1e3a5f;margin:8px 12px;';
-      sbnav.appendChild(sep);
-
-      var lbl = document.createElement('div');
-      lbl.style.cssText = 'padding:6px 16px 2px;font-size:9px;font-weight:700;color:#334155;letter-spacing:.5px;';
-      lbl.textContent = 'الأقسام الأخرى';
-      sbnav.appendChild(lbl);
-
-      [
-        {icon:'📊', label:'التقارير',        idx:1},
-      ].forEach(function(item){
-        var btn = document.createElement('button');
-        btn.className = 'sb-btn';
-        btn.innerHTML = '<span class="sb-icon">'+item.icon+'</span><span class="sb-label">'+item.label+'</span>';
-        btn.onclick = function(){ portalShow(item.idx); closeSidebarMobile && closeSidebarMobile(); };
-        sbnav.appendChild(btn);
-      });
-    }, 800);
-  });
+  // (زر التقارير أصبح في القائمة الجانبية مباشرة بدل الإحصائيات — index.html)
 
 })();
 
