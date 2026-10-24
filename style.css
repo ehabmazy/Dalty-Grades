@@ -2683,24 +2683,25 @@ tr.hl-abs td{background:#fff7ed!important;}
 @media(max-width:420px){.rp-kpis{grid-template-columns:repeat(3,1fr);gap:6px;}.rp-kpi{padding:7px 3px;}.rp-kpi-i{font-size:14px;}.rp-kpi-v{font-size:15px;}.rp-bl{flex-basis:84px;}}
 
 
-/* ═══ الشريط العلوي: تمرير أفقي سلس + حركة ظهور (v78) ═══ */
-.app-topbar{
+/* ═══ الشريط العلوي: تمرير أفقي سلس + حركة ظهور (v79) ═══ */
+/* ☰ ثابت خارج منطقة التمرير، والأزرار داخل .tb-scroll */
+.app-topbar .top-hamburger{position:relative;z-index:5;background:#0b1629;}
+.tb-scroll{
+  flex:1 1 auto;min-width:0;height:100%;display:flex;align-items:center;
   overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;
   scroll-behavior:smooth;-webkit-overflow-scrolling:touch;
   scrollbar-width:none;overscroll-behavior-x:contain;
   scroll-snap-type:x proximity;touch-action:pan-x;
 }
-.app-topbar::-webkit-scrollbar{display:none;}
-.app-topbar>*{flex-shrink:0;}
-.app-topbar .top-hamburger{position:sticky;right:0;z-index:5;background:#0b1629;box-shadow:-6px 0 8px #0b1629;}
-.app-topbar .tb-menu-wrap,.app-topbar #tbDictBtns,.app-topbar .top-user-area{scroll-snap-align:start;}
-.app-topbar .tb-menu-wrap{animation:tbIn .38s cubic-bezier(.22,1,.36,1) both;}
-.app-topbar .tb-menu-btn{transition:color .15s,background .2s,transform .2s;}
-.app-topbar .tb-menu-btn:active{transform:scale(.92);}
-.app-topbar #tbDictBtns{max-width:none!important;overflow:visible!important;}
+.tb-scroll::-webkit-scrollbar{display:none;}
+.tb-scroll>*{flex-shrink:0;}
+.tb-scroll .tb-menu-wrap,.tb-scroll #tbDictBtns{scroll-snap-align:start;}
+.tb-scroll .tb-menu-wrap{animation:tbIn .38s cubic-bezier(.22,1,.36,1) both;}
+.tb-scroll .tb-menu-btn{transition:color .15s,background .2s,transform .2s;}
+.tb-scroll .tb-menu-btn:active{transform:scale(.92);}
+.tb-scroll #tbDictBtns{max-width:none!important;overflow:visible!important;}
 @keyframes tbIn{from{opacity:0;transform:translateY(-8px) scale(.94);}to{opacity:1;transform:none;}}
-/* تلميح أن هناك المزيد من الأزرار جهة اليسار */
-.app-topbar.tb-more-l{-webkit-mask-image:linear-gradient(to right,transparent 0,#000 26px);mask-image:linear-gradient(to right,transparent 0,#000 26px);}
+.tb-scroll.tb-more-l{-webkit-mask-image:linear-gradient(to right,transparent 0,#000 26px);mask-image:linear-gradient(to right,transparent 0,#000 26px);}
 @media(max-width:600px){
   .app-topbar .top-brand,.app-topbar .top-page-title{display:none!important;}
 }
