@@ -1009,10 +1009,10 @@ function wkGradesTablePrint(){
 }
 
 
-var WSD={open:false,srcCols:[],targets:{assess:true,hw:false,beh:false},scope:'all'};
+var WSD={open:false,srcCols:[],targets:{assess:true,hw:false,beh:false,ex1:false,ex2:false},scope:'all'};
 
 function openWeeklySmartDistModal(){
-  WSD={open:true,srcCols:[],targets:{assess:true,hw:false,beh:false},scope:'all'};
+  WSD={open:true,srcCols:[],targets:{assess:true,hw:false,beh:false,ex1:false,ex2:false},scope:'all'};
   renderWeekly();
 }
 function closeWeeklySmartDistModal(){
@@ -1022,21 +1022,23 @@ function closeWeeklySmartDistModal(){
 function wsdToggleSrc(colId){
   var i=WSD.srcCols.indexOf(colId);
   if(i>=0)WSD.srcCols.splice(i,1); else WSD.srcCols.push(colId);
-  renderWeekly();
+  keepScrollRender(renderWeekly);
 }
 function wsdToggleTarget(field,on){
   WSD.targets[field]=on;
-  renderWeekly();
+  keepScrollRender(renderWeekly);
 }
 function renderWeeklySmartDistModal(){
   if(!WSD.open)return'';
   var week=WKS.activeWeek||1;
-  var assessMax=20,hwMax=10,behMax=10;
+  var assessMax=20,hwMax=10,behMax=10,ex1Max=15,ex2Max=15;
   (DB.colPages||[]).forEach(function(pg){
     pg.cols.forEach(function(col){
       if(col.field==='a'+week)assessMax=col.max;
       if(col.field==='h'+week)hwMax=col.max;
       if(col.field==='bw'+week)behMax=col.max;
+      if(col.id==='ex1')ex1Max=col.max;
+      if(col.id==='ex2')ex2Max=col.max;
     });
   });
   // Build source column groups
@@ -1093,7 +1095,10 @@ function renderWeeklySmartDistModal(){
   h+=chkTarget('assess','📊 تقييم /'+assessMax,'#1d4ed8');
   h+=chkTarget('hw','📝 واجب /'+hwMax,'#7c3aed');
   h+=chkTarget('beh','🌟 سلوك ومواظبة /'+behMax,'#059669');
+  h+=chkTarget('ex1','📋 اختبار 1 /'+ex1Max,'#c2410c');
+  h+=chkTarget('ex2','📋 اختبار 2 /'+ex2Max,'#b91c1c');
   h+='</div>';
+  h+='<div style="font-size:9px;color:#94a3b8;">الاختبارات غير مرتبطة بالأسبوع — تُوزَّع درجتها مرة واحدة لكل طالب.</div>';
 
   // ── SCOPE (embedded inside targets card) ──
   h+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
@@ -1111,7 +1116,7 @@ function renderWeeklySmartDistModal(){
 function weeklyApplySmartDist(){
   if(!WSD.srcCols.length){showSnack('⚠️ اختر عمود مصدر واحداً على الأقل');return;}
   var tg=WSD.targets;
-  if(!tg.assess&&!tg.hw&&!tg.beh){showSnack('⚠️ اختر هدفاً واحداً على الأقل');return;}
+  if(!tg.assess&&!tg.hw&&!tg.beh&&!tg.ex1&&!tg.ex2){showSnack('⚠️ اختر هدفاً واحداً على الأقل');return;}
   var week=WKS.activeWeek||1;
   var cls=WKS.activeClass||(DB.classes[0]||'');
   var assessMax=20,hwMax=10,behMax=10;
@@ -1143,6 +1148,14 @@ function weeklyApplySmartDist(){
     if(tg.assess){var af='a'+week;if(s[af]!=='غ'&&s[af]!=='م'){if(!scopeEmpty||isEmpty(s[af])){s[af]=jv(ratio*assessMax,assessMax,3);changed++;}}}
     if(tg.hw){var hf='h'+week;if(s[hf]!=='غ'&&s[hf]!=='م'){if(!scopeEmpty||isEmpty(s[hf])){s[hf]=jv(ratio*hwMax,hwMax,2);changed++;}}}
     if(tg.beh){var bf='bw'+week;if(s[bf]!=='غ'&&s[bf]!=='م'){if(!scopeEmpty||isEmpty(s[bf])){s[bf]=jv(ratio*behMax,behMax,2);changed++;}}}
+    // الاختبارات: حقول ex1 / ex2 (ليست أسبوعية)
+    ['ex1','ex2'].forEach(function(ef){
+      if(!tg[ef])return;
+      var emax=(colMap[ef]&&colMap[ef].max)||15;
+      if(s[ef]==='غ'||s[ef]==='م')return;
+      if(scopeEmpty&&!isEmpty(s[ef]))return;
+      s[ef]=jv(ratio*emax,emax,3);changed++;
+    });
   });
   saveDB();WSD.open=false;
   showSnack('✅ تم التوزيع الذكي — '+changed+' خلية');

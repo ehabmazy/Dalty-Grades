@@ -854,6 +854,26 @@ function showSnack(msg,undoFn,type){
   showSnack._t=setTimeout(function(){if(c.contains(d))c.removeChild(d);},3500);
 }
 
+// يعيد البناء مع الحفاظ على مواضع التمرير (الصفحة + أي حاوية قابلة للتمرير مثل جسم النافذة)
+function keepScrollRender(fn){
+  // يحفظ موضع التمرير (رأسي وأفقي — بما فيه RTL السالب) لكل عنصر قابل للتمرير ثم يعيده بعد البناء
+  var saved=[],els=document.body.querySelectorAll('*'),i,el;
+  for(i=0;i<els.length;i++){
+    el=els[i];
+    if(el.scrollTop!==0||el.scrollLeft!==0)saved.push({i:i,t:el.scrollTop,l:el.scrollLeft,tag:el.tagName,cls:el.className});
+  }
+  var wy=window.pageYOffset,wx=window.pageXOffset;
+  try{fn();}finally{
+    var els2=document.body.querySelectorAll('*');
+    saved.forEach(function(r){
+      var e=els2[r.i];
+      if(e&&e.tagName===r.tag&&e.className===r.cls){e.scrollTop=r.t;e.scrollLeft=r.l;}
+    });
+    window.scrollTo(wx,wy);
+  }
+}
+window.keepScrollRender=keepScrollRender;
+
 // All cols flat from colPages
 function allCols(){
   var r=[];

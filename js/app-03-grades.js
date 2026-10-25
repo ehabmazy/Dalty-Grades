@@ -5,7 +5,9 @@ var GS={activeClass:"",activePage:"pg_home",search:"",hOpen:true,distRange:{min:
   homeColVis:{assess:true,hw:true,beh:true,avgAssess:true,avgHw:true,avgBeh:true,total:true,dist:true}
 };
 
-function renderGrades(){
+// كل إعادة رسم لصفحة الدرجات تحافظ على موضع التمرير (الرأسي والأفقي لجدول .tw)
+function renderGrades(){ keepScrollRender(_renderGradesCore); }
+function _renderGradesCore(){
   var root=document.getElementById("gradesRoot");
   if(!root)return;
   if(!GS.activeClass&&DB.classes.length)GS.activeClass=DB.classes[0];
@@ -567,13 +569,13 @@ function sdToggleSrc(colId){
   var arr=GS.modal.data.srcCols;
   var i=arr.indexOf(colId);
   if(i>=0)arr.splice(i,1); else arr.push(colId);
-  renderGrades();
+  keepScrollRender(renderGrades);
 }
 function sdToggleTarget(field,on){
   if(!GS.modal||GS.modal.type!=="smartDist")return;
   if(!GS.modal.data.targets)GS.modal.data.targets={};
   GS.modal.data.targets[field]=on;
-  renderGrades();
+  keepScrollRender(renderGrades);
 }
 function gradesApplySmartDist(){
   if(!GS.modal||GS.modal.type!=="smartDist")return;
