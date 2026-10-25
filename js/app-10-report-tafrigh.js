@@ -1074,6 +1074,17 @@ function tfrWeekToggle(w){
 }
 window.tfrWeeksAll=tfrWeeksAll; window.tfrWeeksNone=tfrWeeksNone; window.tfrWeekToggle=tfrWeekToggle;
 
+// طلاب الفصل في الكشف: كل صف له اسم، أو بلا اسم لكن عليه درجات (كما تعرضه صفحة الدرجات)
+var TFR_NO_NAME='(بدون اسم)';
+function tfrStudents(cls){
+  return (DB.data[cls]||[]).filter(function(s){
+    if(!s)return false;
+    if(String(s.name==null?'':s.name).trim())return true;
+    return Object.keys(s).some(function(k){
+      return /^(a|h|bw)\d+$/.test(k)||k==='ex1'||k==='ex2'?(s[k]!==''&&s[k]!==undefined&&s[k]!==null):false;
+    });
+  });
+}
 function tfrCalc(s, selWeeks, cls){
   var aSum=0,aC=0,hSum=0,hC=0;
   var weeks={};
@@ -1127,7 +1138,7 @@ function tfrCalc(s, selWeeks, cls){
 // يبني بيانات صفحة فصل واحد (تُمرَّر للنافذة كـ JSON)
 function tfrBuildClassData(cls, selWeeks){
   var C=TFR.cols;
-  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
+  var students=tfrStudents(cls);
   var weekDates=(DB.meta&&DB.meta.weekDates)||{};
   function fmtWeekDate(w){
     var d=weekDates[w];
@@ -1152,7 +1163,7 @@ function tfrBuildClassData(cls, selWeeks){
     if(C.showAvgBeh)    cells.push({v:r.beh,type:'avgB'});
     if(C.showExam)      cells.push({v:r.exam,type:'ex'});
     cells.push({v:r.total,type:r.fail?'fail':'tot'});
-    return {n:idx+1,name:s.name,cells:cells,fail:r.fail};
+    return {n:idx+1,name:(s.name||TFR_NO_NAME),cells:cells,fail:r.fail};
   });
 
   var hdr1=[],hdr2=[];
@@ -1207,7 +1218,7 @@ function _tfrPrintCss(){
   '.hdr-logo{position:relative;width:22mm;justify-self:end;}',
   '.hdr-logo img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;}',
   // الجدول
-  '.tbl-wrap{flex:1 1 0;min-height:0;overflow:hidden;}',
+  '.tbl-wrap{flex:1 1 0;min-height:0;overflow:visible;}',
   'table{border-collapse:collapse;width:100%;direction:rtl;table-layout:fixed;}',
   'th,td{border:0.5px solid #94a3b8;padding:0 1px;text-align:center;vertical-align:middle;line-height:1.2;overflow:hidden;}',
   'th{font-size:var(--hs);}',
@@ -1253,6 +1264,7 @@ function _tfrPrintCss(){
 function _tfrPopupMain(){
   var MAX_EXTRA_PX=60;   // أقصى تمدد لارتفاع الصف (~16مم) عند قلة الطلاب
   var MAX_SCALE=1.3;     // أقصى تكبير للخط عند قلة الطلاب
+  var SLACK_PX=10;       // هامش أمان: فروق التقريب بين الشاشة والطباعة قد تضيف بضع بكسلات
   var MIN_SCALE=0.45;    // أدنى تصغير للخط قبل اللجوء إلى zoom
   function esc(v){return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
   function fmtV(v){
@@ -1341,7 +1353,7 @@ function _tfrPopupMain(){
   // يضبط الجدول ليملأ ارتفاع الورقة بالضبط: تصغير الخط إن زاد، وتمديد الصفوف إن قلّ
   function fitPage(pg){
     var wrap=pg.querySelector(".tbl-wrap"), tbl=wrap.querySelector("table"), tb=tbl.tBodies[0];
-    var n=tb.rows.length, avail=wrap.clientHeight, i, r;
+    var n=tb.rows.length, avail=wrap.clientHeight-SLACK_PX, i, r;
     function reset(s){
       setScale(pg,s); tbl.style.zoom="";
       for(i=0;i<n;i++)tb.rows[i].style.height="";
@@ -1369,10 +1381,17 @@ function _tfrPopupMain(){
     }
     var extra=avail-tbl.offsetHeight;
     if(n>0&&extra>2&&z>=1){
-      var per=Math.min((extra-2)/n,MAX_EXTRA_PX);   // هامش أمان 2px ضد الكسور
+      var per=Math.min((extra-1)/n,MAX_EXTRA_PX);
       var hts=[];
       for(i=0;i<n;i++)hts.push(tb.rows[i].getBoundingClientRect().height+per);
-      for(i=0;i<n;i++)tb.rows[i].style.height=hts[i]+"px";
+      for(i=0;i<n;i++)tb.rows[i].style.height=Math.round(hts[i])+"px";
+    }
+    // تحقق أخير: يجب أن يظهر آخر صف كاملاً داخل الورقة، وإلا نصغّر قليلاً ونعيد الضبط
+    var guard=0;
+    while(n>0&&guard<40&&tb.rows[n-1].getBoundingClientRect().bottom>wrap.getBoundingClientRect().bottom+0.5){
+      guard++;
+      if(s>0.3){ s=s-0.02; reset(s); if(z<1)tbl.style.zoom=z; }
+      else{ z=z*0.97; tbl.style.zoom=z; }
     }
     return Math.round(s*z*100);
   }
@@ -1400,14 +1419,19 @@ function _tfrPopupMain(){
     fitAll();
   }
   function fitAll(){
-    var pages=document.querySelectorAll(".sheet"), min=100;
+    var pages=document.querySelectorAll(".sheet"), min=100, hidden=0;
     for(var i=0;i<pages.length;i++){
       var pc=fitPage(pages[i].querySelector(".page"));
       min=Math.min(min,pc);
       var b=pages[i].querySelector(".fit-badge");
-      if(b)b.textContent="· ✅ مضبوطة على A4"+(pc<100?" (الخط "+pc+"٪)":"");
+      var wr=pages[i].querySelector(".tbl-wrap"), rws=wr.querySelector("table").tBodies[0].rows, wb=wr.getBoundingClientRect().bottom, hid=0;
+      for(var k=0;k<rws.length;k++){if(rws[k].getBoundingClientRect().bottom>wb+0.5)hid++;}
+      hidden+=hid;
+      if(b)b.textContent=hid?("· ⚠️ "+hid+" صف خارج الورقة"):("· ✅ "+rws.length+" طالب — مضبوطة على A4"+(pc<100?" (الخط "+pc+"٪)":""));
     }
     var st=document.getElementById("fitStatus");
+    st.style.color=hidden?"#fca5a5":"";
+    if(hidden){st.textContent="⚠️ "+hidden+" صف لا يظهر داخل الورقة — صغّر الخط أو عرض الاسم";return;}
     st.textContent=pages.length?("✅ "+pages.length+" ورقة A4 — كل فصل في صفحة واحدة"+(min<100?" (أصغر تصغير "+min+"٪)":"")):"";
   }
   window.render=render; window.fitAll=fitAll;
@@ -1450,9 +1474,17 @@ function _tfrPopupMain(){
   }
   window.addEventListener("load",function(){
     init();
-    if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitAll);
+    // الخطوط تُحمَّل متأخرة وتغيّر ارتفاع الصفوف: أعد الضبط عند اكتمالها وبعد لحظات
+    if(document.fonts){
+      if(document.fonts.ready)document.fonts.ready.then(fitAll);
+      if(document.fonts.addEventListener)document.fonts.addEventListener("loadingdone",fitAll);
+    }
+    setTimeout(fitAll,400);setTimeout(fitAll,1500);setTimeout(fitAll,4000);
   });
   window.addEventListener("beforeprint",fitAll);
+  window.addEventListener("afterprint",fitAll);
+  // يعيد الضبط على تخطيط الطباعة الحقيقي (وسائط print) لأنه قد يختلف قليلاً عن الشاشة
+  try{var mq=window.matchMedia("print");var onmq=function(){fitAll();};if(mq.addEventListener)mq.addEventListener("change",onmq);else if(mq.addListener)mq.addListener(onmq);}catch(e){}
 }
 
 // html النافذة
@@ -1545,7 +1577,7 @@ function renderTafrighPage(){
   tfrEnsureWeeks();
 
   var cls=TFR.cls;
-  var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
+  var students=tfrStudents(cls);
   var selWeeks=TFR.weeks.slice().sort(function(a,b){return a-b;});
   var C=TFR.cols;
 
@@ -1650,7 +1682,7 @@ function renderTafrighPage(){
     var rowBg=idx%2===0?'#ffffff':'#f8fafc';
     h+='<tr>';
     h+='<td style="text-align:center;font-size:'+tfHeaderSize+'px;background:'+rowBg+';border:1px solid #bfdbfe;color:#64748b;">'+(idx+1)+'</td>';
-    h+='<td style="text-align:right;font-weight:'+tfWeight+';font-size:'+tfNameSize+'px;color:#0f2a5e;background:#eff6ff;border:1px solid #bfdbfe;padding:3px 6px;">'+tfrEsc(s.name)+'</td>';
+    h+='<td style="text-align:right;font-weight:'+tfWeight+';font-size:'+tfNameSize+'px;color:#0f2a5e;background:#eff6ff;border:1px solid #bfdbfe;padding:3px 6px;">'+tfrEsc(s.name||TFR_NO_NAME)+'</td>';
     selWeeks.forEach(function(w){
       var wd=r.weeks[w];
       var av=wd.av_raw, hv=wd.hv_raw;
@@ -1899,7 +1931,7 @@ function tfrExportExcel(){
     var exportClasses=TFR.cls?[TFR.cls]:DB.classes;
 
     exportClasses.forEach(function(cls){
-      var students=(DB.data[cls]||[]).filter(function(s){return s.name;});
+      var students=tfrStudents(cls);
       if(!students.length)return;
 
       var school=(DB.meta.schoolName||'Dalty Grades');
@@ -1926,7 +1958,7 @@ function tfrExportExcel(){
       var dataRows=[];
       students.forEach(function(s,idx){
         var r=tfrCalc(s,selWeeks,cls);
-        var row=[idx+1,s.name];
+        var row=[idx+1,s.name||TFR_NO_NAME];
         selWeeks.forEach(function(w){
           var wd=r.weeks[w];
           var av=wd.av_raw,hv=wd.hv_raw;
