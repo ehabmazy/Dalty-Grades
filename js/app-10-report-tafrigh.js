@@ -1355,7 +1355,7 @@ function _tfrPopupMain(){
     var wrap=pg.querySelector(".tbl-wrap"), tbl=wrap.querySelector("table"), tb=tbl.tBodies[0];
     var n=tb.rows.length, avail=wrap.clientHeight-SLACK_PX, i, r;
     function reset(s){
-      setScale(pg,s); tbl.style.zoom="";
+      setScale(pg,s); tbl.style.zoom=""; tbl.style.height="";
       for(i=0;i<n;i++)tb.rows[i].style.height="";
     }
     reset(1);
@@ -1379,12 +1379,17 @@ function _tfrPopupMain(){
       else for(i=0;i<12;i++){var m2=(lo2+hi2)/2; reset(m2); if(tbl.offsetHeight<=avail)lo2=m2; else hi2=m2;}
       s=lo2; reset(s);
     }
-    var extra=avail-tbl.offsetHeight;
-    if(n>0&&extra>2&&z>=1){
-      var per=Math.min((extra-1)/n,MAX_EXTRA_PX);
-      var hts=[];
-      for(i=0;i<n;i++)hts.push(tb.rows[i].getBoundingClientRect().height+per);
-      for(i=0;i<n;i++)tb.rows[i].style.height=Math.round(hts[i])+"px";
+    // التمدد: الفصل الكبير يملأ ارتفاع الورقة بالضبط عبر CSS (height:100%) فلا تبقى فجوة
+    // مهما اختلف التقريب بين الشاشة والطباعة. الفصل الصغير جداً يُمدَّد بحدّ أقصى للصف.
+    var fillFull=false;
+    if(n>0&&z>=1){
+      var full=wrap.clientHeight, nat=tbl.offsetHeight;
+      if(nat+n*MAX_EXTRA_PX>=full){ fillFull=true; tbl.style.height="100%"; }
+      else{
+        var hts=[];
+        for(i=0;i<n;i++)hts.push(tb.rows[i].getBoundingClientRect().height+MAX_EXTRA_PX);
+        for(i=0;i<n;i++)tb.rows[i].style.height=Math.round(hts[i])+"px";
+      }
     }
     // تحقق أخير: يجب أن يظهر آخر صف كاملاً داخل الورقة، وإلا نصغّر قليلاً ونعيد الضبط
     var guard=0;
@@ -1393,6 +1398,7 @@ function _tfrPopupMain(){
       if(s>0.3){ s=s-0.02; reset(s); if(z<1)tbl.style.zoom=z; }
       else{ z=z*0.97; tbl.style.zoom=z; }
     }
+    if(fillFull&&z>=1)tbl.style.height="100%";
     return Math.round(s*z*100);
   }
   var SETTINGS=null;
