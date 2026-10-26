@@ -7,6 +7,22 @@ var GS={activeClass:"",activePage:"pg_home",search:"",hOpen:true,distRange:{min:
 
 // كل إعادة رسم لصفحة الدرجات تحافظ على موضع التمرير (الرأسي والأفقي لجدول .tw)
 function renderGrades(){ keepScrollRender(_renderGradesCore); }
+
+// ── البحث: تحديث فوري بدون فقدان التركيز (مع تأخير بسيط أثناء الكتابة السريعة) ──
+var _gsTimer=null;
+function gradesSearchInput(inp){
+  GS.search=inp.value;
+  if(inp.parentNode)inp.parentNode.classList.toggle('has',!!inp.value);
+  clearTimeout(_gsTimer);
+  _gsTimer=setTimeout(renderGrades,120);
+}
+function gradesSearchClear(){
+  clearTimeout(_gsTimer);
+  GS.search='';
+  var i=document.getElementById('gSearchInp');
+  if(i){i.value='';if(i.parentNode)i.parentNode.classList.remove('has');i.focus();}
+  renderGrades();
+}
 function _renderGradesCore(){
   var root=document.getElementById("gradesRoot");
   if(!root)return;
@@ -40,7 +56,10 @@ function _renderGradesCore(){
   // TOP BAR
   html+='<div class="g-topbar">';
   html+='<div class="g-ctrl-row">';
-  html+='<input class="g-search" placeholder="🔍 بحث..." value="'+esc(GS.search)+'" oninput="GS.search=this.value;renderGrades()"/>';
+  html+='<div class="g-search-wrap'+(GS.search?' has':'')+'">'
+      +'<input class="g-search" id="gSearchInp" type="text" inputmode="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="🔍 ابحث بالاسم أو رقم الطالب..." value="'+esc(GS.search)+'" oninput="gradesSearchInput(this)" onkeydown="if(event.key===\'Enter\')this.blur()"/>'
+      +'<button type="button" class="g-search-x" onclick="gradesSearchClear()" aria-label="مسح البحث">✕</button>'
+      +'</div>';
   html+='</div>';
   html+='</div>'; // g-topbar
 
@@ -395,7 +414,21 @@ function _renderGradesCore(){
   var _gMain=root.querySelector('.g-main');
   var _savedScrollTop=_gMain?_gMain.scrollTop:0;
   var _savedScrollLeft=_gMain?_gMain.scrollLeft:0;
-  root.innerHTML=html;
+  /* إن كان المستخدم يكتب في مربع البحث نُبقي شريط البحث كما هو (لا نحذفه) حتى لا يضيع التركيز والكيبورد */
+  var _curSearch=root.querySelector('.g-search');
+  var _oldPage=root.querySelector('.grades-page');
+  var _oldBar=_oldPage?_oldPage.querySelector('.g-topbar'):null;
+  if(_curSearch&&_oldBar&&document.activeElement===_curSearch){
+    var _tmp=document.createElement('div');_tmp.innerHTML=html;
+    var _newPage=_tmp.firstElementChild;
+    var _newBar=_newPage?_newPage.querySelector('.g-topbar'):null;
+    if(_newPage&&_newBar){
+      Array.prototype.slice.call(_oldPage.children).forEach(function(ch){if(ch!==_oldBar)_oldPage.removeChild(ch);});
+      Array.prototype.slice.call(_newPage.children).forEach(function(ch){if(ch!==_newBar)_oldPage.appendChild(ch);});
+    }else{root.innerHTML=html;}
+  }else{
+    root.innerHTML=html;
+  }
   var _gMainNew=root.querySelector('.g-main');
   if(_gMainNew){
     _gMainNew.scrollTop=_savedScrollTop;
