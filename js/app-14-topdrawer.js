@@ -98,38 +98,22 @@
   /* ── رسم الدرج ── */
   function render(){
     var items=origButtons();
-    var g=groupsOf(items);
-    var avail=GROUPS.filter(function(x){return g[x.k];});
-
     var pt=(window._PAGE_TITLES&&window._currentPage&&window._PAGE_TITLES[window._currentPage])||'';
     titleEl.innerHTML='🛠 الأدوات'+(pt?'<small>'+pt+'</small>':'');
+    tabsEl.style.display='none';
 
-    if(!avail.length){
-      tabsEl.style.display='none';
+    if(!items.length){
       gridEl.innerHTML='<div class="tbd-empty">لا توجد أدوات لهذه الصفحة</div>';
       panelEl.style.display=anyBarOpen()?'':'none';
       return;
     }
-    if(!curTab||!g[curTab])curTab=avail[0].k;
 
-    /* التبويبات (تظهر فقط لو يوجد أكثر من مجموعة) */
-    if(avail.length>1){
-      tabsEl.style.display='flex';
-      tabsEl.innerHTML='';
-      avail.forEach(function(x){
-        var t=document.createElement('button');
-        t.type='button';t.className='tbd-tab'+(x.k===curTab?' on':'');
-        t.textContent=x.t+' ('+g[x.k].length+')';
-        t.onclick=function(){curTab=x.k;render();};
-        tabsEl.appendChild(t);
-      });
-    }else{
-      tabsEl.style.display='none';
-    }
+    /* كل الأيقونات معًا بلا تبويبات (مرتبة: التصفية ثم الأدوات ثم الإخراج) */
+    var g=groupsOf(items),ordered=[];
+    GROUPS.forEach(function(x){if(g[x.k])ordered=ordered.concat(g[x.k]);});
 
-    /* المربعات */
     gridEl.innerHTML='';
-    g[curTab].forEach(function(b){
+    ordered.forEach(function(b){
       var p=parts(b);
       var tile=document.createElement('button');
       tile.type='button';
@@ -216,7 +200,7 @@
   /* ── التهيئة ── */
   function init(){
     topbar=document.querySelector('#appShell .app-topbar');
-    if(!topbar||$('tbDrawer'))return;
+    if(!topbar||$('tbDrawerBar'))return;
 
     /* زر الفتح: بعد العنوان وقبل أول أزرار الصفحة */
     btn=document.createElement('button');
@@ -229,7 +213,7 @@
 
     /* التعتيم والدرج */
     ov=document.createElement('div');ov.id='tbdOv';ov.onclick=function(){close();};
-    dr=document.createElement('div');dr.id='tbDrawer';
+    dr=document.createElement('div');dr.id='tbDrawerBar';
     dr.setAttribute('role','dialog');dr.setAttribute('aria-label','أدوات الصفحة');
 
     hdrEl=document.createElement('div');hdrEl.className='tbd-hdr';
