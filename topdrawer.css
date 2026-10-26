@@ -1,0 +1,122 @@
+/* ═══════════════════════════════════════════════════════════
+   الدرج العلوي (Top Drawer) — v83
+   يستبدل صف أزرار الشريط العلوي بدرج ينزل من أعلى الشاشة.
+   الأزرار الأصلية تبقى في الصفحة مخفية، والدرج يستدعي نفس دوالها.
+   ═══════════════════════════════════════════════════════════ */
+
+/* إخفاء أزرار الشريط الأصلية (تبقى في DOM ليقرأها الدرج) — فقط بعد نجاح تشغيل الدرج */
+body.tbd-on .app-topbar .tb-menu-wrap,
+body.tbd-on .app-topbar #tbDictBtns{
+  position:absolute!important;width:0!important;height:0!important;
+  overflow:hidden!important;opacity:0!important;pointer-events:none!important;
+  margin:0!important;padding:0!important;border:0!important;
+}
+
+/* زر فتح الدرج داخل الشريط النحيف */
+.tbd-btn{
+  display:none;align-items:center;gap:5px;height:100%;
+  padding:0 12px;margin:0;background:rgba(96,165,250,.12);
+  border:none;border-right:1px solid #1e3a5f;border-left:1px solid #1e3a5f;
+  color:#93c5fd;font:800 11px Cairo,Segoe UI,sans-serif;cursor:pointer;
+  white-space:nowrap;flex-shrink:0;transition:background .2s,color .2s;
+}
+.tbd-btn.has{display:flex;}
+.tbd-btn:hover,.tbd-btn.open{background:rgba(96,165,250,.24);color:#fff;}
+.tbd-btn:active{transform:scale(.96);}
+.tbd-btn .tbd-arr{display:inline-block;font-size:12px;transition:transform .3s;}
+.tbd-btn.open .tbd-arr{transform:rotate(180deg);}
+.tbd-btn .tbd-cnt{
+  background:#3b82f6;color:#fff;border-radius:9px;padding:0 6px;
+  font-size:9px;line-height:15px;min-width:15px;text-align:center;
+}
+
+/* التعتيم */
+#tbdOv{
+  position:fixed;inset:0;z-index:1890;background:rgba(2,6,23,.62);
+  opacity:0;visibility:hidden;
+  transition:opacity .28s,visibility .28s;
+  -webkit-tap-highlight-color:transparent;
+}
+#tbdOv.open{opacity:1;visibility:visible;}
+
+/* الدرج */
+#tbDrawer{
+  position:fixed;top:0;left:0;right:0;margin:0 auto;z-index:1900;
+  width:100%;max-width:780px;max-height:84vh;max-height:84dvh;
+  display:flex;flex-direction:column;direction:rtl;
+  background:linear-gradient(180deg,#0f1b33 0%,#0b1629 100%);
+  border:1px solid #1e3a5f;border-top:none;
+  border-radius:0 0 24px 24px;
+  box-shadow:0 22px 60px rgba(0,0,0,.75);
+  padding-top:env(safe-area-inset-top,0px);
+  transform:translateY(-108%);visibility:hidden;
+  transition:transform .34s cubic-bezier(.22,1,.36,1),visibility .34s;
+  font-family:Cairo,Segoe UI,sans-serif;
+}
+#tbDrawer.open{transform:none;visibility:visible;}
+
+.tbd-hdr{display:flex;align-items:center;gap:8px;padding:12px 16px 6px;}
+.tbd-title{flex:1;min-width:0;font-size:14px;font-weight:900;color:#60a5fa;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tbd-title small{font-size:10px;font-weight:700;color:#64748b;margin-right:6px;}
+.tbd-x{
+  width:34px;height:34px;border-radius:50%;border:1px solid #1e3a5f;
+  background:#111c33;color:#94a3b8;font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.tbd-x:active{transform:scale(.9);}
+
+.tbd-tabs{display:flex;gap:6px;padding:4px 16px 8px;overflow-x:auto;scrollbar-width:none;}
+.tbd-tabs::-webkit-scrollbar{display:none;}
+.tbd-tab{
+  flex:1 0 auto;padding:7px 14px;border-radius:999px;border:1.5px solid #1e3a5f;
+  background:transparent;color:#94a3b8;font:800 11px Cairo,sans-serif;cursor:pointer;
+  white-space:nowrap;transition:all .18s;
+}
+.tbd-tab.on{background:#1d4ed8;border-color:#3b82f6;color:#fff;}
+
+.tbd-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;padding:4px 16px 6px;}
+
+.tbd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:9px;}
+.tbd-tile{
+  position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;min-height:76px;padding:10px 4px 8px;border-radius:16px;
+  border:1.5px solid #1e3a5f;border-top:3px solid var(--c,#1e3a5f);
+  background:#111c33;color:#cbd5e1;font:800 11px/1.25 Cairo,sans-serif;
+  text-align:center;cursor:pointer;transition:transform .12s,background .2s,border-color .2s;
+  -webkit-tap-highlight-color:transparent;
+}
+.tbd-tile .ic{font-size:24px;line-height:1;}
+.tbd-tile:active{transform:scale(.93);}
+.tbd-tile.on{background:rgba(59,130,246,.2);border-color:#3b82f6;color:#fff;
+  box-shadow:0 0 0 1px rgba(59,130,246,.35) inset;}
+.tbd-tile .bdg{position:absolute;top:5px;left:7px;background:#3b82f6;color:#fff;
+  border-radius:9px;padding:0 6px;font-size:9px;line-height:15px;}
+
+/* منطقة الأشرطة الفرعية (تُنقل إليها الأشرطة الأصلية: الفصول، الأسابيع، ...) */
+#tbdPanel{margin-top:2px;}
+#tbdPanel>div.open{
+  display:flex!important;max-height:none!important;overflow:visible!important;
+  background:#0a1220!important;border:1px solid #1e3a5f!important;
+  border-radius:16px!important;padding:10px 12px!important;margin-top:10px!important;
+  gap:7px!important;flex-wrap:wrap!important;align-items:center;
+  animation:tbdIn .26s ease both;
+}
+#tbdPanel>#dictClsBar.open{flex-wrap:wrap!important;overflow-x:visible!important;}
+@keyframes tbdIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+
+.tbd-empty{padding:18px 8px;text-align:center;color:#64748b;font-size:12px;font-weight:700;}
+
+/* المقبض السفلي */
+.tbd-handle{flex:0 0 auto;display:flex;justify-content:center;align-items:center;
+  height:26px;cursor:pointer;touch-action:none;}
+.tbd-handle i{display:block;width:46px;height:5px;border-radius:3px;background:#334155;}
+
+@media(min-width:700px){
+  #tbDrawer{top:6px;border-top:1px solid #1e3a5f;border-radius:20px;}
+}
+@media print{#tbDrawer,#tbdOv,.tbd-btn{display:none!important;}}
+@media(prefers-reduced-motion:reduce){
+  #tbDrawer,#tbdOv,.tbd-tile,#tbdPanel>div.open{transition:none!important;animation:none!important;}
+}

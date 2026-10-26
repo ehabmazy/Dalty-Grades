@@ -2707,3 +2707,19 @@ tr.hl-abs td{background:#fff7ed!important;}
 @media(max-width:600px){
   .app-topbar .top-brand,.app-topbar .top-page-title{display:none!important;}
 }
+
+/* ═══ بحث صفحة الدرجات (v84): مربع أكبر وزر مسح ═══ */
+.g-search-wrap{position:relative;display:flex;align-items:center;flex:1 1 220px;max-width:460px;}
+.g-search-wrap .g-search{
+  width:100%;box-sizing:border-box;min-height:38px;padding:6px 12px 6px 36px;
+  font-size:16px;font-family:inherit;border-radius:10px;
+  background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.3);
+}
+.g-search-wrap .g-search:focus{background:rgba(255,255,255,.26);border-color:#93c5fd;}
+.g-search-x{
+  position:absolute;left:6px;top:50%;transform:translateY(-50%);
+  width:26px;height:26px;border-radius:50%;border:none;display:none;
+  align-items:center;justify-content:center;font-size:12px;cursor:pointer;
+  background:rgba(255,255,255,.28);color:#fff;
+}
+.g-search-wrap.has .g-search-x{display:flex;}

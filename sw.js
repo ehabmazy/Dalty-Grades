@@ -9,7 +9,7 @@
    4) لا يتدخل في طلبات Firebase (قاعدة البيانات / الدخول) إطلاقاً.
    ══════════════════════════════════════════ */
 
-const VERSION     = 'v82';
+const VERSION     = 'v84';
 const CACHE       = 'dalty-app-' + VERSION;   /* ملفات التطبيق + المكتبات */
 const MODEL_CACHE = 'dalty-models';           /* ملفات كبيرة (Whisper) — لا تُحذف عند التحديث */
 
@@ -18,6 +18,7 @@ const CORE = [
   './',
   './index.html',
   './style.css',
+  './topdrawer.css',
   './auth.js',
   './firebase-sync.js',
   './js/app-01-core.js',
@@ -33,6 +34,7 @@ const CORE = [
   './js/app-11-numpad.js',
   './js/app-12-ai.js',
   './js/app-13-reports.js',
+  './js/app-14-topdrawer.js',
 ];
 
 /* ── ملفات ثانوية: يُحاول تخزينها ولا يفشل التثبيت إن تعذّر أحدها ── */
