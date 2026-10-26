@@ -1002,26 +1002,39 @@ var TFR = {
   teacherName: '',
   subject: '',
   term: '',
-  schoolYear: '2025 - 2026',
-  font: {family:'Cairo,sans-serif', tableSize:10, headerSize:9, nameSize:10, totalSize:12, weight:700, nameWidth:45},
+  schoolYear: '',
+  font: {family:"'Amiri',serif", tableSize:10, headerSize:9, nameSize:10, totalSize:12, weight:700, nameWidth:45},
   cols: {showAssess:true, showHw:true, showBeh:true, showAvgAssess:true, showAvgHw:true, showAvgBeh:true, showExam:true}
 };
-(function(){try{var tf=JSON.parse(localStorage.getItem('tfr_font_v1'));if(tf)TFR.font=Object.assign(TFR.font,tf);}catch(e){}}());
+(function(){try{var tf=JSON.parse(localStorage.getItem('tfr_font_v1'));
+  // الخط الافتراضي الجديد Amiri: نتجاهل Cairo المحفوظ لأنه كان الافتراضي القديم
+  if(tf&&/cairo/i.test(String(tf.family||'')))delete tf.family;
+  if(tf)TFR.font=Object.assign(TFR.font,tf);}catch(e){}}());
 (function(){try{TFR.logo=localStorage.getItem('tfr_logo_v1')||'';}catch(e){TFR.logo='';}}());
 (function(){try{var tc=JSON.parse(localStorage.getItem('tfr_cols_v1'));if(tc)TFR.cols=Object.assign(TFR.cols,tc);}catch(e){}}());
 
 // تهيئة بيانات كشف التفريغ من الإعدادات (تُنفَّذ مرة واحدة عند أول فتح للصفحة)
 var _tfrSyncedFromDB = false;
+// بيانات الكشف (المعلم/المادة/الفصل/العام): آخر قيمة أدخلها المستخدم تُحفظ على الجهاز،
+// وإن لم توجد تُؤخذ من الإعدادات.
+var TFR_META_KEY='tfr_meta_v1';
+function tfrMetaSave(){
+  try{localStorage.setItem(TFR_META_KEY,JSON.stringify({teacherName:TFR.teacherName,subject:TFR.subject,term:TFR.term,schoolYear:TFR.schoolYear}));}catch(e){}
+}
 function tfrSyncFromDB(){
   if(_tfrSyncedFromDB) return;
   _tfrSyncedFromDB = true;
-  if(!TFR.teacherName && DB.meta.teacherName) TFR.teacherName = DB.meta.teacherName;
-  if(!TFR.subject    && DB.meta.subject)      TFR.subject     = DB.meta.subject;
-  if(!TFR.schoolYear && DB.meta.schoolYear)   TFR.schoolYear  = DB.meta.schoolYear;
-  // الفصل الدراسي من DB.meta.semester
-  if(!TFR.term && DB.meta.semester){
-    TFR.term = Number(DB.meta.semester)===2 ? 'الفصل الدراسي الثاني' : 'الفصل الدراسي الأول';
+  var sv=null;
+  try{sv=JSON.parse(localStorage.getItem(TFR_META_KEY));}catch(e){}
+  var m=(DB&&DB.meta)||{};
+  function pick(key,fallback){
+    if(sv&&typeof sv[key]==='string'&&sv[key]!=='') return sv[key];
+    return fallback||'';
   }
+  TFR.teacherName=pick('teacherName',m.teacherName);
+  TFR.subject    =pick('subject',m.subject);
+  TFR.schoolYear =pick('schoolYear',m.schoolYear||'2025 / 2026');
+  TFR.term       =pick('term',Number(m.semester)===2?'الفصل الدراسي الثاني':'الفصل الدراسي الأول');
 }
 
 function tfrEsc(v){ return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1169,21 +1182,21 @@ function tfrBuildClassData(cls, selWeeks){
   var hdr1=[],hdr2=[];
   selWeeks.forEach(function(w){
     var d=fmtWeekDate(w);
-    if(perWeek>0) hdr1.push({label:'أ'+w+(d?'|'+d:''),span:perWeek,bg:'#0f3460',color:'#93c5fd'});
-    if(C.showAssess) hdr2.push({label:'ت<br>/20',bg:'#0f3460',color:'#93c5fd'});
-    if(C.showHw)     hdr2.push({label:'و<br>/10',bg:'#1e4080',color:'#67e8f9'});
-    if(C.showBeh)    hdr2.push({label:'س<br>/10',bg:'#2d1b69',color:'#a78bfa'});
+    if(perWeek>0) hdr1.push({label:'أ'+w+(d?'|'+d:''),span:perWeek,bg:'#dbeafe',color:'#1d4ed8'});
+    if(C.showAssess) hdr2.push({label:'ت<br>/20',bg:'#dbeafe',color:'#1d4ed8'});
+    if(C.showHw)     hdr2.push({label:'و<br>/10',bg:'#cffafe',color:'#0e7490'});
+    if(C.showBeh)    hdr2.push({label:'س<br>/10',bg:'#ede9fe',color:'#6d28d9'});
   });
   var sumSpan=(C.showAvgAssess?1:0)+(C.showAvgHw?1:0)+(C.showAvgBeh?1:0)+(C.showExam?1:0)+1;
-  hdr1.push({label:'إجمالي درجات الطالب',span:sumSpan,bg:'#14532d',color:'#fde68a',sum:true});
-  if(C.showAvgAssess) hdr2.push({label:'م.ت<br>/20',bg:'#14532d',color:'#86efac'});
-  if(C.showAvgHw)     hdr2.push({label:'م.و<br>/10',bg:'#14532d',color:'#67e8f9'});
-  if(C.showAvgBeh)    hdr2.push({label:'م.سلوك<br>/10',bg:'#14532d',color:'#c4b5fd'});
-  if(C.showExam)      hdr2.push({label:'اخت<br>/30',bg:'#14532d',color:'#fdba74'});
+  hdr1.push({label:'إجمالي درجات الطالب',span:sumSpan,bg:'#bbf7d0',color:'#14532d',sum:true});
+  if(C.showAvgAssess) hdr2.push({label:'م.ت<br>/20',bg:'#dcfce7',color:'#166534'});
+  if(C.showAvgHw)     hdr2.push({label:'م.و<br>/10',bg:'#dcfce7',color:'#0e7490'});
+  if(C.showAvgBeh)    hdr2.push({label:'م.سلوك<br>/10',bg:'#ede9fe',color:'#6d28d9'});
+  if(C.showExam)      hdr2.push({label:'اخت<br>/30',bg:'#ffedd5',color:'#9a3412'});
   var maxT=70; try{maxT=recordedMax(cls)||70;}catch(e){}
-  hdr2.push({label:'المج<br>/'+maxT,bg:'#78350f',color:'#fef3c7'});
+  hdr2.push({label:'المج<br>/'+maxT,bg:'#fef3c7',color:'#92400e'});
 
-  return {cls:cls,maxT:maxT,rows:rows,hdr1:hdr1,hdr2:hdr2,weeklyCount:weeklyCount,selWeeks:selWeeks,
+  return {cls:cls,maxT:maxT,perWeek:perWeek,rows:rows,hdr1:hdr1,hdr2:hdr2,weeklyCount:weeklyCount,selWeeks:selWeeks,
           students:students.length};
 }
 
@@ -1236,6 +1249,7 @@ function _tfrPrintCss(){
   '.td-fail{background:#fee2e2!important;color:#b91c1c;}',
   // قسم المتوسطات والمجموع — تمييز
   'td.sum-c{font-size:var(--sts);font-weight:900;}',
+  '.wk-first{border-right:2px solid #1e40af!important;}',
   '.sum-first{border-right:2px solid #14532d!important;}',
   '.sum-last{border-left:2px solid #14532d!important;}',
   'td.td-tot,td.td-fail{font-size:var(--tot);font-weight:900;}',
@@ -1308,16 +1322,17 @@ function _tfrPopupMain(){
       h+='<col style="width:'+cw.toFixed(2)+'mm;">';
     }
     h+='</colgroup><thead>';
-    h+='<tr><th rowspan="2" style="background:#1e3a8a;color:white;">#</th><th rowspan="2" style="background:#1e3a8a;color:white;text-align:right;padding-right:4px;">اسم الطالب</th>';
+    h+='<tr><th rowspan="2" style="background:#dbeafe;color:#1e3a8a;">#</th><th rowspan="2" style="background:#dbeafe;color:#1e3a8a;text-align:right;padding-right:4px;">اسم الطالب</th>';
     D.hdr1.forEach(function(x){
       var p=x.label.split("|");
-      h+='<th colspan="'+x.span+'" class="'+(x.sum?'sum-h sum-first sum-last':'')+'" style="background:'+x.bg+';color:'+x.color+';">';
+      h+='<th colspan="'+x.span+'" class="'+(x.sum?'sum-h sum-first sum-last':'wk-first')+'" style="background:'+x.bg+';color:'+x.color+';">';
       if(p[1])h+='<div class="th-sub-date">'+p[1]+'</div>';
       h+=p[0]+'</th>';
     });
     h+='</tr><tr>';
     D.hdr2.forEach(function(x,i){
       var s=i>=D.weeklyCount, cls=s?'sum-h':'';
+      if(!s&&D.perWeek&&i%D.perWeek===0)cls+=' wk-first';
       if(i===D.weeklyCount)cls+=' sum-first';
       if(i===D.hdr2.length-1)cls+=' sum-last';
       h+='<th class="'+cls+'" style="background:'+x.bg+';color:'+x.color+';">'+x.label+'</th>';
@@ -1328,6 +1343,7 @@ function _tfrPopupMain(){
       h+='<td class="td-name'+(S.af?' nf':'')+'" style="font-weight:'+S.fw+';">'+esc(row.name)+'</td>';
       row.cells.forEach(function(c,i){
         var cls='td-'+c.type, s=i>=D.weeklyCount;
+        if(!s&&D.perWeek&&i%D.perWeek===0)cls+=' wk-first';
         if(s)cls+=' sum-c';
         if(i===D.weeklyCount)cls+=' sum-first';
         if(i===row.cells.length-1)cls+=' sum-last';
@@ -1356,6 +1372,7 @@ function _tfrPopupMain(){
     var n=tb.rows.length, avail=wrap.clientHeight-SLACK_PX, i, r;
     function reset(s){
       setScale(pg,s); tbl.style.zoom=""; tbl.style.height="";
+      var nm=tb.querySelectorAll("td.td-name"); for(var q=0;q<nm.length;q++)nm[q].style.fontSize="";
       for(i=0;i<n;i++)tb.rows[i].style.height="";
     }
     reset(1);
@@ -1399,6 +1416,15 @@ function _tfrPopupMain(){
       else{ z=z*0.97; tbl.style.zoom=z; }
     }
     if(fillFull&&z>=1)tbl.style.height="100%";
+    // الاسم في سطر واحد: الاسم الأطول من العمود يُصغَّر خطه ليتّسع بدل أن يُقطع
+    var nms=tb.querySelectorAll("td.td-name.nf");
+    for(var q=0;q<nms.length;q++){
+      var c=nms[q];
+      if(c.scrollWidth>c.clientWidth+0.5){
+        var fs=parseFloat(getComputedStyle(c).fontSize)*(c.clientWidth-1)/c.scrollWidth;
+        c.style.fontSize=Math.max(5,fs).toFixed(2)+"px";
+      }
+    }
     return Math.round(s*z*100);
   }
   var SETTINGS=null;
@@ -1476,6 +1502,7 @@ function _tfrPopupMain(){
     o=document.createElement("option");o.value="__all__";o.textContent="🏫 كل الفصول ("+DATA.classes.length+")";cs.appendChild(o);
     DATA.classes.forEach(function(c){o=document.createElement("option");o.value=c.cls;o.textContent=c.cls;cs.appendChild(o);});
     cs.value=DATA.initial;
+    document.getElementById("pAutoFit").checked=true;   // الاسم في سطر واحد افتراضياً
     render();
   }
   window.addEventListener("load",function(){
@@ -1556,7 +1583,7 @@ function tfrPrint(allClasses){
     subject:TFR.subject||'',term:TFR.term||'',syear:TFR.schoolYear||'',teacher:TFR.teacherName||'',
     school:DB.meta.schoolName||'Dalty Grades',
     logo:TFR.logo||'',
-    font:{family:(TF.family||'Cairo,sans-serif').replace(/"/g,"'"),tableSize:TF.tableSize||10,headerSize:TF.headerSize||9,
+    font:{family:(TF.family||'Amiri,serif').replace(/['"]/g,''),tableSize:TF.tableSize||10,headerSize:TF.headerSize||9,
           nameSize:TF.nameSize||10,totalSize:TF.totalSize||12,weight:TF.weight||700,nameWidth:TF.nameWidth||45},
     cf:JSON.parse(JSON.stringify(TFR_CF))
   };
@@ -1651,35 +1678,36 @@ function renderTafrighPage(){
 
   // صف 1
   h+='<tr>';
-  h+='<th rowspan="2" style="background:#1e3a8a;color:white;border:1px solid #3b82f6;padding:5px 3px;width:24px;">#</th>';
-  h+='<th rowspan="2" style="background:#1e3a8a;color:white;border:1px solid #3b82f6;padding:5px 6px;text-align:right;min-width:120px;">اسم الطالب</th>';
+  h+='<th rowspan="2" style="background:#dbeafe;color:#1e3a8a;border:1px solid #3b82f6;padding:5px 3px;width:24px;">#</th>';
+  h+='<th rowspan="2" style="background:#dbeafe;color:#1e3a8a;border:1px solid #3b82f6;padding:5px 6px;text-align:right;min-width:120px;">اسم الطالب</th>';
   selWeeks.forEach(function(w){
     var d=fmtD(w);
     var span=(C.showAssess?1:0)+(C.showHw?1:0)+(C.showBeh?1:0);
     if(span===0) return;
-    h+='<th colspan="'+span+'" style="background:#0f3460;color:#93c5fd;border:1px solid #3b82f6;padding:4px 2px;font-size:'+tfHeaderSize+'px;">'
+    h+='<th colspan="'+span+'" style="background:#dbeafe;color:#1d4ed8;border:1px solid #3b82f6;border-right:2px solid #1e40af;padding:4px 2px;font-size:'+tfHeaderSize+'px;">'
       +(d?'<div style="font-size:7.5px;opacity:.8;">'+d+'</div>':'')+'أ'+w+'</th>';
   });
   var sumSpan=(C.showAvgAssess?1:0)+(C.showAvgHw?1:0)+(C.showAvgBeh?1:0)+(C.showExam?1:0);
   var GOLD='2px solid #f59e0b';
   var sumFirstB='border-right:'+GOLD+';';   // بداية قسم المتوسطات (RTL: الحافة اليمنى)
   var sumLastB='border-left:'+GOLD+';';     // نهاية القسم بعد عمود المجموع
-  if(sumSpan>0) h+='<th colspan="'+sumSpan+'" style="background:#14532d;color:#fde68a;border:1px solid #3b82f6;border-top:'+GOLD+';'+sumFirstB+'padding:5px 2px;">⭐ المتوسطات والمجموع</th>';
-  h+='<th rowspan="2" style="background:#451a03;color:#fcd34d;border:1px solid #3b82f6;border-top:'+GOLD+';'+sumLastB+(sumSpan>0?'':sumFirstB)+'padding:5px 3px;min-width:36px;">المج<br/>/'+maxT+'</th>';
+  if(sumSpan>0) h+='<th colspan="'+sumSpan+'" style="background:#bbf7d0;color:#14532d;border:1px solid #3b82f6;border-top:'+GOLD+';'+sumFirstB+'padding:5px 2px;">⭐ المتوسطات والمجموع</th>';
+  h+='<th rowspan="2" style="background:#fef3c7;color:#92400e;border:1px solid #3b82f6;border-top:'+GOLD+';'+sumLastB+(sumSpan>0?'':sumFirstB)+'padding:5px 3px;min-width:36px;">المج<br/>/'+maxT+'</th>';
   h+='</tr>';
 
   // صف 2
   h+='<tr>';
   selWeeks.forEach(function(){
-    if(C.showAssess) h+='<th style="background:#0f3460;color:#93c5fd;border:1px solid #3b82f6;padding:3px 1px;font-size:'+tfHeaderSize+'px;">ت<br/>/20</th>';
-    if(C.showHw)     h+='<th style="background:#1e4080;color:#67e8f9;border:1px solid #3b82f6;padding:3px 1px;font-size:'+tfHeaderSize+'px;">و<br/>/10</th>';
-    if(C.showBeh)    h+='<th style="background:#2d1b69;color:#a78bfa;border:1px solid #3b82f6;padding:3px 1px;font-size:'+tfHeaderSize+'px;">س<br/>/10</th>';
+    var _wb='border-right:2px solid #1e40af;';
+    if(C.showAssess){ h+='<th style="background:#dbeafe;color:#1d4ed8;border:1px solid #3b82f6;'+_wb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">ت<br/>/20</th>'; _wb=''; }
+    if(C.showHw){     h+='<th style="background:#cffafe;color:#0e7490;border:1px solid #3b82f6;'+_wb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">و<br/>/10</th>'; _wb=''; }
+    if(C.showBeh){    h+='<th style="background:#ede9fe;color:#6d28d9;border:1px solid #3b82f6;'+_wb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">س<br/>/10</th>'; _wb=''; }
   });
   var _fb=sumFirstB;  // يُطبَّق على أول عمود ملخّص ظاهر فقط
-  if(C.showAvgAssess){ h+='<th style="background:#14532d;color:#86efac;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">م.ت<br/>/20</th>'; _fb=''; }
-  if(C.showAvgHw){     h+='<th style="background:#14532d;color:#67e8f9;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">م.و<br/>/10</th>'; _fb=''; }
-  if(C.showAvgBeh){    h+='<th style="background:#14532d;color:#c4b5fd;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">م.سلوك<br/><small>/10</small></th>'; _fb=''; }
-  if(C.showExam){      h+='<th style="background:#14532d;color:#fdba74;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">اخت<br/>/30</th>'; _fb=''; }
+  if(C.showAvgAssess){ h+='<th style="background:#dcfce7;color:#166534;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">م.ت<br/>/20</th>'; _fb=''; }
+  if(C.showAvgHw){     h+='<th style="background:#dcfce7;color:#0e7490;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">م.و<br/>/10</th>'; _fb=''; }
+  if(C.showAvgBeh){    h+='<th style="background:#ede9fe;color:#6d28d9;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">م.سلوك<br/><small>/10</small></th>'; _fb=''; }
+  if(C.showExam){      h+='<th style="background:#ffedd5;color:#9a3412;border:1px solid #3b82f6;'+_fb+'padding:3px 1px;font-size:'+tfHeaderSize+'px;">اخت<br/>/30</th>'; _fb=''; }
   h+='</tr></thead><tbody>';
 
   allCalc.forEach(function(item,idx){
@@ -1696,9 +1724,10 @@ function renderTafrighPage(){
       var avD=(av===''||av===undefined||av===null)?'—':(av==='غ'?'<span style="color:#ef4444;font-weight:700;">غ</span>':(av==='م'?'<span style="color:#d97706;font-weight:700;">م</span>':av));
       var hvD=(hv===''||hv===undefined||hv===null)?'—':(hv==='غ'?'<span style="color:#ef4444;font-weight:700;">غ</span>':(hv==='م'?'<span style="color:#d97706;font-weight:700;">م</span>':hv));
       var bwD=(bwv===null)?'—':(bwv==='غ'?'<span style="color:#ef4444;font-weight:700;">غ</span>':(bwv==='م'?'<span style="color:#d97706;font-weight:700;">م</span>':bwv));
-      if(C.showAssess) h+='<td style="text-align:center;font-size:'+tfTableSize+'px;font-weight:'+tfWeight+';background:'+rowBg+';border:1px solid #bfdbfe;">'+avD+'</td>';
-      if(C.showHw)     h+='<td style="text-align:center;font-size:'+tfTableSize+'px;font-weight:'+tfWeight+';background:#f0f9ff;border:1px solid #bfdbfe;">'+hvD+'</td>';
-      if(C.showBeh)    h+='<td style="text-align:center;font-size:'+tfTableSize+'px;font-weight:'+tfWeight+';background:#faf5ff;border:1px solid #bfdbfe;color:#6d28d9;">'+bwD+'</td>';
+      var _wc='border-right:2px solid #1e40af;';
+      if(C.showAssess){ h+='<td style="text-align:center;font-size:'+tfTableSize+'px;font-weight:'+tfWeight+';background:'+rowBg+';border:1px solid #bfdbfe;'+_wc+'">'+avD+'</td>'; _wc=''; }
+      if(C.showHw){     h+='<td style="text-align:center;font-size:'+tfTableSize+'px;font-weight:'+tfWeight+';background:#f0f9ff;border:1px solid #bfdbfe;'+_wc+'">'+hvD+'</td>'; _wc=''; }
+      if(C.showBeh){    h+='<td style="text-align:center;font-size:'+tfTableSize+'px;font-weight:'+tfWeight+';background:#faf5ff;border:1px solid #bfdbfe;color:#6d28d9;'+_wc+'">'+bwD+'</td>'; _wc=''; }
     });
     var _lastRow=(idx===allCalc.length-1);
     var _bb=_lastRow?'border-bottom:'+GOLD+';':'';
@@ -1871,6 +1900,7 @@ function tfrSyncMetaFromSettings(){
   TFR.term=Number(m.semester)===2?'الفصل الدراسي الثاني':'الفصل الدراسي الأول';
   var map={tfr_teacher:TFR.teacherName,tfr_subject:TFR.subject,tfr_term:TFR.term,tfr_syear:TFR.schoolYear};
   Object.keys(map).forEach(function(id){var el=document.getElementById(id);if(el)el.value=map[id];});
+  tfrMetaSave();
   renderTafrighPage();
   if(typeof showSnack==='function') showSnack('✅ تم تحديث بيانات الكشف من الإعدادات');
 }
@@ -1887,10 +1917,10 @@ function _tfrRenderMetaBar(bar){
     }
     var h='<div class="sub-bar-inner" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:0 8px;">';
     h+='<span style="font-size:9px;color:#94a3b8;font-weight:700;white-space:nowrap;align-self:center;">📝 بيانات الكشف:</span>';
-    h+=inp('tfr_teacher','اسم المعلم',TFR.teacherName,'TFR.teacherName=this.value',140);
-    h+=inp('tfr_subject','المادة',TFR.subject,'TFR.subject=this.value',90);
-    h+=inp('tfr_term','الفصل الدراسي',TFR.term,'TFR.term=this.value',140);
-    h+=inp('tfr_syear','العام الدراسي',TFR.schoolYear,'TFR.schoolYear=this.value',110);
+    h+=inp('tfr_teacher','اسم المعلم',TFR.teacherName,'TFR.teacherName=this.value;tfrMetaSave()',140);
+    h+=inp('tfr_subject','المادة',TFR.subject,'TFR.subject=this.value;tfrMetaSave()',90);
+    h+=inp('tfr_term','الفصل الدراسي',TFR.term,'TFR.term=this.value;tfrMetaSave()',140);
+    h+=inp('tfr_syear','العام الدراسي',TFR.schoolYear,'TFR.schoolYear=this.value;tfrMetaSave()',110);
     h+='<button onclick="tfrSyncMetaFromSettings()" '
      +'style="padding:4px 10px;border-radius:6px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid #3b82f6;background:rgba(59,130,246,.15);color:#93c5fd;white-space:nowrap;align-self:flex-end;">🔄 من الإعدادات</button>';
     h+='</div>';
