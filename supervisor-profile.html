@@ -224,6 +224,23 @@ select.inp{cursor:pointer;}
   opacity:0;transition:.2s;
 }
 .media-item:hover .media-del{opacity:1;}
+.media-item .media-save{
+  position:absolute;bottom:4px;left:4px;
+  background:rgba(29,78,216,.9);border:none;border-radius:8px;
+  height:26px;padding:0 8px;color:#fff;font-size:12px;cursor:pointer;
+  font-family:'Cairo',sans-serif;display:flex;align-items:center;gap:3px;
+}
+.save-all-btn{
+  display:none;margin-top:10px;width:100%;padding:10px;border-radius:10px;
+  border:1px solid rgba(59,130,246,.4);background:rgba(29,78,216,.15);
+  color:#93c5fd;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;
+}
+#spLightbox .lb-save{
+  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  background:#1d4ed8;border:none;color:#fff;border-radius:12px;
+  padding:10px 22px;font-size:15px;font-weight:700;cursor:pointer;
+  font-family:'Cairo',sans-serif;
+}
 .media-item .media-type-badge{
   position:absolute;bottom:4px;right:4px;
   background:rgba(0,0,0,.7);border-radius:5px;padding:2px 5px;
@@ -466,7 +483,7 @@ select.inp{cursor:pointer;}
 ════════════════════════════════════ */
 @media print{
   .topbar,.action-bar,#spToast,.media-tabs,.drop-zone,.rec-bar,
-  .sig-tools,.tb-btn,.media-del,.audio-del,.video-embed-del{display:none!important;}
+  .sig-tools,.tb-btn,.media-del,.media-save,.save-all-btn,.lb-save,.audio-del,.video-embed-del{display:none!important;}
   body{background:#fff;color:#000;}
   .hero{background:linear-gradient(160deg,#1a3a7a,#2d1b69)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .card{border:1px solid #ddd;box-shadow:none;}
@@ -691,6 +708,7 @@ select.inp{cursor:pointer;}
         </div>
       </div>
       <div class="media-grid" id="photoGrid" style="margin-top:10px;"></div>
+      <button class="save-all-btn" id="savePhotosAllBtn" onclick="savePhotos()">💾 حفظ كل الصور على الهاتف</button>
     </div>
 
     <!-- Audio panel -->
@@ -774,6 +792,7 @@ select.inp{cursor:pointer;}
 <div id="spLightbox">
   <div class="lb-close" onclick="closeLightbox()">✕</div>
   <img id="lbImg" src="" alt=""/>
+  <button class="lb-save" onclick="savePhoto(SP.lbIndex)">💾 حفظ على الهاتف</button>
 </div>
 
 <!-- ── SHARE MODAL ── -->
@@ -1090,13 +1109,63 @@ function renderPhotoGrid() {
     item.className = 'media-item';
     item.innerHTML = '<img src="'+p.dataUrl+'" alt="صورة '+(i+1)+'" onclick="openLightbox(\''+i+'\')"/>'+
       '<button class="media-del" onclick="event.stopPropagation();deletePhoto('+i+')">✕</button>'+
+      '<button class="media-save" title="حفظ على الهاتف" onclick="event.stopPropagation();savePhoto('+i+')">💾 حفظ</button>'+
       '<div class="media-type-badge">📷</div>';
     grid.appendChild(item);
   });
+  var allBtn = document.getElementById('savePhotosAllBtn');
+  if(allBtn) allBtn.style.display = SP.photos.length > 1 ? 'block' : 'none';
+}
+
+// ── حفظ الصور على الهاتف ──
+// في الهاتف: نافذة المشاركة (فيها «حفظ الصورة» / «حفظ في المعرض»)، وإلا تنزيل مباشر
+function _dataUrlToFile(p, i) {
+  var parts = String(p.dataUrl).split(',');
+  var mime = (parts[0].match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  var bin = atob(parts[1] || ''), n = bin.length, u8 = new Uint8Array(n);
+  while(n--) u8[n] = bin.charCodeAt(n);
+  var ext = mime.split('/')[1] === 'png' ? 'png' : (mime.split('/')[1] || 'jpg').replace('jpeg','jpg');
+  var base = (p.name || ('صورة_' + (i+1))).replace(/\.[a-z0-9]+$/i,'').replace(/[\\/:*?"<>|]/g,'_');
+  return new File([u8], base + '.' + ext, {type: mime});
+}
+function _downloadFile(f) {
+  var url = URL.createObjectURL(f), a = document.createElement('a');
+  a.href = url; a.download = f.name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+async function _saveFiles(files) {
+  try {
+    if(navigator.share && navigator.canShare && navigator.canShare({files: files})) {
+      await navigator.share({files: files});
+      return 'shared';
+    }
+  } catch(e) {
+    if(e && e.name === 'AbortError') return 'abort';
+  }
+  files.forEach(function(f, k){ setTimeout(function(){ _downloadFile(f); }, k * 400); });
+  return 'downloaded';
+}
+async function savePhoto(i) {
+  var p = SP.photos[i]; if(!p) return;
+  try {
+    var r = await _saveFiles([_dataUrlToFile(p, i)]);
+    if(r === 'shared') toast('✅ اختر «حفظ الصورة» من القائمة', 'ok');
+    else if(r === 'downloaded') toast('✅ تم تنزيل الصورة على الجهاز', 'ok');
+  } catch(e) { toast('⚠️ تعذّر حفظ الصورة', 'err'); }
+}
+async function savePhotos() {
+  if(!SP.photos.length) return;
+  try {
+    var r = await _saveFiles(SP.photos.map(_dataUrlToFile));
+    if(r === 'shared') toast('✅ اختر «حفظ الصور» من القائمة', 'ok');
+    else if(r === 'downloaded') toast('✅ تم تنزيل ' + SP.photos.length + ' صورة', 'ok');
+  } catch(e) { toast('⚠️ تعذّر حفظ الصور', 'err'); }
 }
 
 function deletePhoto(i) { SP.photos.splice(i,1); renderPhotoGrid(); }
 function openLightbox(i) {
+  SP.lbIndex = +i;
   document.getElementById('lbImg').src = SP.photos[i].dataUrl;
   document.getElementById('spLightbox').classList.add('open');
 }
