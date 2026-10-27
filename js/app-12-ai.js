@@ -3039,6 +3039,13 @@ function viewChat() {
   chatRenderAlerts(); chatRenderList(); chatRenderAtt();
   var b = box(); if (b) b.scrollTop = b.scrollHeight;
 }
+function verifyHtml(m) {
+  var v = m.verify; if (m.state !== 'applied' || !v) return '';
+  var good = !v.bad.length;
+  return '<div style="margin-top:7px;font-size:11px;line-height:1.9;border-radius:8px;padding:6px 9px;background:' + (good ? 'rgba(74,222,128,.08)' : 'rgba(251,191,36,.1)') + ';border:1px solid ' + (good ? '#166534' : '#d97706') + ';color:' + (good ? '#86efac' : '#fcd34d') + ';">🔍 ' +
+    (good ? 'تحقّقتُ من البيانات بعد الحفظ: ' + v.ok + ' من ' + v.tot + ' تغيير مطابق تماماً' + (v.extras ? ' (+ ' + v.extras + ' عملية بنيوية)' : '') + '.'
+          : 'تحقّقتُ بعد الحفظ: ' + v.ok + ' من ' + v.tot + ' مطابق. الاختلافات:<br>' + v.bad.map(esc).join('<br>')) + '</div>';
+}
 function chatRenderList() {
   var el = document.getElementById('daiChatList'); if (!el) return;
   if (!CHAT.msgs.length) {
@@ -3068,15 +3075,15 @@ function chatRenderList() {
             (p.over ? '<div style="font-size:10px;color:#fbbf24;margin-top:4px;">⚠️ سيُستبدل ' + p.over + ' درجة موجودة.</div>' : '');
         }).join('') +
         '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">' +
-        (m.state === 'applied' ? '<span style="color:#4ade80;font-size:11px;font-weight:800;padding:6px 0;">✅ طُبِّق</span>' +
+        (m.state === 'applied' ? '<span style="color:#4ade80;font-size:11px;font-weight:800;padding:6px 0;">✅ طُبِّق</span>' + btn('👁 عرض في الصفحة', 'DAI.chatShow(' + i + ')', GHOST + 'padding:6px 10px;font-size:11px;') +
             (undoable ? btn('↩ تراجع', 'DAI.chatUndo(' + i + ')', 'background:rgba(251,191,36,.12);border:1px solid #d97706;color:#fcd34d;padding:6px 10px;font-size:11px;') : '') :
           m.state === 'dismissed' ? '<span style="color:#94a3b8;font-size:11px;padding:6px 0;">تم التجاهل</span>' :
           m.state === 'undone' ? '<span style="color:#fbbf24;font-size:11px;padding:6px 0;">↩ تم التراجع</span>' :
           btn(n ? '✅ تطبيق (' + n + ')' : 'لا يوجد ما يُطبَّق', 'DAI.chatApply(' + i + ')', PRIMARY + 'padding:7px 12px;font-size:12px;' + (n ? '' : 'opacity:.45;'), n ? '' : 'disabled') +
-          btn('✖ تجاهل', 'DAI.chatDismiss(' + i + ')', GHOST + 'padding:6px 10px;')) + '</div></div>';
+          btn('✖ تجاهل', 'DAI.chatDismiss(' + i + ')', GHOST + 'padding:6px 10px;')) + '</div>' + verifyHtml(m) + '</div>';
     } else if (m.hadPlan) {
       card = '<div style="margin-top:8px;border-top:1px dashed #334155;padding-top:6px;font-size:11px;color:#94a3b8;line-height:1.8;">' +
-        (m.state === 'applied' ? '✅ طُبِّقت تعديلات هنا. (زر التراجع غير متاح بعد إعادة فتح التطبيق — لديك نسخة احتياطية قبل التعديل في صفحة 💾 النسخ الاحتياطي.)' :
+        (m.state === 'applied' ? '✅ طُبِّقت تعديلات هنا. (زر التراجع غير متاح بعد إعادة فتح التطبيق — لديك نسخة احتياطية قبل التعديل في صفحة 💾 النسخ الاحتياطي.)' + verifyHtml(m) :
           m.state === 'undone' ? '↩ تم التراجع' : m.state === 'dismissed' ? 'تم التجاهل' :
           'انتهت صلاحية معاينة التعديلات بعد إعادة فتح التطبيق. اطلب التعديل من جديد إن أردته.') + '</div>';
     }
@@ -3383,6 +3390,49 @@ function planCount(m) {
   return n;
 }
 function refreshHead() { if (ST && ST.view === 'chat') head('🧠 المحادثة الذكية', true); }
+/* ═════ التحقق بعد التطبيق: نقرأ البيانات الفعلية من القاعدة ونقارنها بما خُطِّط له ═════ */
+function verifyGroups(groups) {
+  var tot = 0, ok = 0, bad = [], extras = 0;
+  (groups || []).forEach(function (g) {
+    var arr = DB.data[g.cls] || [], p = g.plan;
+    function byId(id) { for (var k = 0; k < arr.length; k++) if (String(arr[k].id) === String(id)) return arr[k]; return null; }
+    (p.cells || []).forEach(function (c) {
+      tot++;
+      var st = byId(c.id), cur = st ? st[c.key] : undefined;
+      var want = hasData(c.nu) ? String(c.nu) : '', got = hasData(cur) ? String(cur) : '';
+      if (st && want === got) ok++;
+      else bad.push((st ? (st.name || '').trim() : '؟') + ' — ' + labelFor(c.key) + ': المتوقع ' + fmtVal(c.nu) + '، الموجود ' + fmtVal(cur));
+    });
+    (p.abs || []).forEach(function (a) {
+      tot++;
+      var st = byId(a.id), cur = st ? (getStudentAbsences(g.cls, st.id)['w' + a.week + '_ci' + a.ci] || '') : null;
+      if (st && cur === (a.nu || '')) ok++;
+      else bad.push((st ? (st.name || '').trim() : '؟') + ' — غياب أسبوع ' + a.week + ' حصة ' + (a.ci + 1) + ': لم يُسجَّل كما هو متوقع');
+    });
+    (p.add || []).forEach(function (name) {
+      tot++;
+      if (arr.some(function (x) { return normAr(x.name) === normAr(name); })) ok++;
+      else bad.push('الطالب «' + name + '» لم يُضَف');
+    });
+    extras += (p.extra || []).length;
+  });
+  return { tot: tot, ok: ok, bad: bad.slice(0, 6), extras: extras };
+}
+function chatShow(i) {
+  var m = CHAT.msgs[i]; if (!m) return;
+  var g = (m.groups && m.groups[0]) || null;
+  var cls = (g && g.cls) || m.cls || ST.cls;
+  var hasCells = !!(g && m.groups.some(function (x) { return x.plan.cells.length; }));
+  var abG = g && m.groups.filter(function (x) { return x.plan.abs.length; })[0];
+  var page = (!hasCells && abG) ? 'absence' : 'grades';
+  try {
+    if (typeof GS !== 'undefined') GS.activeClass = cls;
+    if (typeof AS !== 'undefined') { AS.activeClass = cls; if (abG) AS.activeWeek = abG.plan.abs[0].week; }
+    if (typeof WKS !== 'undefined') WKS.activeClass = cls;
+  } catch (e) {}
+  minimizeAI();
+  try { if (typeof switchPage === 'function') switchPage(page); } catch (e) {}
+}
 function chatApply(i) {
   var m = CHAT.msgs[i]; if (!m || !m.groups || m.state !== 'pending') return;
   var label0 = m.summary || ('محادثة: ' + (CHAT.msgs[i - 1] ? CHAT.msgs[i - 1].text : '').slice(0, 40));
@@ -3398,7 +3448,8 @@ function chatApply(i) {
     if (!ts.length) { chatRenderList(); return; }
   }
   m.state = 'applied';
-  if (typeof showSnack === 'function') showSnack('✅ تم تنفيذ التعديلات');
+  try { m.verify = verifyGroups(m.groups); } catch (e) { m.verify = null; }
+  if (typeof showSnack === 'function') showSnack(m.verify && m.verify.bad.length ? '⚠️ طُبِّقت التعديلات مع اختلافات — راجع التحقق' : '✅ تم التنفيذ والتحقق من ' + (m.verify ? m.verify.ok : 0) + ' تغيير');
   chatSave(); refreshHead(); chatRenderList();
 }
 function chatDismiss(i) { var m = CHAT.msgs[i]; if (m && m.state === 'pending') { m.state = 'dismissed'; chatSave(); chatRenderList(); } }
@@ -3624,7 +3675,7 @@ function chatSave() {
       if (m.summary) o.summary = m.summary;
       if (m.prefNote) o.prefNote = m.prefNote;
       if (m.tables) o.tables = m.tables;
-      if (m.groups || m.hadPlan) { o.hadPlan = 1; o.state = m.state; }
+      if (m.groups || m.hadPlan) { o.hadPlan = 1; o.state = m.state; if (m.verify) o.verify = m.verify; }
       return o;
     });
     localStorage.setItem(CHAT_STORE, JSON.stringify({ t: Date.now(), open: AI_OPEN, draft: CHAT.draft || '', msgs: keep }));
@@ -3715,7 +3766,7 @@ window.DAI = {
   locate: paneLocate,
   alertToggle: alertToggle, alertHide: alertHide, alertDetail: alertDetail, alertAsk: alertAsk,
   chatFiles: chatAddFiles, chatRmImg: function (i) { CHAT.imgs.splice(i, 1); chatRenderAtt(); }, chatKind: function (k) { CHAT.imgKind = (CHAT.imgKind === k ? '' : k); CHAT.attHint = ''; chatRenderAtt(); },
-  chatGo: chatGo, chatTableXls: chatTableXls, chatMdXls: chatMdXls, chatTablePdf: chatTablePdf, chatMdPdf: chatMdPdf, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
+  chatGo: chatGo, chatTableXls: chatTableXls, chatMdXls: chatMdXls, chatTablePdf: chatTablePdf, chatMdPdf: chatMdPdf, minimize: minimizeAI, restore: restoreAI, undoBar: undoBar, chatApply: chatApply, chatShow: chatShow, chatDismiss: chatDismiss, chatUndo: chatUndo, chatCopy: chatCopy,
   undo: function (fromDone) { doUndo(fromDone === true); }
 };
 
