@@ -10,9 +10,13 @@ function showApp(){
   var shell=document.getElementById("appShell");
   if(shell)shell.classList.add("visible");
   var _un=document.getElementById("topUserName");if(_un)_un.textContent="";
+  var _wasBooted=!!window._booted;
   if(!window._booted){window._booted=true;initDB();initNotifications();}
-  if(window.innerWidth<=700){closeSidebar();}else{openSidebar();}
-  setTimeout(function(){switchPage("home");},0);
+  if(!_wasBooted){
+    if(window.innerWidth<=700){closeSidebar();}else{openSidebar();}
+    setTimeout(function(){switchPage("home");},0);
+  }
+  /* لو كان التطبيق مفتوحاً بالفعل (مثلاً وصل تأكيد الدخول متأخراً) لا نُرجع المستخدم للرئيسية */
   if(typeof loadSavedFontSettings === 'function') loadSavedFontSettings();
 }
 window.addEventListener("load",function(){
