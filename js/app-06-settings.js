@@ -211,6 +211,21 @@ function renderSettings(){
   html+='<span class="settings-desc">تظهر بدلاً من أيقونة 👤 للطلاب الذين ليس لديهم صور خاصة</span>';
   html+='</div></div></div></div>';
 
+  // حفظ صور الطلاب في مجلد واحد (ZIP) لسهولة النقل
+  var _spN=0; (DB.classes||[]).forEach(function(c){(DB.data[c]||[]).forEach(function(st){ if(st&&typeof st.photo==='string'&&st.photo.indexOf('data:image')===0)_spN++; });});
+  html+='<div class="settings-row" style="align-items:flex-start;">';
+  html+='<span class="settings-lbl">حفظ صور الطلاب:</span>';
+  html+='<div class="settings-val"><div style="display:flex;flex-direction:column;gap:8px;">';
+  html+='<select id="stuPhotoZipClass" style="max-width:220px;padding:6px;border-radius:6px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;font-family:inherit;"><option value="">كل الفصول</option>';
+  (DB.classes||[]).forEach(function(c){ html+='<option value="'+String(c).replace(/"/g,'&quot;')+'">'+String(c).replace(/</g,'&lt;')+'</option>'; });
+  html+='</select>';
+  html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  html+='<button class="btn btn-sm" style="background:#1d4ed8;color:#fff;" onclick="stuPhotosZip(\'share\')">📤 مشاركة / حفظ على الهاتف</button>';
+  html+='<button class="btn btn-sm" style="background:#0f766e;color:#fff;" onclick="stuPhotosZip(\'download\')">⬇️ تنزيل مجلد (ZIP)</button>';
+  html+='</div>';
+  html+='<span class="settings-desc">تُجمع صور الطلاب ('+_spN+' صورة) في ملف واحد بداخله مجلد لكل فصل، وأسماء الملفات بأسماء الطلاب. فكّ الضغط على الجهاز ستجد مجلد «صور_الطلاب».</span>';
+  html+='</div></div></div>';
+
   html+='</div></div>';
 
   // ── عامة ──
@@ -1471,3 +1486,70 @@ function doRedo(){showSnack('⚠️ الإعادة غير متاحة حاليا�
 // SECTION NEW-C: BOOT
 // ══════════════════════════════════════════════════════
 function bootAll(){initDB();}
+
+
+/* ═════════ تصدير صور الطلاب كمجلد ZIP ═════════ */
+var _zipCrcT=null;
+function _zipCrc(u8){
+  if(!_zipCrcT){_zipCrcT=new Uint32Array(256);for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?(0xEDB88320^(c>>>1)):(c>>>1);_zipCrcT[n]=c>>>0;}}
+  var crc=0xFFFFFFFF;for(var i=0;i<u8.length;i++)crc=_zipCrcT[(crc^u8[i])&255]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+// ZIP بدون ضغط (الصور مضغوطة أصلاً) مع دعم الأسماء العربية (UTF-8)
+function _zipBuild(entries){
+  var enc=new TextEncoder(),parts=[],central=[],offset=0;
+  var d=new Date(),dt=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF,dd=(((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF;
+  entries.forEach(function(e){
+    var nm=enc.encode(e.name),crc=_zipCrc(e.data),sz=e.data.length;
+    var lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(8,0,true);
+    lh.setUint16(10,dt,true);lh.setUint16(12,dd,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);
+    lh.setUint16(26,nm.length,true);lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer),nm,e.data);
+    var ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(10,0,true);
+    ch.setUint16(12,dt,true);ch.setUint16(14,dd,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);
+    ch.setUint16(28,nm.length,true);ch.setUint32(42,offset,true);
+    central.push(new Uint8Array(ch.buffer),nm);
+    offset+=30+nm.length+sz;
+  });
+  var cs=0;central.forEach(function(x){cs+=x.length;});
+  var end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true);end.setUint16(8,entries.length,true);end.setUint16(10,entries.length,true);end.setUint32(12,cs,true);end.setUint32(16,offset,true);
+  return new Blob(parts.concat(central,[new Uint8Array(end.buffer)]),{type:'application/zip'});
+}
+function _zipSafe(t){return String(t||'').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim().slice(0,60);}
+function _zipDataUrl(du){
+  var m=/^data:([^;,]+)(;base64)?,(.*)$/.exec(du);if(!m)return null;
+  var bin=atob(m[3]),u8=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+  var t=m[1].split('/')[1]||'jpeg';return {data:u8,ext:t==='jpeg'?'jpg':t};
+}
+async function stuPhotosZip(mode){
+  try{
+    var sel=document.getElementById('stuPhotoZipClass'),only=sel?sel.value:'';
+    var root='صور_الطلاب',entries=[],used={};
+    (DB.classes||[]).forEach(function(c){
+      if(only&&c!==only)return;
+      var i=0;
+      (DB.data[c]||[]).forEach(function(st){
+        if(!st||!st.name)return; i++;
+        if(typeof st.photo!=='string'||st.photo.indexOf('data:image')!==0)return;
+        var f=_zipDataUrl(st.photo);if(!f)return;
+        var base=root+'/'+(_zipSafe(c)||'فصل')+'/'+(i<10?'0':'')+i+'_'+(_zipSafe(st.name)||'طالب'),path=base+'.'+f.ext,k=2;
+        while(used[path])path=base+'_'+(k++)+'.'+f.ext;
+        used[path]=1;entries.push({name:path,data:f.data});
+      });
+    });
+    if(!entries.length){showSnack('ℹ️ لا توجد صور طلاب للحفظ');return;}
+    var fname='صور_الطلاب'+(only?'_'+_zipSafe(only):'')+'_'+new Date().toISOString().slice(0,10)+'.zip';
+    var blob=_zipBuild(entries),file=new File([blob],fname,{type:'application/zip'});
+    if(mode==='share'&&navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:fname});showSnack('✅ تمت المشاركة: '+entries.length+' صورة');return;}
+      catch(e){if(e&&e.name==='AbortError')return;}
+    }
+    var url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},6000);
+    showSnack('✅ تم تنزيل '+entries.length+' صورة في ملف ZIP');
+  }catch(e){showSnack('⚠️ تعذّر تجهيز الصور');}
+}
