@@ -159,6 +159,55 @@ function _clearUnsyncedIfOlder(pushStartTs) {
 }
 function _localStoreKey() { return window.STORE_KEY || "grades_v6"; }
 
+/* آخر نسخة سحابية طُبّقت/رُفعت من هذا الجهاز — لتجنّب إعادة تطبيق نفس النسخة في كل فتح */
+function _getKnownRemoteTs() {
+  try { return parseInt(localStorage.getItem(_localStoreKey() + "_rts") || "0", 10) || 0; } catch (e) { return 0; }
+}
+function _setKnownRemoteTs(ts) {
+  try { if (ts) localStorage.setItem(_localStoreKey() + "_rts", String(ts)); } catch (e) {}
+}
+
+/* لو المستخدم داخل صفحة (غير الرئيسية) لا نستبدل بياناتها ونعيد رسمها أمامه — نؤجّل التطبيق */
+function _remoteShouldWait() {
+  try {
+    return !!(window._booted && window.DB && window.DB.data &&
+              typeof _currentPage !== "undefined" && _currentPage !== "home");
+  } catch (e) { return false; }
+}
+function _flushPendingRemote() {
+  var fn = window._pendingRemoteApply;
+  window._pendingRemoteApply = null;
+  var b = document.getElementById("remoteUpdateBanner");
+  if (b) b.remove();
+  if (fn) { try { fn(); } catch (e) { console.warn("[Dalty Sync] flush", e); } }
+}
+function _notifyRemotePending() {
+  /* طبّق المؤجَّل تلقائياً عند العودة للرئيسية */
+  if (!window._spWrapped && typeof window.switchPage === "function") {
+    window._spWrapped = true;
+    var _sp = window.switchPage;
+    window.switchPage = function (p) {
+      var r = _sp.apply(this, arguments);
+      if (p === "home" && window._pendingRemoteApply) _flushPendingRemote();
+      return r;
+    };
+  }
+  if (document.getElementById("remoteUpdateBanner")) return;
+  var d = document.createElement("div");
+  d.id = "remoteUpdateBanner";
+  d.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:76px;z-index:9998;" +
+    "background:#0f1e35;color:#e2e8f0;border:1px solid #1e3a5f;border-radius:12px;padding:9px 14px;" +
+    "font-family:Cairo,sans-serif;font-size:13px;direction:rtl;display:flex;gap:10px;align-items:center;" +
+    "box-shadow:0 6px 20px rgba(0,0,0,.4)";
+  d.innerHTML = '<span>🔄 توجد نسخة أحدث على السحابة</span>' +
+    '<button style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:5px 10px;' +
+    'font-family:Cairo,sans-serif;cursor:pointer">تحديث الآن</button>' +
+    '<button style="background:transparent;color:#94a3b8;border:none;cursor:pointer;font-size:15px">✕</button>';
+  d.children[1].onclick = _flushPendingRemote;
+  d.children[2].onclick = function () { d.remove(); };
+  document.body.appendChild(d);
+}
+
 function listenForRemoteChanges() {
   _fbRef.on("value", function (snapshot) {
     var remote = snapshot.val();
@@ -207,24 +256,43 @@ function listenForRemoteChanges() {
     /* إصلاح أي نقص جزئي (زي absences أو schedule) بدل رفض التحديث بالكامل */
     clean = repairDB(clean);
 
-    console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
-
-    try {
-      localStorage.setItem(_localStoreKey(), JSON.stringify(clean));
-    } catch(e) {}
-
-    /* تحديث DB في الذاكرة وإعادة الرسم */
-    if (window.DB !== undefined) {
-      window.DB = clean;
-      if (typeof window._photosHydrate === "function") window._photosHydrate();
-      if (typeof window.renderGrades  === "function") window.renderGrades();
-      if (typeof window.renderAbsence === "function") window.renderAbsence();
-      if (typeof window.renderWeekly  === "function") window.renderWeekly();
-      if (typeof window.renderSick    === "function") window.renderSick();
+    /* نفس النسخة المطبّقة سابقاً: لا شيء يتغير — لا إعادة رسم ولا تحميل زائد */
+    var _rts = remote._ts || 0;
+    if (_rts && _rts === _getKnownRemoteTs()) {
+      showSyncStatus("ok", "☁️ متزامن");
+      return;
     }
 
-    showSyncStatus("ok", "✅ تم التحديث من جهاز آخر");
-    setTimeout(function () { showSyncStatus("ok", "☁️ متزامن"); }, 3000);
+    var _applyIt = function () {
+      /* إن رُصدت تعديلات محلية أثناء الانتظار فهي الأحدث: لا تستبدلها */
+      if (_isUnsynced()) return;
+      console.log("[Dalty Sync] 📥 تحديث من جهاز آخر");
+
+      try {
+        localStorage.setItem(_localStoreKey(), JSON.stringify(clean));
+      } catch(e) {}
+
+      /* تحديث DB في الذاكرة وإعادة الرسم */
+      if (window.DB !== undefined) {
+        window.DB = clean;
+        if (typeof window._photosHydrate === "function") window._photosHydrate();
+        if (typeof window.renderGrades  === "function") window.renderGrades();
+        if (typeof window.renderAbsence === "function") window.renderAbsence();
+        if (typeof window.renderWeekly  === "function") window.renderWeekly();
+        if (typeof window.renderSick    === "function") window.renderSick();
+      }
+      _setKnownRemoteTs(_rts);
+      showSyncStatus("ok", "✅ تم التحديث من جهاز آخر");
+      setTimeout(function () { showSyncStatus("ok", "☁️ متزامن"); }, 3000);
+    };
+
+    if (_remoteShouldWait()) {
+      window._pendingRemoteApply = _applyIt;   /* آخر نسخة فقط */
+      _notifyRemotePending();
+      showSyncStatus("ok", "☁️ نسخة أحدث بانتظار التحديث");
+      return;
+    }
+    _applyIt();
   });
 }
 
@@ -336,6 +404,7 @@ function pushToFirebase() {
     .then(function () {
       _isSyncing = false;
       _clearUnsyncedIfOlder(ts);
+      _setKnownRemoteTs(ts);
       showSyncStatus("ok", "☁️ متزامن");
       console.log("[Dalty Sync] ✅ تم الحفظ على Firebase");
     })
@@ -596,6 +665,7 @@ function pullFromFirebase() {
       /* حدّث الذاكرة أولاً: فشل الحفظ المحلي (امتلاء التخزين) لا يجب أن يمنع التحديث */
       window.DB = clean;
       _lastSaveTS = remoteTs;
+      _setKnownRemoteTs(remoteTs);
       var _stored = true;
       try { localStorage.setItem(_localStoreKey(), JSON.stringify(clean)); }
       catch (e) { _stored = false; console.warn("[Dalty Sync] تعذر الحفظ المحلي:", e); }

@@ -68,7 +68,7 @@ function _applyRememberedStoreKey() {
   } catch (e) {}
   return false;
 }
-function _openOfflineFallback(reason) {
+function _openOfflineFallback(reason, silent) {
   if (window._offlineOpened) return;
   window._offlineOpened = true;
   console.warn("[Auth] فتح التطبيق من بيانات الجهاز (بدون تحقق من الشبكة):", reason);
@@ -78,21 +78,41 @@ function _openOfflineFallback(reason) {
     if (!window._booted) openAppNow();
     var shell = document.getElementById("appShell");
     if (shell) shell.classList.add("visible");
-    if (typeof showSnack === "function") {
+    if (!silent && typeof showSnack === "function") {
       showSnack("📴 تعمل بدون إنترنت — بياناتك محفوظة على جهازك وستتزامن عند عودة الاتصال", null, "warn");
     }
   }, 50);
 }
 
 /* Firebase SDK محمّل مباشرة من index.html */
-window.addEventListener("load", function () { initAuth(); });
+function _bootAuth() {
+  if (window._authBooted) return;
+  window._authBooted = true;
+  initAuth();
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _bootAuth);
+  window.addEventListener("load", _bootAuth);   /* احتياط */
+} else {
+  _bootAuth();
+}
 
 /* ════════════════════════════════════════
    تهيئة Firebase Auth
    ════════════════════════════════════════ */
 function initAuth() {
   /* قبل أن يقرأ التطبيق بياناته: اختر آخر نسخة محلية لهذا المستخدم */
-  _applyRememberedStoreKey();
+  var _hasLocalCopy = _applyRememberedStoreKey();
+
+  /* ⚡ فتح فوري: لدينا مستخدم سابق ونسخة محلية → افتح التطبيق الآن بدون انتظار الشبكة،
+     ويتم التحقق من الدخول في الخلفية (تظهر شاشة الدخول فقط لو انتهت الجلسة فعلاً) */
+  if (_hasLocalCopy) {
+    window._optimisticOpen = true;
+    if (typeof window.showApp === "function" && !window.showApp._authIntercepted && !window._origShowApp) {
+      window._origShowApp = window.showApp;   /* الدالة الأصلية قبل أن يعترضها نظام الدخول */
+    }
+    _openOfflineFallback("optimistic-local-copy", true);
+  }
 
   /* لم يتحمّل Firebase (لا إنترنت ولا نسخة مخزنة) — افتح التطبيق محلياً */
   if (typeof firebase === "undefined") {
@@ -136,6 +156,8 @@ function initAuth() {
             _openOfflineFallback("offline-no-session");
             return;
           }
+          /* انتهت الجلسة فعلاً (والشبكة متاحة): أخفِ التطبيق وأظهر شاشة الدخول */
+          window._optimisticOpen = false;
           showAuthScreen();
         }
       });
@@ -175,6 +197,7 @@ function interceptShowApp() {
   /* منع الفتح التلقائي عند التحميل */
   window.addEventListener("load", function() {
     /* أخفِ appShell حتى يتم التحقق */
+    if (window._booted || window._offlineOpened) return;   /* التطبيق فُتح من النسخة المحلية */
     var shell = document.getElementById("appShell");
     if (shell) shell.classList.remove("visible");
   }, { once: true, capture: true });
@@ -335,8 +358,10 @@ window.showSubDetails = function() {
 
 function openAppNow() {
   /* فُتح التطبيق بالفعل بدون إنترنت، ثم وصل تأكيد الدخول: لا تُعد تحميل الصفحة الرئيسية */
-  if (window._offlineOpened && window._booted && !window._offlineReconciled) {
+  if (window._offlineOpened && window._booted) {
     window._offlineReconciled = true;
+    var _sh = document.getElementById("appShell");
+    if (_sh) _sh.classList.add("visible");
     return;
   }
   if (window._origShowApp) {
