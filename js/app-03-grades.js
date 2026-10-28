@@ -4,6 +4,7 @@ var GS={activeClass:"",activePage:"pg_home",search:"",hOpen:true,distRange:{min:
   modal:null, // {type, data}
   homeColVis:{assess:true,hw:true,beh:true,avgAssess:true,avgHw:true,avgBeh:true,total:true,dist:true}
 };
+try{GS.homeView=localStorage.getItem('dalty_home_view')==='cards'?'cards':'table';}catch(e){GS.homeView='table';}
 
 // كل إعادة رسم لصفحة الدرجات تحافظ على موضع التمرير (الرأسي والأفقي لجدول .tw)
 function renderGrades(){ keepScrollRender(_renderGradesCore); }
@@ -69,6 +70,7 @@ function _renderGradesCore(){
   html+='<div class="g-info-left">📌 '+esc(cls)+' — '+esc(DB.meta.subject)+'</div>';
   html+='<div class="g-info-right">';
   html+='<span class="badge badge-blue">'+filtered.length+' طالب</span>';
+  if(GS.activePage==='pg_home')html+='<button class="btn btn-sm" style="background:'+(GS.homeView==='cards'?'#b45309':'#7c3aed')+';color:white;border:none;" onclick="gradesSetView(\''+(GS.homeView==='cards'?'table':'cards')+'\')">'+(GS.homeView==='cards'?'📋 عرض جدول':'🪪 عرض كروت')+'</button>';
   html+='<button class="btn btn-sm" style="background:#0e7490;color:white;border:none;" onclick="gradesSortAlpha()">🔤 أبجدي</button>';
   html+='<button class="btn btn-sm" style="background:'+(namesLocked?'#b45309':'#475569')+';color:white;border:none;" onclick="gradesToggleNamesLock()" title="'+(namesLocked?'الأسماء مقفلة — اضغط للفتح':'اضغط لقفل تعديل الأسماء')+'">'+(namesLocked?'🔒 الأسماء مقفلة':'🔓 قفل الأسماء')+'</button>';
   html+='<button class="btn btn-sm" style="background:#059669;color:white;border:none;'+(namesLocked?'opacity:.45;':'')+'" onclick="openPasteNamesModal()">📋 لصق أسماء</button>';
@@ -124,6 +126,7 @@ function _renderGradesCore(){
       if(fld===_lastShownFld)s+='border-left:3px solid '+_wkBorderClr+';';
       return s;
     }
+    if(GS.homeView==='cards'){html+=_gradesCardsHtml(cls,filtered,students,tmax);}else{
     html+='<div class="tw"><table><thead>';
     if(_wkSpan>0){
       html+='<tr>';
@@ -285,6 +288,7 @@ function _renderGradesCore(){
     });
     html+='</tbody></table></div>';
     html+='<div style="font-size:10px;color:#94a3b8;margin:4px 2px;display:flex;gap:14px;flex-wrap:wrap;"><span style="color:#fca5a5;">🟥 الخانة الحمراء = الدرجة لسه متسجلتش في أسبوع وصلنا له أو فات</span><span style="color:#6ee7b7;">✅ رأس العمود/الأسبوع الأخضر = كل الطلاب درجاتهم متسجلة</span><span style="color:#fbbf24;">┃ الخط السميك = فاصل بين الأسابيع</span></div>';
+    }
     html+='<button class="add-row-btn" onclick="gradesAddStudent()">+ إضافة طالب جديد</button>';
   } else {
   // NORMAL PAGE VIEW
@@ -2267,3 +2271,80 @@ window._sgUpdateUrl = _sgUpdateUrl;
     document.addEventListener('pointercancel',up);
   };
 })();
+
+
+/* ═════════ عرض الكروت للطلاب (صفحة الدرجات الرئيسية) ═════════ */
+function gradesSetView(v){
+  GS.homeView=(v==='cards')?'cards':'table';
+  try{localStorage.setItem('dalty_home_view',GS.homeView);}catch(e){}
+  GS._gsCell=null;GS._gsInput='';
+  try{if(typeof FNP_hide==='function')FNP_hide();}catch(e){}
+  renderGrades();
+}
+function _gradesCardsCss(){
+  if(document.getElementById('scCardsCss'))return;
+  var st=document.createElement('style');st.id='scCardsCss';
+  st.textContent=
+  '.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:8px 0 80px;}'+
+  '.sc-card{background:#0d1b33;border:1.5px solid #1e3a5f;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;position:relative;}'+
+  '.sc-card.sel{border-color:#fbbf24;box-shadow:0 0 0 2px rgba(251,191,36,.35);}'+
+  '.sc-photo{position:relative;width:100%;aspect-ratio:1/1;background:#1e3a5f;cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;}'+
+  '.sc-photo img{width:100%;height:100%;object-fit:cover;object-position:center 25%;display:block;}'+
+  '.sc-photo .sc-ph{font-size:56px;opacity:.5;}'+
+  '.sc-num{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.65);color:#fff;border-radius:8px;padding:1px 8px;font-size:12px;font-weight:800;}'+
+  '.sc-cam{position:absolute;bottom:6px;left:6px;background:rgba(0,0,0,.55);color:#fff;border-radius:8px;padding:2px 6px;font-size:12px;}'+
+  '.sc-abs{display:flex;align-items:center;justify-content:center;gap:6px;padding:5px 6px;font-size:11px;font-weight:800;background:rgba(34,197,94,.12);color:#4ade80;}'+
+  '.sc-abs.has{background:rgba(239,68,68,.18);color:#fca5a5;}'+
+  '.sc-abs small{font-weight:600;color:#fdba74;}'+
+  '.sc-body{padding:7px 8px 8px;display:flex;flex-direction:column;gap:6px;flex:1;}'+
+  '.sc-name{font-size:13px;font-weight:800;color:#f1f5f9;text-align:center;line-height:1.35;word-break:break-word;}'+
+  '.sc-notes{font-size:10px;color:#fbbf24;text-align:center;}'+
+  '.sc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;}'+
+  '.sc-stat{background:#0a1426;border-radius:6px;padding:3px 0;text-align:center;}'+
+  '.sc-stat b{display:block;font-size:12px;color:#e2e8f0;}'+
+  '.sc-stat span{display:block;font-size:8px;color:#64748b;}'+
+  '.sc-total{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#94a3b8;}'+
+  '.sc-total b{font-size:15px;padding:1px 10px;border-radius:8px;}'+
+  '.sc-ded{font-size:10px;color:#f97316;text-align:center;margin-top:-3px;}'+
+  '.sc-dist{margin-top:auto;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px dashed #0d9488;border-radius:10px;padding:8px 4px;cursor:pointer;color:#5eead4;font-weight:800;font-size:14px;background:rgba(13,148,136,.08);min-height:40px;}'+
+  '.sc-card.sel .sc-dist{background:#fbbf24;color:#1c1400;border:1.5px solid #fbbf24;}';
+  document.head.appendChild(st);
+}
+function _gradesCardsHtml(cls,filtered,students,tmax){
+  _gradesCardsCss();
+  var rm=recordedMax(cls),h='<div class="sc-grid">';
+  if(!filtered.length)h+='<div style="grid-column:1/-1;text-align:center;color:#64748b;padding:30px;">لا يوجد طلاب</div>';
+  filtered.forEach(function(s){
+    var idx=students.indexOf(s),res=calcStudent(s,cls),tot=res.total;
+    var photo=s.photo||(DB.meta&&DB.meta.defaultStudentPhoto?DB.meta.defaultStudentPhoto:'');
+    var absN=0,sickN=0;
+    try{absN=countStudentAbsencePeriods(cls,s.id);sickN=countStudentSickPeriods(cls,s.id);}catch(e){}
+    var cid='gs_dist_'+idx,sel=!!(GS._gsCell&&GS._gsCell.cellId===cid),clr=gcRel(tot,rm);
+    h+='<div class="sc-card'+(sel?' sel':'')+'">';
+    h+='<div class="sc-photo" onclick="document.getElementById(\'cph'+s.id+'\').click()">';
+    h+=photo?'<img src="'+photo+'" alt="">':'<span class="sc-ph">👤</span>';
+    h+='<span class="sc-num">'+(idx+1)+'</span><span class="sc-cam">📷</span></div>';
+    h+='<input id="cph'+s.id+'" type="file" accept="image/*" style="display:none" onchange="gradesPhotoChange(event,'+idx+')">';
+    h+='<div class="sc-abs'+(absN>0?' has':'')+'">🚫 غياب: '+absN+' فترة'+(sickN>0?' <small>· مرض '+sickN+'</small>':'')+'</div>';
+    h+='<div class="sc-body">';
+    h+='<div class="sc-name">'+esc(s.name||'')+'</div>';
+    if(s.notes)h+='<div class="sc-notes">'+esc(s.notes)+'</div>';
+    h+='<div class="sc-stats">'
+      +'<div class="sc-stat"><b>'+res.avgAssess+'</b><span>تقييم</span></div>'
+      +'<div class="sc-stat"><b>'+res.avgHw+'</b><span>واجب</span></div>'
+      +'<div class="sc-stat"><b>'+res.avgBeh+'</b><span>سلوك</span></div>'
+      +'<div class="sc-stat"><b>'+res.exTotal+'</b><span>اختبار</span></div></div>';
+    h+='<div class="sc-total"><span>المجموع /'+rm+'</span><b style="background:'+clr+'22;color:'+clr+';border:1.5px solid '+clr+'">'+tot+'</b></div>';
+    if(res.absenceDeduct>0)h+='<div class="sc-ded">خصم الغياب −'+res.absenceDeduct+'</div>';
+    h+='<div class="sc-dist" onclick="_gsSelectDistCell('+idx+',\'dih'+s.id+'\','+tmax+',\''+cid+'\')">📊 توزيع: <span>'+(sel&&GS._gsInput!==''?esc(GS._gsInput):(sel?'…':'مج'))+'</span></div>';
+    h+='</div></div>';
+  });
+  h+='</div>';
+  /* إبقاء الكرت المحدد ظاهراً فوق لوحة الأرقام */
+  setTimeout(function(){
+    var c=document.querySelector('.sc-card.sel');if(!c)return;
+    var r=c.getBoundingClientRect();
+    if(r.top<70||r.bottom>window.innerHeight*0.62)c.scrollIntoView({block:'start',behavior:'smooth'});
+  },170);
+  return h;
+}

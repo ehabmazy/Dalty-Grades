@@ -222,8 +222,9 @@ function renderSettings(){
   html+='<div style="display:flex;gap:6px;flex-wrap:wrap;">';
   html+='<button class="btn btn-sm" style="background:#1d4ed8;color:#fff;" onclick="stuPhotosZip(\'share\')">📤 مشاركة / حفظ على الهاتف</button>';
   html+='<button class="btn btn-sm" style="background:#0f766e;color:#fff;" onclick="stuPhotosZip(\'download\')">⬇️ تنزيل مجلد (ZIP)</button>';
+  html+='<label class="btn btn-sm" style="background:#7c3aed;color:#fff;cursor:pointer;">📥 استيراد صور الطلاب<input type="file" accept=".zip,application/zip,image/*" multiple style="display:none" onchange="stuPhotosImport(this)"></label>';
   html+='</div>';
-  html+='<span class="settings-desc">تُجمع صور الطلاب ('+_spN+' صورة) في ملف واحد بداخله مجلد لكل فصل، وأسماء الملفات بأسماء الطلاب. فكّ الضغط على الجهاز ستجد مجلد «صور_الطلاب».</span>';
+  html+='<span class="settings-desc">تُجمع صور الطلاب ('+_spN+' صورة) في ملف واحد بداخله مجلد لكل فصل، وأسماء الملفات بأسماء الطلاب. فكّ الضغط على الجهاز ستجد مجلد «صور_الطلاب». للاستيراد اختر ملف ZIP نفسه (أو صوراً باسم الطالب) وسيُطابقها مع الفصل والاسم.</span>';
   html+='</div></div></div>';
 
   html+='</div></div>';
@@ -1552,4 +1553,74 @@ async function stuPhotosZip(mode){
     setTimeout(function(){URL.revokeObjectURL(url);},6000);
     showSnack('✅ تم تنزيل '+entries.length+' صورة في ملف ZIP');
   }catch(e){showSnack('⚠️ تعذّر تجهيز الصور');}
+}
+
+
+/* ═════════ استيراد صور الطلاب (ZIP أو صور) ═════════ */
+async function _zipRead(buf){
+  var u8=new Uint8Array(buf),dv=new DataView(buf),dec=new TextDecoder('utf-8'),eo=-1;
+  for(var i=u8.length-22;i>=Math.max(0,u8.length-65558);i--){if(dv.getUint32(i,true)===0x06054b50){eo=i;break;}}
+  if(eo<0)throw new Error('zip');
+  var n=dv.getUint16(eo+10,true),p=dv.getUint32(eo+16,true),out=[];
+  for(var k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50)break;
+    var method=dv.getUint16(p+10,true),cs=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),el=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),lho=dv.getUint32(p+42,true);
+    var name=dec.decode(u8.subarray(p+46,p+46+nl));
+    p+=46+nl+el+cl;
+    if(name.slice(-1)==='/'||name.indexOf('__MACOSX')>=0||!/\.(jpe?g|png|webp|gif)$/i.test(name))continue;
+    var ds=lho+30+dv.getUint16(lho+26,true)+dv.getUint16(lho+28,true),raw=u8.subarray(ds,ds+cs),data;
+    if(method===0)data=raw;
+    else if(method===8)data=new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    else continue;
+    out.push({path:name,data:data});
+  }
+  return out;
+}
+function _zipMime(n){var e=(n.split('.').pop()||'').toLowerCase();return e==='png'?'image/png':e==='webp'?'image/webp':e==='gif'?'image/gif':'image/jpeg';}
+async function stuPhotosImport(inp){
+  var files=Array.prototype.slice.call(inp.files||[]);inp.value='';
+  if(!files.length)return;
+  try{
+    showSnack('⏳ جارٍ قراءة الصور...');
+    var items=[];
+    for(var i=0;i<files.length;i++){
+      var f=files[i];
+      if(/\.zip$/i.test(f.name)||f.type==='application/zip'){
+        (await _zipRead(await f.arrayBuffer())).forEach(function(e){items.push({path:e.path,blob:new Blob([e.data],{type:_zipMime(e.path)})});});
+      }else if(/^image\//.test(f.type)){items.push({path:f.name,blob:f});}
+    }
+    if(!items.length){showSnack('⚠️ لم أجد صوراً صالحة (JPG / PNG)');return;}
+    _photosAssignUids();
+    var sel=document.getElementById('stuPhotoZipClass'),selCls=sel?sel.value:'';
+    var clsBySafe={};(DB.classes||[]).forEach(function(c){clsBySafe[_zipSafe(c)]=c;});
+    var taken={},jobs=[],skipped=0;
+    items.forEach(function(it){
+      var parts=it.path.split('/'),file=parts.pop(),cls=parts.length?clsBySafe[_zipSafe(parts[parts.length-1])]:null;
+      var stem=file.replace(/\.[a-z0-9]+$/i,''),m=/^(\d+)_(.*)$/.exec(stem),idx=m?+m[1]:0;
+      var nm=_zipSafe((m?m[2]:stem).replace(/_\d+$/,'')),pool=cls?[cls]:(selCls?[selCls]:(DB.classes||[])),hit=null;
+      pool.forEach(function(c){
+        var list=DB.data[c]||[],cand=[];
+        list.forEach(function(st,pos){if(st&&st.name&&_zipSafe(st.name)===nm&&!taken[st.uid])cand.push({st:st,pos:pos+1});});
+        if(!cand.length)return;
+        var exact=cand.filter(function(x){return x.pos===idx;})[0];
+        if(exact)hit=hit||exact.st;
+        else if(cls||pool.length===1||!hit)hit=hit||cand[0].st;
+      });
+      if(hit){taken[hit.uid]=1;jobs.push({st:hit,blob:it.blob});}else skipped++;
+    });
+    if(!jobs.length){showSnack('⚠️ لم تُطابق أي صورة مع طلاب (تأكد أن الاسم مطابق)');return;}
+    var rep=jobs.filter(function(j){return j.st.photo;}).length;
+    if(!confirm('سيتم تعيين '+jobs.length+' صورة'+(rep?' (منها '+rep+' ستستبدل صورة موجودة)':'')+(skipped?'\nوتجاهل '+skipped+' صورة لم تُطابق أي طالب':'')+'\n\nمتابعة؟'))return;
+    var done=0;
+    for(var j=0;j<jobs.length;j++){
+      var jb=jobs[j];
+      var out=await new Promise(function(res){compressImageFile(new File([jb.blob],'p.jpg',{type:jb.blob.type}),360,0.78,function(o){res(o);});});
+      if(!out)continue;
+      try{await PhotoStore.put('s|'+jb.st.uid,out);_photoSaved['s|'+jb.st.uid]=out;jb.st.photo=out;done++;}catch(e){}
+    }
+    try{saveDB();}catch(e){}
+    showSnack('✅ تم استيراد '+done+' صورة'+(skipped?' — تجاهل '+skipped:''));
+    try{renderSettings();}catch(e){}
+    try{_photosRerender();}catch(e){}
+  }catch(e){showSnack('⚠️ تعذّر قراءة الملف');}
 }
