@@ -2857,6 +2857,7 @@ function _gsFnpDel() {
 function _gsFnpMark(v) {
   if(!GS._gsCell) return;
   if(GS._gsCell.field === '__dist__') {
+    if(GS._gsCell.comp){ if(typeof showSnack==='function') showSnack('⚠️ زر غائب متاح من خلية «توزيع» المجموع فقط'); return; }
     if(v !== 'غ'){ if(typeof showSnack==='function') showSnack('⚠️ في التوزيع يتوفر زر غائب فقط'); return; }
     /* غائب في التوزيع: كل خلايا الطالب = غ ثم ننتقل للتالي */
     var _c0 = GS.activeClass, _i0 = GS._gsCell.stuIdx;
@@ -2972,7 +2973,7 @@ function _gsSelectDistCell(stuIdx, inputId, maxVal, cellId) {
     if(hdr) {
       var cls2 = GS.activeClass;
       var st = (DB.data && DB.data[cls2]) ? DB.data[cls2][stuIdx] : null;
-      hdr.textContent = '📊 توزيع مجموع / ' + (st ? st.name : '');
+      hdr.textContent = _gsDistHdr(st);
     }
   }, 30);
   renderGrades();
@@ -3022,7 +3023,7 @@ var _origGsFnpKey = window._gsFnpKey || function(){};
         var cls2 = GS.activeClass;
         var idx2 = GS._gsCell.stuIdx;
         var tmax2 = totalMax();
-        var p = distributeTotal(val, DB.data[cls2][idx2]);
+        var p = GS._gsCell.comp ? distributeComponent(GS._gsCell.comp, val, DB.data[cls2][idx2]) : distributeTotal(val, DB.data[cls2][idx2]);
         if(p) { DB.data[cls2][idx2] = p; saveDB(); }
       }
       /* انتقل للتالي */
@@ -3037,7 +3038,7 @@ var _origGsFnpKey = window._gsFnpKey || function(){};
         if(hdr) {
           var cls3 = GS.activeClass;
           var st3 = (DB.data && DB.data[cls3]) ? DB.data[cls3][next.stuIdx] : null;
-          hdr.textContent = '📊 توزيع مجموع / ' + (st3 ? st3.name : '');
+          hdr.textContent = _gsDistHdr(st3);
         }
         _gsScrollToNameStart();
       } else {

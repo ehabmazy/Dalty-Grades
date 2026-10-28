@@ -258,10 +258,10 @@ function _renderGradesCore(){
         }
       });
       var avgBeh=behCnt>0?Math.round(behSum/behCnt):'—';
-      if(_showAvgAssess)html+='<td class="avg-cell">'+res.avgAssess+'</td>';
-      if(_showAvgHw)html+='<td class="avg-cell">'+res.avgHw+'</td>';
-      if(_showAvgBeh)html+='<td class="avg-cell" style="color:#000000;">'+avgBeh+'</td>';
-      html+='<td class="avg-cell gv-exam">'+res.exTotal+'</td>';
+      if(_showAvgAssess)html+=_cmpTd('assess',idx,res.avgAssess,'avg-cell','');
+      if(_showAvgHw)html+=_cmpTd('hw',idx,res.avgHw,'avg-cell','');
+      if(_showAvgBeh)html+=_cmpTd('beh',idx,avgBeh,'avg-cell','color:#000000;');
+      html+=_cmpTd('exam',idx,res.exTotal,'avg-cell gv-exam','');
       if(_showTotal)html+='<td><span class="tot-cell" id="tot_'+idx+'" style="background:'+gcRel(tot,recordedMax(cls))+'22;color:'+gcRel(tot,recordedMax(cls))+';border:1.5px solid '+gcRel(tot,recordedMax(cls))+'">'+tot+'</span></td>';
       if(_showTotal){
         var _absDedHome=res.absenceDeduct||0;
@@ -2303,6 +2303,8 @@ function _gradesCardsCss(){
   '.sc-stat{background:#0a1426;border-radius:6px;padding:3px 0;text-align:center;}'+
   '.sc-stat b{display:block;font-size:12px;color:#e2e8f0;}'+
   '.sc-stat span{display:block;font-size:8px;color:#64748b;}'+
+  '.sc-cmp{cursor:pointer;border:1px dashed #334155;}'+
+  '.sc-cmp.on{background:#fbbf24;border-color:#fbbf24;}.sc-cmp.on b,.sc-cmp.on span{color:#1c1400;}'+
   '.sc-total{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#94a3b8;}'+
   '.sc-total b{font-size:15px;padding:1px 10px;border-radius:8px;}'+
   '.sc-ded{font-size:10px;color:#f97316;text-align:center;margin-top:-3px;}'+
@@ -2329,11 +2331,8 @@ function _gradesCardsHtml(cls,filtered,students,tmax){
     h+='<div class="sc-body">';
     h+='<div class="sc-name">'+esc(s.name||'')+'</div>';
     if(s.notes)h+='<div class="sc-notes">'+esc(s.notes)+'</div>';
-    h+='<div class="sc-stats">'
-      +'<div class="sc-stat"><b>'+res.avgAssess+'</b><span>تقييم</span></div>'
-      +'<div class="sc-stat"><b>'+res.avgHw+'</b><span>واجب</span></div>'
-      +'<div class="sc-stat"><b>'+res.avgBeh+'</b><span>سلوك</span></div>'
-      +'<div class="sc-stat"><b>'+res.exTotal+'</b><span>اختبار</span></div></div>';
+    function _tile(comp,val,lbl){var on=_cmpSel(comp,idx);return '<div class="sc-stat sc-cmp'+(on?' on':'')+'" onclick="_gsSelectCompCell(\''+comp+'\','+idx+')"><b>'+_cmpShow(comp,idx,val)+'</b><span>'+lbl+'</span></div>';}
+    h+='<div class="sc-stats">'+_tile('assess',res.avgAssess,'تقييم')+_tile('hw',res.avgHw,'واجب')+_tile('beh',res.avgBeh,'سلوك')+_tile('exam',res.exTotal,'اختبار')+'</div>';
     h+='<div class="sc-total"><span>المجموع /'+rm+'</span><b style="background:'+clr+'22;color:'+clr+';border:1.5px solid '+clr+'">'+tot+'</b></div>';
     if(res.absenceDeduct>0)h+='<div class="sc-ded">خصم الغياب −'+res.absenceDeduct+'</div>';
     h+='<div class="sc-dist" onclick="_gsSelectDistCell('+idx+',\'dih'+s.id+'\','+tmax+',\''+cid+'\')">📊 توزيع: <span>'+(sel&&GS._gsInput!==''?esc(GS._gsInput):(sel?'…':'مج'))+'</span></div>';
@@ -2347,4 +2346,94 @@ function _gradesCardsHtml(cls,filtered,students,tmax){
     if(r.top<70||r.bottom>window.innerHeight*0.62)c.scrollIntoView({block:'start',behavior:'smooth'});
   },170);
   return h;
+}
+
+
+/* ═════════ توزيع تلقائي لكل مكوّن على حدة (تقييم / واجب / سلوك / اختبارات) ═════════ */
+var CMP_INFO={
+  assess:{label:'متوسط التقييم',max:20,pre:'a'},
+  hw:{label:'متوسط الواجب',max:10,pre:'h'},
+  beh:{label:'متوسط السلوك',max:10,pre:'bw'},
+  exam:{label:'الاختبارات',max:30}
+};
+function _gsDistHdr(st){
+  var c=GS._gsCell&&GS._gsCell.comp;
+  return '📊 '+(c?'توزيع '+CMP_INFO[c].label+' /'+CMP_INFO[c].max:'توزيع مجموع')+' / '+(st?st.name:'');
+}
+function _cmpSel(comp,idx){var c=GS._gsCell;return !!(c&&c.cellId==='gs_cmp_'+comp+'_'+idx);}
+function _cmpShow(comp,idx,val){return _cmpSel(comp,idx)?(GS._gsInput!==''?esc(GS._gsInput):'…'):val;}
+function _cmpTd(comp,idx,val,cls,extra){
+  var on=_cmpSel(comp,idx);
+  return '<td class="'+cls+'" onclick="_gsSelectCompCell(\''+comp+'\','+idx+')" style="cursor:pointer;'+(on?'background:#fbbf24!important;color:#1c1400!important;':'')+extra+'" title="اضغط لتوزيع '+CMP_INFO[comp].label+' تلقائياً">'+_cmpShow(comp,idx,val)+'</td>';
+}
+function _gsSelectCompCell(comp,stuIdx){
+  var cid='gs_cmp_'+comp+'_'+stuIdx;
+  if(GS._gsCell&&GS._gsCell.cellId===cid){
+    GS._gsCell=null;GS._gsInput='';
+    try{if(typeof FNP_hide==='function')FNP_hide();}catch(e){}
+    renderGrades();return;
+  }
+  var cls=GS.activeClass,students=DB.data[cls]||[],search=(GS.search||'').trim();
+  var filtered=search?students.filter(function(s,i){return nameMatch(s.name,search)||String(i+1)===search;}):students;
+  var mx=CMP_INFO[comp].max;
+  GS._gsCellList=filtered.map(function(s){var i2=students.indexOf(s);return{stuIdx:i2,field:'__dist__',maxVal:mx,cellId:'gs_cmp_'+comp+'_'+i2,colKey:'__dist__',inputId:'',comp:comp};});
+  GS._gsCellListIdx=GS._gsCellList.findIndex(function(c){return c.stuIdx===stuIdx;});
+  if(GS._gsCellListIdx<0)GS._gsCellListIdx=0;
+  GS._gsCell={stuIdx:stuIdx,field:'__dist__',maxVal:mx,cellId:cid,colKey:'__dist__',inputId:'',comp:comp};
+  GS._gsInput='';
+  if(typeof buildFloatingNumpad==='function')buildFloatingNumpad();
+  if(typeof FNP_show==='function')FNP_show();
+  setTimeout(function(){var hdr=document.getElementById('fnpHeaderLabel');if(hdr)hdr.textContent=_gsDistHdr(students[stuIdx]);},30);
+  renderGrades();
+}
+/* يوزّع قيمة المتوسط المطلوبة على الأسابيع بحيث يخرج المتوسط = القيمة تماماً (مع تفاوت عشوائي بين الأسابيع) */
+function _cmpSpread(total,k,max,jit){
+  var v=[],base=Math.floor(total/k),r=total-base*k,i;
+  for(i=0;i<k;i++)v.push(base);
+  var ord=[];for(i=0;i<k;i++)ord.push(i);
+  ord.sort(function(){return Math.random()-.5;});
+  for(i=0;i<r;i++)v[ord[i]]++;
+  for(var t=0;t<k*3&&k>1;t++){
+    var a=Math.floor(Math.random()*k),b=Math.floor(Math.random()*k);if(a===b)continue;
+    var d=1+Math.floor(Math.random()*jit);
+    if(v[a]+d<=max&&v[b]-d>=0){v[a]+=d;v[b]-=d;}
+  }
+  return v;
+}
+function distributeComponent(comp,target,s){
+  var info=CMP_INFO[comp];if(!info)return null;
+  target=Math.round(Number(target));if(isNaN(target))return null;
+  target=Math.min(Math.max(target,0),info.max);
+  var p=Object.assign({},s);
+  function colMax(f,d){var m=d;allCols().forEach(function(c){if(c.field===f&&c.max)m=c.max;});return m;}
+  if(comp==='exam'){
+    var cols=['ex1','ex2'].filter(function(f){return s[f]!=='غ'&&s[f]!=='م';});
+    if(!cols.length)return p;
+    var mxs=cols.map(function(f){return colMax(f,15);});
+    var T=Math.min(target,mxs.reduce(function(a,b){return a+b;},0));
+    if(cols.length===1){p[cols[0]]=T;}
+    else{
+      var lo=Math.max(0,T-mxs[1]),hi=Math.min(mxs[0],T),mid=Math.round(T/2);
+      var v1=Math.min(hi,Math.max(lo,mid+Math.floor(Math.random()*5)-2));
+      p[cols[0]]=v1;p[cols[1]]=T-v1;
+    }
+    p._totalAbsent=false;return p;
+  }
+  var aw=DB&&DB.meta?Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length):14;
+  var weeks=ALL_WEEKS.slice(0,aw),free=[],counted=0;
+  weeks.forEach(function(w){
+    var f=info.pre+w,cur=s[f];
+    if(comp!=='beh'){var cc=allCols().filter(function(c){return c.field===f;})[0];if(cc&&!cc.visible)return;} // عمود مخفي لا يدخل في المتوسط
+    if(cur==='م')return;           // مستثنى: لا يدخل في المتوسط
+    counted++;
+    if(cur==='غ')return;            // غائب: صفر ثابت
+    free.push(f);
+  });
+  if(!free.length)return p;
+  var mx=colMax(info.pre+weeks[0],info.max);
+  var total=Math.min(target*counted,free.length*mx);
+  var vals=_cmpSpread(total,free.length,mx,comp==='assess'?3:2);
+  free.forEach(function(f,i){p[f]=vals[i];});
+  p._totalAbsent=false;
+  return p;
 }
