@@ -3636,3 +3636,336 @@ function _npDirectTrackBegin(fld, curField) {
   WKS._npDirectEntry = e;
   return e;
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   لوحة الأرقام العائمة: صورة الطالب + زر اتجاه التنقل (↕ عمودي / ↔ أفقي)
+   - عمودي (الافتراضي): نفس العمود ← الطالب التالي
+   - أفقي: الخلية التالية في نفس صف الطالب، ثم أول خلية للطالب التالي
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+  function navH(){ try{ return localStorage.getItem('fnp_nav')==='h'; }catch(e){ return false; } }
+  function curPage(){ return (typeof _currentPage!=='undefined')?_currentPage:''; }
+
+  /* ── CSS ── */
+  var st=document.createElement('style');
+  st.textContent=[
+    '#floatingNumpad .fnp-who{display:flex;align-items:center;gap:7px;flex:1;min-width:0;}',
+    '#floatingNumpad .fnp-who .fnp-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
+    '#floatingNumpad .fnp-photo{width:38px;height:38px;border-radius:50%;flex-shrink:0;border:2px solid #fbbf24;background:#1e3a5f center/cover no-repeat;display:none;align-items:center;justify-content:center;font-size:18px;line-height:1;}',
+    '#floatingNumpad .fnp-photo.on{display:flex;}',
+    '#floatingNumpad.fnp-s1 .fnp-photo{width:30px;height:30px;font-size:15px;}',
+    '#floatingNumpad.fnp-s2 .fnp-photo{width:24px;height:24px;font-size:12px;}',
+    '.fnp-nav-btn{width:auto!important;padding:0 6px;font-size:10px!important;margin-inline-end:4px;gap:3px;background:rgba(16,185,129,.15)!important;border-color:#10b981!important;color:#6ee7b7!important;}',
+    '.fnp-nav-btn *{pointer-events:none;}',
+    '.fnp-nav-btn.on{background:#10b981!important;color:#022c22!important;}',
+    '#floatingNumpad.fnp-s2 .fnp-nav-btn .nv-tx{display:none;}',
+    '.gs-tbl-sel,.wk-tbl-sel{scroll-margin:70px;}',
+    '#floatingNumpad .fnp-cur{font-size:12px;font-weight:800;color:#94a3b8;text-align:center;padding:4px 6px;border-radius:8px;background:rgba(148,163,184,.1);border:1px dashed #475569;flex-shrink:0;}',
+    '#floatingNumpad .fnp-cur.has{color:#fde68a;background:rgba(251,191,36,.12);border:1px solid #f59e0b;}',
+    '#floatingNumpad .fnp-cur b{color:#fff;font-size:15px;}',
+    '#floatingNumpad .fnp-cur .nw{color:#4ade80;}',
+    '#floatingNumpad.fnp-s1 .fnp-cur{font-size:11px;padding:2px 4px;}',
+    '#floatingNumpad.fnp-s2 .fnp-cur{font-size:9px;padding:1px 3px;}'
+  ].join('\n');
+  if(document.head) document.head.appendChild(st);
+  else window.addEventListener('load',function(){document.head.appendChild(st);});
+
+  /* ── الطالب الحالي المرتبط بالخلية/الراصد ── */
+  function curStudent(){
+    try{
+      var page=curPage();
+      if(page==='grades' && typeof GS!=='undefined' && GS._gsCell){
+        return (DB.data[GS.activeClass]||[])[GS._gsCell.stuIdx]||null;
+      }
+      if(typeof WKS!=='undefined'){
+        var cls=WKS.activeClass, arr=(DB.data&&DB.data[cls])||[];
+        if(WKS.viewMode==='table' && WKS._tblCell) return arr[WKS._tblCell.stuIdx]||null;
+        if(page==='weekly' && WKS.numpadStudent){
+          for(var i=0;i<arr.length;i++) if(arr[i].id==WKS.numpadStudent.id) return arr[i];
+          return WKS.numpadStudent;
+        }
+      }
+    }catch(e){}
+    return null;
+  }
+
+  var _lastKey='';
+  function refreshPhoto(force){
+    var ph=document.getElementById('fnpPhoto'); if(!ph) return;
+    var s=curStudent();
+    var photo=s?(s.photo||(DB.meta&&DB.meta.defaultStudentPhoto)||''):'';
+    var key=s?(s.id+'|'+String(photo).length):'';
+    if(!force && key===_lastKey) return;
+    _lastKey=key;
+    if(!s){ ph.classList.remove('on'); return; }
+    ph.classList.add('on');
+    if(photo){ ph.style.backgroundImage='url("'+String(photo).replace(/"/g,'%22')+'")'; ph.textContent=''; }
+    else { ph.style.backgroundImage='none'; ph.textContent='👤'; }
+  }
+
+  function updateNavBtn(){
+    var b=document.getElementById('fnpNavBtn'); if(!b) return;
+    var h=navH();
+    b.classList.toggle('on',h);
+    b.innerHTML=h?'<span>↔</span><span class="nv-tx">أفقي</span>':'<span>↕</span><span class="nv-tx">عمودي</span>';
+    b.title=h?'التنقل أفقياً (نفس صف الطالب) — اضغط للتبديل إلى العمودي':'التنقل عمودياً (نفس العمود) — اضغط للتبديل إلى الأفقي';
+  }
+
+  /* ── تجهيز ترويسة اللوحة: صورة + زر الاتجاه (مرة واحدة) ── */
+  function setup(){
+    var el=document.getElementById('floatingNumpad');
+    if(!el || document.getElementById('fnpPhoto')) return;
+    var title=document.getElementById('fnpHeaderLabel');
+    var handle=el.querySelector('.fnp-handle');
+    if(!title||!handle) return;
+    var who=document.createElement('div'); who.className='fnp-who';
+    var ph=document.createElement('div'); ph.id='fnpPhoto'; ph.className='fnp-photo';
+    title.parentNode.insertBefore(who,title);
+    who.appendChild(ph); who.appendChild(title);
+    var btn=document.createElement('button');
+    btn.id='fnpNavBtn'; btn.className='fnp-close-btn fnp-nav-btn';
+    btn.onclick=function(){ window.FNP_toggleNav(); };
+    handle.insertBefore(btn,document.getElementById('fnpMinBtn'));
+    var body=el.querySelector('.fnp-body');
+    if(body&&!document.getElementById('fnpCur')){
+      var cu=document.createElement('div'); cu.id='fnpCur'; cu.className='fnp-cur'; cu.style.display='none';
+      body.insertBefore(cu,body.firstChild);
+    }
+    updateNavBtn();
+    try{ new MutationObserver(function(){ refreshPhoto(); renderCur(); }).observe(title,{childList:true,characterData:true,subtree:true}); }catch(e){}
+    refreshPhoto(true);
+  }
+
+  /* ── قوائم التنقل الأفقي ── */
+  /* صفحة الدرجات (جدول): كل الخلايا بترتيب الصفوف ثم الأعمدة كما تظهر في الصفحة */
+  function domGradeCells(){
+    var cls=GS.activeClass, students=DB.data[cls]||[], out=[];
+    var re=/^_gsSelectCell\((\d+),'([^']*)',([^,]*),'([^']*)','([^']*)'\)/;
+    document.querySelectorAll('.gs-tbl-cell[onclick^="_gsSelectCell("]').forEach(function(el){
+      var m=re.exec(el.getAttribute('onclick')); if(!m) return;
+      var idx=+m[1], f=m[2], v=(students[idx]||{})[f];
+      if(v==='غ'||v==='م') return; /* نفس تخطي الغائب/المعذور في التنقل العمودي */
+      out.push({stuIdx:idx,field:f,maxVal:Number(m[3]),cellId:m[4],colKey:m[5]});
+    });
+    return out;
+  }
+  /* الراصد الأسبوعي (جدول) */
+  function domTblCells(){
+    var out=[], re=/^_tblSelectCell\((\d+),'([^']*)','([^']*)',([^,]*),(\d+)\)/;
+    document.querySelectorAll('.wk-tbl-cell[onclick^="_tblSelectCell("]').forEach(function(el){
+      var m=re.exec(el.getAttribute('onclick')); if(!m) return;
+      var mx=Number(m[4]); if(isNaN(mx)) mx=10;
+      out.push({stuIdx:+m[1],fld:m[2],field:m[3],maxVal:mx,dispIdx:+m[5]});
+    });
+    return out;
+  }
+  /* عرض الكروت: تقييم ← واجب ← سلوك ← اختبار ← توزيع المجموع، ثم الطالب التالي */
+  function cardsShown(){ return !!document.querySelector('.sc-grid'); }
+  function buildCardList(c,horiz){
+    var cls=GS.activeClass, students=DB.data[cls]||[], search=(GS.search||'').trim();
+    var filtered=search?students.filter(function(s,i){return nameMatch(s.name,search)||String(i+1)===search;}):students;
+    var prefix=(GS.activePage==='pg_home')?'dih':'di', list=[];
+    var tmax=c.comp?totalMax():c.maxVal;
+    filtered.forEach(function(s){
+      var i=students.indexOf(s);
+      if(horiz){
+        ['assess','hw','beh','exam'].forEach(function(cp){
+          list.push({stuIdx:i,field:'__dist__',maxVal:CMP_INFO[cp].max,cellId:'gs_cmp_'+cp+'_'+i,colKey:'__dist__',inputId:'',comp:cp});
+        });
+        list.push({stuIdx:i,field:'__dist__',maxVal:tmax,cellId:'gs_dist_'+i,colKey:'__dist__',inputId:prefix+s.id});
+      }else if(c.comp){
+        list.push({stuIdx:i,field:'__dist__',maxVal:CMP_INFO[c.comp].max,cellId:'gs_cmp_'+c.comp+'_'+i,colKey:'__dist__',inputId:'',comp:c.comp});
+      }else{
+        list.push({stuIdx:i,field:'__dist__',maxVal:c.maxVal,cellId:'gs_dist_'+i,colKey:'__dist__',inputId:prefix+s.id});
+      }
+    });
+    return list;
+  }
+  function reindex(){
+    var c=GS._gsCell;
+    var i=GS._gsCellList.findIndex(function(x){return x.cellId===c.cellId;});
+    GS._gsCellListIdx=i<0?0:i;
+  }
+  /* يعيد بناء قائمة التنقل للخلية المحددة حالياً (عند تبديل الاتجاه أثناء الرصد) */
+  function rebuildNavList(){
+    try{
+      if(curPage()!=='grades'||typeof GS==='undefined'||!GS._gsCell) return;
+      var c=GS._gsCell;
+      if(c.field==='__dist__'){
+        if(cardsShown()){ GS._gsCellList=buildCardList(c,navH()); reindex(); }
+      }else{
+        GS._gsCellList=window._gsBuildColList(c.stuIdx,c.field,c.maxVal,c.colKey); reindex();
+      }
+    }catch(e){}
+  }
+
+  /* التنقل في صفحة الدرجات: عند الوضع الأفقي تُبنى القائمة من الصفوف */
+  var _origBuild=window._gsBuildColList;
+  if(typeof _origBuild==='function'){
+    window._gsBuildColList=function(){
+      if(navH()){ var l=domGradeCells(); if(l.length) return l; }
+      return _origBuild.apply(this,arguments);
+    };
+  }
+  /* اختيار خلية من الكروت */
+  ['_gsSelectCompCell','_gsSelectDistCell'].forEach(function(n){
+    var o=window[n]; if(typeof o!=='function') return;
+    window[n]=function(){
+      var r=o.apply(this,arguments);
+      try{
+        if(navH()&&GS._gsCell&&GS._gsCell.field==='__dist__'&&cardsShown()){
+          GS._gsCellList=buildCardList(GS._gsCell,true); reindex();
+        }
+      }catch(e){}
+      return r;
+    };
+  });
+
+  /* إبقاء الخلية المحددة ظاهرة أفقياً وعمودياً وخارج لوحة الأرقام */
+  function scrollParent(el){
+    for(var p=el.parentElement;p;p=p.parentElement){
+      var oy=getComputedStyle(p).overflowY;
+      if((oy==='auto'||oy==='scroll')&&p.scrollHeight>p.clientHeight+1) return p;
+    }
+    return null;
+  }
+  function ensureSelVisible(sel){
+    var el=document.querySelector(sel); if(!el) return;
+    try{ el.scrollIntoView({block:'nearest',inline:'nearest'}); }catch(e){}
+    var np=document.getElementById('floatingNumpad');
+    if(!np||!np.classList.contains('fnp-visible')) return;
+    var n=np.getBoundingClientRect(), vh=window.innerHeight, down=(n.top+n.bottom)/2>vh/2;
+    var sp=scrollParent(el);
+    if(down&&sp){
+      var need=Math.ceil(sp.getBoundingClientRect().bottom-n.top)+16;
+      if(need>0&&(parseFloat(sp.style.paddingBottom)||0)<need) sp.style.paddingBottom=need+'px';
+    }
+    var r=el.getBoundingClientRect();
+    if(r.right<n.left||r.left>n.right||r.bottom<n.top||r.top>n.bottom) return;
+    var d=down?(r.bottom-n.top+14):-(n.bottom-r.top+14);
+    if(sp) sp.scrollBy(0,d); else window.scrollBy(0,d);
+  }
+
+  var _origGsSubmit=window._gsFnpSubmit;
+  if(typeof _origGsSubmit==='function'){
+    window._gsFnpSubmit=function(){
+      var r=_origGsSubmit.apply(this,arguments);
+      if(typeof GS!=='undefined'&&GS._gsCell&&GS._gsCell.field!=='__dist__'){
+        setTimeout(function(){ ensureSelVisible('.gs-tbl-sel'); },130);
+        setTimeout(function(){ ensureSelVisible('.gs-tbl-sel'); },330);
+      }
+      return r;
+    };
+  }
+
+  /* الراصد الأسبوعي (جدول): تنقل أفقي = الخلية التالية في الصف ثم الطالب التالي */
+  var _origTblSubmit=window._tblFnpSubmit;
+  if(typeof _origTblSubmit==='function'){
+    window._tblFnpSubmit=function(){
+      if(!navH()||typeof WKS==='undefined'||!WKS._tblCell) return _origTblSubmit.apply(this,arguments);
+      var cls=WKS.activeClass, cur=WKS._tblCell, hint=null;
+      if(WKS._tblInput!==''&&DB.data&&DB.data[cls]&&DB.data[cls][cur.stuIdx]){
+        var v=clamp(Number(WKS._tblInput),0,cur.maxVal);
+        DB.data[cls][cur.stuIdx][cur.field]=v;
+        if(typeof saveDB==='function') saveDB();
+        hint=[DB.data[cls][cur.stuIdx],cur.field,cur.maxVal,v];
+      }
+      var list=domTblCells();
+      var i=list.findIndex(function(c){return c.stuIdx===cur.stuIdx&&c.fld===cur.fld;});
+      var nxt=(i>=0)?list[i+1]:null;
+      if(nxt){
+        WKS._tblCell=nxt; WKS._tblInput='';
+        renderWeekly();
+        if(typeof _fnpUpdateTableHeader==='function') _fnpUpdateTableHeader();
+        setTimeout(function(){ ensureSelVisible('.wk-tbl-sel'); },90);
+      }else{
+        WKS._tblCell=null; WKS._tblInput='';
+        if(typeof FNP_hide==='function') FNP_hide();
+        renderWeekly();
+        if(typeof showSnack==='function') showSnack('✅ تم الانتهاء من رصد جميع الطلاب');
+      }
+      if(hint&&typeof _gradeMaybeHintDeviation==='function') _gradeMaybeHintDeviation.apply(null,hint);
+    };
+  }
+
+  /* ── عرض القيمة الحالية للخلية قبل تغييرها (تبقى ظاهرة أثناء الكتابة) ── */
+  var _orig=null;
+  function liveVal(s,c,cls){
+    if(c.field!=='__dist__') return s[c.field];
+    var r=calcStudent(s,cls);
+    if(c.comp==='assess') return r.avgAssess;
+    if(c.comp==='hw') return r.avgHw;
+    if(c.comp==='beh') return r.avgBeh;
+    if(c.comp==='exam') return r.exTotal;
+    return r.total;
+  }
+  function cellInfo(){
+    try{
+      var pg=curPage();
+      if(pg==='grades'&&typeof GS!=='undefined'&&GS._gsCell){
+        var c=GS._gsCell, cls=GS.activeClass, s=(DB.data[cls]||[])[c.stuIdx]; if(!s) return null;
+        return {key:'g|'+c.cellId,input:GS._gsInput||'',live:function(){return liveVal(s,c,cls);}};
+      }
+      if(typeof WKS!=='undefined'&&WKS.viewMode==='table'&&WKS._tblCell){
+        var t=WKS._tblCell, cls2=WKS.activeClass, s2=(DB.data[cls2]||[])[t.stuIdx]; if(!s2) return null;
+        return {key:'t|'+t.stuIdx+'|'+t.field,input:WKS._tblInput||'',live:function(){return s2[t.field];}};
+      }
+    }catch(e){}
+    return null;
+  }
+  function snap(){
+    var ci=cellInfo();
+    if(!ci){ _orig=null; return null; }
+    if(!_orig||_orig.key!==ci.key) _orig={key:ci.key,val:ci.live()};
+    return ci;
+  }
+  function renderCur(){
+    var el=document.getElementById('fnpCur'); if(!el) return;
+    var ci=snap();
+    if(!ci){ el.style.display='none'; return; }
+    var o=_orig.val, has=!(o===''||o===undefined||o===null);
+    var h='الحالية: <b>'+(has?esc(String(o)):'فارغة')+'</b>';
+    if(ci.input!=='') h+='  ←  الجديدة: <b class="nw">'+esc(ci.input)+'</b>';
+    el.style.display='';
+    el.className='fnp-cur'+(has?' has':'');
+    el.innerHTML=h;
+  }
+  /* لقطة القيمة الأصلية قبل أي ضغطة، ثم تحديث العرض بعدها */
+  ['_fnpKey','_fnpDel','_fnpClr','_fnpMark','_fnpSubmit'].forEach(function(n){
+    var o=window[n]; if(typeof o!=='function') return;
+    window[n]=function(){ snap(); var r=o.apply(this,arguments); renderCur(); return r; };
+  });
+  /* اختيار خلية جديدة = قيمة أصلية جديدة */
+  ['_gsSelectCell','_tblSelectCell','_gsSelectCompCell','_gsSelectDistCell'].forEach(function(n){
+    var o=window[n]; if(typeof o!=='function') return;
+    window[n]=function(){ _orig=null; var r=o.apply(this,arguments); setTimeout(renderCur,30); return r; };
+  });
+
+  window.FNP_toggleNav=function(){
+    var h=!navH();
+    try{ localStorage.setItem('fnp_nav',h?'h':'v'); }catch(e){}
+    updateNavBtn();
+    rebuildNavList();
+    if(typeof showSnack==='function') showSnack(h?'↔ التنقل أفقياً: الخلية التالية في صف الطالب':'↕ التنقل عمودياً: نفس العمود للطالب التالي');
+  };
+
+  /* تجهيز الترويسة عند فتح اللوحة + مزامنة الصورة وإظهار الزر عند الحاجة */
+  var _origShow=window.FNP_show;
+  if(typeof _origShow==='function'){
+    window.FNP_show=function(){ var r=_origShow.apply(this,arguments); setup(); refreshPhoto(true); return r; };
+  }
+  setInterval(function(){
+    setup();
+    var el=document.getElementById('floatingNumpad');
+    if(!cellInfo()) _orig=null;
+    if(!el||!el.classList.contains('fnp-visible')) return;
+    refreshPhoto(); renderCur();
+    var b=document.getElementById('fnpNavBtn');
+    if(b){
+      var pg=curPage();
+      var rel=(pg==='grades')||(pg==='weekly'&&typeof WKS!=='undefined'&&WKS.viewMode==='table');
+      b.style.display=rel?'':'none';
+    }
+  },400);
+})();

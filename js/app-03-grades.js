@@ -2322,7 +2322,8 @@ function _gradesCardsHtml(cls,filtered,students,tmax){
     var absN=0,sickN=0;
     try{absN=countStudentAbsencePeriods(cls,s.id);sickN=countStudentSickPeriods(cls,s.id);}catch(e){}
     var cid='gs_dist_'+idx,sel=!!(GS._gsCell&&GS._gsCell.cellId===cid),clr=gcRel(tot,rm);
-    h+='<div class="sc-card'+(sel?' sel':'')+'">';
+    var cardSel=!!(GS._gsCell&&GS._gsCell.stuIdx===idx);
+    h+='<div class="sc-card'+(cardSel?' sel':'')+'">';
     h+='<div class="sc-photo" onclick="document.getElementById(\'cph'+s.id+'\').click()">';
     h+=photo?'<img src="'+photo+'" alt="">':'<span class="sc-ph">👤</span>';
     h+='<span class="sc-num">'+(idx+1)+'</span><span class="sc-cam">📷</span></div>';
@@ -2335,17 +2336,44 @@ function _gradesCardsHtml(cls,filtered,students,tmax){
     h+='<div class="sc-stats">'+_tile('assess',res.avgAssess,'تقييم')+_tile('hw',res.avgHw,'واجب')+_tile('beh',res.avgBeh,'سلوك')+_tile('exam',res.exTotal,'اختبار')+'</div>';
     h+='<div class="sc-total"><span>المجموع /'+rm+'</span><b style="background:'+clr+'22;color:'+clr+';border:1.5px solid '+clr+'">'+tot+'</b></div>';
     if(res.absenceDeduct>0)h+='<div class="sc-ded">خصم الغياب −'+res.absenceDeduct+'</div>';
-    h+='<div class="sc-dist" onclick="_gsSelectDistCell('+idx+',\'dih'+s.id+'\','+tmax+',\''+cid+'\')">📊 توزيع: <span>'+(sel&&GS._gsInput!==''?esc(GS._gsInput):(sel?'…':'مج'))+'</span></div>';
+    h+='<div class="sc-dist" onclick="_gsSelectDistCell('+idx+',\'dih'+s.id+'\','+tmax+',\''+cid+'\')">📊 توزيع: <span>'+(sel&&GS._gsInput!==''?esc(GS._gsInput):(sel?tot:'مج'))+'</span></div>';
     h+='</div></div>';
   });
   h+='</div>';
-  /* إبقاء الكرت المحدد ظاهراً فوق لوحة الأرقام */
-  setTimeout(function(){
-    var c=document.querySelector('.sc-card.sel');if(!c)return;
-    var r=c.getBoundingClientRect();
-    if(r.top<70||r.bottom>window.innerHeight*0.62)c.scrollIntoView({block:'start',behavior:'smooth'});
-  },170);
+  /* إبقاء الكرت المحدد ظاهراً بعيداً عن لوحة الأرقام (بعد انتهاء تثبيت التمرير) */
+  setTimeout(_gsEnsureCardVisible,150);
+  setTimeout(_gsEnsureCardVisible,400);
   return h;
+}
+/* يحسب المنطقة الظاهرة فعلياً (خارج لوحة الأرقام العائمة) ويمرّر الكارت المحدد إليها */
+function _gsEnsureCardVisible(){
+  var c=document.querySelector('.sc-card.sel');if(!c)return;
+  var main=document.querySelector('.g-main');
+  var np=document.getElementById('floatingNumpad');
+  var vh=window.innerHeight;
+  var mr=main?main.getBoundingClientRect():{top:0,bottom:vh};
+  var top=Math.max(mr.top,0),bottom=Math.min(mr.bottom,vh);
+  var npShown=!!(np&&np.classList.contains('fnp-visible'));
+  if(npShown){
+    var nr=np.getBoundingClientRect();
+    if((nr.top+nr.bottom)/2>vh/2){
+      bottom=Math.min(bottom,nr.top);
+      /* مساحة إضافية أسفل القائمة ليتمكن آخر كارت من الصعود فوق اللوحة */
+      if(main){var need=Math.ceil(mr.bottom-nr.top)+16;
+        if(need>0&&(parseFloat(main.style.paddingBottom)||0)<need)main.style.paddingBottom=need+'px';}
+    }else{
+      top=Math.max(top,nr.bottom);
+      if(main){var needT=Math.ceil(nr.bottom-mr.top)+16;
+        if(needT>0&&(parseFloat(main.style.paddingTop)||0)<needT)main.style.paddingTop=needT+'px';}
+    }
+  }
+  var r=c.getBoundingClientRect(),pad=8,delta=0;
+  if(r.height>bottom-top-2*pad||r.top<top+pad)delta=r.top-(top+pad);
+  else if(r.bottom>bottom-pad)delta=r.bottom-(bottom-pad);
+  if(Math.abs(delta)>1){
+    if(main&&main.scrollHeight>main.clientHeight)main.scrollBy({top:delta,behavior:'smooth'});
+    else window.scrollBy({top:delta,behavior:'smooth'});
+  }
 }
 
 
@@ -2361,7 +2389,7 @@ function _gsDistHdr(st){
   return '📊 '+(c?'توزيع '+CMP_INFO[c].label+' /'+CMP_INFO[c].max:'توزيع مجموع')+' / '+(st?st.name:'');
 }
 function _cmpSel(comp,idx){var c=GS._gsCell;return !!(c&&c.cellId==='gs_cmp_'+comp+'_'+idx);}
-function _cmpShow(comp,idx,val){return _cmpSel(comp,idx)?(GS._gsInput!==''?esc(GS._gsInput):'…'):val;}
+function _cmpShow(comp,idx,val){return _cmpSel(comp,idx)?(GS._gsInput!==''?esc(GS._gsInput):val):val;}
 function _cmpTd(comp,idx,val,cls,extra){
   var on=_cmpSel(comp,idx);
   return '<td class="'+cls+'" onclick="_gsSelectCompCell(\''+comp+'\','+idx+')" style="cursor:pointer;'+(on?'background:#fbbf24!important;color:#1c1400!important;':'')+extra+'" title="اضغط لتوزيع '+CMP_INFO[comp].label+' تلقائياً">'+_cmpShow(comp,idx,val)+'</td>';
