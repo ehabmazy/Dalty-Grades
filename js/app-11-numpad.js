@@ -3650,12 +3650,12 @@ function _npDirectTrackBegin(fld, curField) {
   /* ── CSS ── */
   var st=document.createElement('style');
   st.textContent=[
-    '#floatingNumpad .fnp-who{display:flex;align-items:center;gap:7px;flex:1;min-width:0;}',
-    '#floatingNumpad .fnp-who .fnp-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
-    '#floatingNumpad .fnp-photo{width:38px;height:38px;border-radius:50%;flex-shrink:0;border:2px solid #fbbf24;background:#1e3a5f center/cover no-repeat;display:none;align-items:center;justify-content:center;font-size:18px;line-height:1;}',
+    '#floatingNumpad .fnp-photo{flex:1 1 0;min-height:var(--fnp-ph,110px);margin:6px 8px 0;border-radius:12px;border:2px solid #fbbf24;background:#1e3a5f center 20%/cover no-repeat;display:none;align-items:center;justify-content:center;font-size:64px;line-height:1;overflow:hidden;}',
     '#floatingNumpad .fnp-photo.on{display:flex;}',
-    '#floatingNumpad.fnp-s1 .fnp-photo{width:30px;height:30px;font-size:15px;}',
-    '#floatingNumpad.fnp-s2 .fnp-photo{width:24px;height:24px;font-size:12px;}',
+    '#floatingNumpad.fnp-s1 .fnp-photo{font-size:44px;margin:4px 5px 0;}',
+    '#floatingNumpad.fnp-s2 .fnp-photo{font-size:34px;margin:3px 3px 0;}',
+    '#floatingNumpad .fnp-body{flex:1 1 0;}',
+    '#floatingNumpad .fnp-body .fnp-title{display:block;flex-shrink:0;font-size:12px;line-height:1.4;text-align:center;color:#93c5fd;white-space:normal;}',
     '.fnp-nav-btn{width:auto!important;padding:0 6px;font-size:10px!important;margin-inline-end:4px;gap:3px;background:rgba(16,185,129,.15)!important;border-color:#10b981!important;color:#6ee7b7!important;}',
     '.fnp-nav-btn *{pointer-events:none;}',
     '.fnp-nav-btn.on{background:#10b981!important;color:#022c22!important;}',
@@ -3698,10 +3698,11 @@ function _npDirectTrackBegin(fld, curField) {
     var key=s?(s.id+'|'+String(photo).length):'';
     if(!force && key===_lastKey) return;
     _lastKey=key;
-    if(!s){ ph.classList.remove('on'); return; }
+    if(!s){ ph.classList.remove('on'); fitPhoto(); return; }
     ph.classList.add('on');
     if(photo){ ph.style.backgroundImage='url("'+String(photo).replace(/"/g,'%22')+'")'; ph.textContent=''; }
     else { ph.style.backgroundImage='none'; ph.textContent='👤'; }
+    fitPhoto();
   }
 
   function updateNavBtn(){
@@ -3712,29 +3713,40 @@ function _npDirectTrackBegin(fld, curField) {
     b.title=h?'التنقل أفقياً (نفس صف الطالب) — اضغط للتبديل إلى العمودي':'التنقل عمودياً (نفس العمود) — اضغط للتبديل إلى الأفقي';
   }
 
-  /* ── تجهيز ترويسة اللوحة: صورة + زر الاتجاه (مرة واحدة) ── */
+  /* ── تجهيز اللوحة بتنسيق الكرت: الصورة في النصف العلوي، والاسم والقيمة والمفاتيح في السفلي ── */
+  function fitPhoto(){
+    var el=document.getElementById('floatingNumpad'); if(!el) return;
+    var body=el.querySelector('.fnp-body'), handle=el.querySelector('.fnp-handle');
+    if(!body||!handle) return;
+    var auto=!el.style.height||el.classList.contains('fnp-s1')||el.classList.contains('fnp-s2');
+    var h=60;
+    if(auto){
+      var bh=body.offsetHeight||0;
+      var avail=window.innerHeight*0.92-handle.offsetHeight-bh-10;
+      h=Math.max(60,Math.min(Math.max(90,bh),avail));
+    }
+    el.style.setProperty('--fnp-ph',Math.round(h)+'px');
+  }
   function setup(){
     var el=document.getElementById('floatingNumpad');
     if(!el || document.getElementById('fnpPhoto')) return;
     var title=document.getElementById('fnpHeaderLabel');
     var handle=el.querySelector('.fnp-handle');
-    if(!title||!handle) return;
-    var who=document.createElement('div'); who.className='fnp-who';
+    var body=el.querySelector('.fnp-body');
+    if(!title||!handle||!body) return;
     var ph=document.createElement('div'); ph.id='fnpPhoto'; ph.className='fnp-photo';
-    title.parentNode.insertBefore(who,title);
-    who.appendChild(ph); who.appendChild(title);
+    el.insertBefore(ph,body);
+    body.insertBefore(title,body.firstChild);
+    var cu=document.createElement('div'); cu.id='fnpCur'; cu.className='fnp-cur'; cu.style.display='none';
+    body.insertBefore(cu,title.nextSibling);
     var btn=document.createElement('button');
     btn.id='fnpNavBtn'; btn.className='fnp-close-btn fnp-nav-btn';
     btn.onclick=function(){ window.FNP_toggleNav(); };
     handle.insertBefore(btn,document.getElementById('fnpMinBtn'));
-    var body=el.querySelector('.fnp-body');
-    if(body&&!document.getElementById('fnpCur')){
-      var cu=document.createElement('div'); cu.id='fnpCur'; cu.className='fnp-cur'; cu.style.display='none';
-      body.insertBefore(cu,body.firstChild);
-    }
     updateNavBtn();
     try{ new MutationObserver(function(){ refreshPhoto(); renderCur(); }).observe(title,{childList:true,characterData:true,subtree:true}); }catch(e){}
-    refreshPhoto(true);
+    try{ new ResizeObserver(fitPhoto).observe(body); }catch(e){}
+    refreshPhoto(true); fitPhoto();
   }
 
   /* ── قوائم التنقل الأفقي ── */
@@ -3960,7 +3972,7 @@ function _npDirectTrackBegin(fld, curField) {
     var el=document.getElementById('floatingNumpad');
     if(!cellInfo()) _orig=null;
     if(!el||!el.classList.contains('fnp-visible')) return;
-    refreshPhoto(); renderCur();
+    refreshPhoto(); renderCur(); fitPhoto();
     var b=document.getElementById('fnpNavBtn');
     if(b){
       var pg=curPage();
