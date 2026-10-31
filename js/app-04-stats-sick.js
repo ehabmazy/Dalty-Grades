@@ -1,4 +1,7 @@
 // (صفحة الإحصائيات القديمة استُبدلت بصفحة التقارير — js/app-13-reports.js)
+/* حالة صفحة المرضى — كانت غير معرَّفة فيحدث ReferenceError وتظهر الصفحة سوداء */
+var SKS={activeClass:""};
+
 function renderSick(){
   var root=document.getElementById("sickRoot");
   if(!root)return;

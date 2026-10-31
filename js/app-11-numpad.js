@@ -141,11 +141,10 @@ function renderWeeklyNumpad(cls, students, displayStudents, week, absCols, aF, h
     if(photo) h += '<img src="'+photo+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 20%;">';
     else h += '<span>👤</span>';
     h += '<span style="position:absolute;top:6px;inset-inline-start:6px;min-width:36px;height:36px;padding:0 9px;border-radius:18px;background:#fbbf24;color:#1e293b;font:900 18px/36px Cairo,sans-serif;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.55);">'+_stuNum+'</span>';
+    h += '<span style="position:absolute;top:6px;inset-inline-end:6px;max-width:55%;height:30px;padding:0 10px;border-radius:15px;background:rgba(15,23,42,.78);border:1px solid rgba(251,191,36,.6);color:#fde68a;font:800 13px/28px Cairo,sans-serif;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 8px rgba(0,0,0,.45);">'+esc(cls)+'</span>';
     h += '</div>';
     h += '<div style="flex-shrink:0;font-family:\'Amiri\',serif;font-size:clamp(18px,4.6vw,24px);font-weight:900;line-height:1.35;color:#fff;text-align:center;">'+esc(s.name||'')+'</div>';
     h += '<div style="flex-shrink:0;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;">';
-    h += '<span style="'+_chip+'">رقم <b style="color:#fde68a;">'+_stuNum+'</b></span>';
-    h += '<span style="'+_chip+'">الفصل <b style="color:#fde68a;">'+esc(cls)+'</b></span>';
     if(s._totalAbsent){
       h += '<span style="'+_chip+'"><b style="color:#fca5a5;">غائب كلياً</b></span>';
     }else{
@@ -2479,27 +2478,23 @@ function _initNumpadEvents() {
       _origRenderWeekly.apply(this, arguments);
       if (typeof WKS !== 'undefined' && (WKS.viewMode === 'numpad' || WKS.viewMode === 'attend' || WKS.viewMode === 'absent')) {
         buildFloatingNumpad();
-        /* إظهار اللوحة فقط إذا كانت الصفحة الحالية هي الراصد */
+        var kb = document.querySelector('.np2-keyboard');
         if (typeof _currentPage === 'undefined' || _currentPage !== 'weekly') {
           /* لسنا في صفحة الراصد — لا تُظهر اللوحة */
           if (FNP.el)  FNP.el.classList.remove('fnp-visible');
           if (FNP.tog) FNP.tog.classList.remove('fnp-tog-visible');
           FNP.visible = false;
-        } else if (!FNP.visible) {
-          if (FNP.tog) FNP.tog.classList.add('fnp-tog-visible');
-          /* إخفاء اللوحة الثابتة وإظهار العائمة */
-          setTimeout(function(){
-            if (typeof _currentPage !== 'undefined' && _currentPage !== 'weekly') return;
-            var kb = document.querySelector('.np2-keyboard');
-            if (kb) {
-              kb.classList.add('np2-keyboard-hidden');
-              FNP_show();
-            }
-          }, 80);
         } else {
-          /* اللوحة مرئية — اكتفِ بإخفاء اللوحة الثابتة دون إعادة رسم اللوحة العائمة */
-          var kb = document.querySelector('.np2-keyboard');
-          if (kb) kb.classList.add('np2-keyboard-hidden');
+          /* زر 🔢 متاح دائماً، لكن اللوحة العائمة لا تُفتح تلقائياً: فقط عند الضغط عليه.
+             إن فتحها المستخدم بنفسه تبقى مفتوحة، وإلا تبقى اللوحة الثابتة هي الظاهرة. */
+          if (FNP.tog) FNP.tog.classList.add('fnp-tog-visible');
+          if (FNP.visible) {
+            if (FNP.el) FNP.el.classList.add('fnp-visible');
+            if (kb) kb.classList.add('np2-keyboard-hidden');
+          } else {
+            if (FNP.el) FNP.el.classList.remove('fnp-visible');
+            if (kb) kb.classList.remove('np2-keyboard-hidden');
+          }
         }
       } else if (typeof WKS !== 'undefined' && WKS.viewMode === 'table') {
         /* وضع الجدول: أظهر اللوحة العائمة إذا كانت خلية محددة */
@@ -3673,6 +3668,16 @@ function _npDirectTrackBegin(fld, curField) {
     '#floatingNumpad .fnp-photo.on{display:flex;}',
     '#floatingNumpad .fnp-emo{display:none;}',
     '#floatingNumpad .fnp-photo.noimg .fnp-emo{display:block;}',
+    '#floatingNumpad .fnp-clsb{position:absolute;top:6px;inset-inline-end:6px;max-width:55%;height:30px;padding:0 10px;border-radius:15px;background:rgba(15,23,42,.78);border:1px solid rgba(251,191,36,.6);color:#fde68a;font:800 13px/28px Cairo,sans-serif;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 8px rgba(0,0,0,.45);}',
+    '#floatingNumpad.fnp-s2 .fnp-clsb{height:22px;font-size:10px;line-height:20px;padding:0 6px;}',
+    '#floatingNumpad .fnp-wk{flex-shrink:0;display:none;gap:4px;justify-content:center;align-items:stretch;}',
+    '#floatingNumpad .fnp-wk .wk-t{display:flex;align-items:center;font-size:10px;font-weight:800;color:#94a3b8;padding:0 2px;}',
+    '#floatingNumpad .fnp-wk .wk-c{flex:1;min-width:0;text-align:center;border-radius:8px;padding:2px 3px;background:rgba(148,163,184,.12);border:1px solid transparent;}',
+    '#floatingNumpad .fnp-wk .wk-c small{display:block;font-size:9.5px;font-weight:700;color:#94a3b8;}',
+    '#floatingNumpad .fnp-wk .wk-c b{display:block;font-size:14px;font-weight:900;color:#fde68a;line-height:1.2;}',
+    '#floatingNumpad .fnp-wk .wk-c.act{background:rgba(251,191,36,.16);border-color:#fbbf24;}',
+    '#floatingNumpad .fnp-wk .wk-c.ab b{color:#f87171;}',
+    '#floatingNumpad.fnp-s2 .fnp-wk{display:none!important;}',
     '#floatingNumpad .fnp-badge{position:absolute;top:6px;inset-inline-start:6px;min-width:36px;height:36px;padding:0 9px;border-radius:18px;background:#fbbf24;color:#1e293b;font:900 18px/36px Cairo,sans-serif;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.55);}',
     '#floatingNumpad.fnp-s1 .fnp-photo{font-size:48px;margin:4px 5px 0;}',
     '#floatingNumpad.fnp-s2 .fnp-photo{font-size:36px;margin:3px 3px 0;}',
@@ -3738,14 +3743,13 @@ function _npDirectTrackBegin(fld, curField) {
     var s=o.s;
     nm.style.display=''; nm.textContent=s.name||'—';
     if(bd){ bd.style.display=''; bd.textContent=String(o.idx+1); }
+    var cb=$id('fnpCls'); if(cb){ cb.textContent=o.cls||''; cb.style.display=o.cls?'':'none'; }
     /* العمود/النشاط الجاري رصده: نص الترويسة بعد حذف اسم الطالب منه */
     var lab=$id('fnpHeaderLabel'), t=lab?(lab.textContent||''):'';
     if(s.name) t=t.split(s.name).join('');
     t=t.replace(/^[\s\/|\-–]+|[\s\/|\-–]+$/g,'');
     col.textContent=t; col.style.display=t?'':'none';
     var h='';
-    h+='<span class="chip">رقم <b>'+(o.idx+1)+'</b></span>';
-    if(o.cls) h+='<span class="chip">الفصل <b>'+safe(o.cls)+'</b></span>';
     if(s._totalAbsent){
       h+='<span class="chip warn"><b>غائب كلياً</b></span>';
     }else{
@@ -3760,6 +3764,27 @@ function _npDirectTrackBegin(fld, curField) {
       h+='<span class="chip'+(ab>0?' warn':'')+'">الغياب <b>'+ab+'</b></span>';
     }catch(e){}
     inf.innerHTML=h; inf.style.display='';
+    refreshWeek(o);
+  }
+  /* بيانات الأسبوع الجاري رصده: واجب / تقييم / سلوك لنفس الطالب */
+  function curCellField(){
+    try{
+      var pg=curPage();
+      if(pg==='grades'&&typeof GS!=='undefined'&&GS._gsCell) return GS._gsCell.field;
+      if(typeof WKS!=='undefined'&&WKS.viewMode==='table'&&WKS._tblCell) return WKS._tblCell.field;
+    }catch(e){}
+    return '';
+  }
+  function refreshWeek(o){
+    var el=$id('fnpWk'); if(!el) return;
+    var f=curCellField(), m=/^(a|h|bw)(\d+)$/.exec(f||'');
+    if(!o||!m){ el.style.display='none'; el.innerHTML=''; return; }
+    var w=m[2], s=o.s, h='<span class="wk-t">أسبوع '+w+'</span>';
+    [['h','واجب'],['a','تقييم'],['bw','سلوك']].forEach(function(p){
+      var fld=p[0]+w, v=s[fld], empty=(v===undefined||v===''||v===null);
+      h+='<div class="wk-c'+(fld===f?' act':'')+((v==='غ'||v==='م')?' ab':'')+'"><small>'+p[1]+'</small><b>'+(empty?'—':safe(v))+'</b></div>';
+    });
+    el.innerHTML=h; el.style.display='flex';
   }
 
   var _lastKey='';
@@ -3808,14 +3833,15 @@ function _npDirectTrackBegin(fld, curField) {
     var body=el.querySelector('.fnp-body');
     if(!title||!handle||!body) return;
     var ph=document.createElement('div'); ph.id='fnpPhoto'; ph.className='fnp-photo noimg';
-    ph.innerHTML='<span class="fnp-emo">👤</span><span class="fnp-badge" id="fnpNum" title="رقم الطالب"></span>';
+    ph.innerHTML='<span class="fnp-emo">👤</span><span class="fnp-badge" id="fnpNum" title="رقم الطالب"></span><span class="fnp-clsb" id="fnpCls" title="الفصل"></span>';
     el.insertBefore(ph,body);
     var nmEl=document.createElement('div'); nmEl.id='fnpName'; nmEl.className='fnp-name';
     var inEl=document.createElement('div'); inEl.id='fnpInfo'; inEl.className='fnp-info';
+    var wkEl=document.createElement('div'); wkEl.id='fnpWk'; wkEl.className='fnp-wk';
     var coEl=document.createElement('div'); coEl.id='fnpCol'; coEl.className='fnp-col';
     var cu=document.createElement('div'); cu.id='fnpCur'; cu.className='fnp-cur'; cu.style.display='none';
     var card=document.createElement('div'); card.id='fnpCard'; card.className='fnp-card';
-    card.appendChild(title); card.appendChild(nmEl); card.appendChild(inEl); card.appendChild(coEl); card.appendChild(cu);
+    card.appendChild(title); card.appendChild(nmEl); card.appendChild(inEl); card.appendChild(wkEl); card.appendChild(coEl); card.appendChild(cu);
     el.insertBefore(card,body);
     var btn=document.createElement('button');
     btn.id='fnpNavBtn'; btn.className='fnp-close-btn fnp-nav-btn';
@@ -3829,13 +3855,16 @@ function _npDirectTrackBegin(fld, curField) {
 
   /* ── قوائم التنقل الأفقي ── */
   /* صفحة الدرجات (جدول): كل الخلايا بترتيب الصفوف ثم الأعمدة كما تظهر في الصفحة */
-  function domGradeCells(){
+  function domGradeCells(curField){
     var cls=GS.activeClass, students=DB.data[cls]||[], out=[];
+    /* أعمدة الأسابيع: يبقى التنقل داخل نفس الأسبوع (واجب ← تقييم ← سلوك) ثم الطالب التالي في نفس الأسبوع */
+    var wm=/^(?:a|h|bw)(\d+)$/.exec(curField||''), wk=wm?wm[1]:null;
     var re=/^_gsSelectCell\((\d+),'([^']*)',([^,]*),'([^']*)','([^']*)'\)/;
     document.querySelectorAll('.gs-tbl-cell[onclick^="_gsSelectCell("]').forEach(function(el){
       var m=re.exec(el.getAttribute('onclick')); if(!m) return;
       var idx=+m[1], f=m[2], v=(students[idx]||{})[f];
       if(v==='غ'||v==='م') return; /* نفس تخطي الغائب/المعذور في التنقل العمودي */
+      if(wk){ var fm=/^(?:a|h|bw)(\d+)$/.exec(f); if(!fm||fm[1]!==wk) return; }
       out.push({stuIdx:idx,field:f,maxVal:Number(m[3]),cellId:m[4],colKey:m[5]});
     });
     return out;
@@ -3893,8 +3922,8 @@ function _npDirectTrackBegin(fld, curField) {
   /* التنقل في صفحة الدرجات: عند الوضع الأفقي تُبنى القائمة من الصفوف */
   var _origBuild=window._gsBuildColList;
   if(typeof _origBuild==='function'){
-    window._gsBuildColList=function(){
-      if(navH()){ var l=domGradeCells(); if(l.length) return l; }
+    window._gsBuildColList=function(stuIdx,field){
+      if(navH()){ var l=domGradeCells(field); if(l.length) return l; }
       return _origBuild.apply(this,arguments);
     };
   }
