@@ -463,7 +463,7 @@ function renderWeeklyAttend(cls, students, week, absCols) {
 /* ── تسجيل الطالب حاضراً من شريط الإدخال ── */
 function _attendSubmit() {
   var ta  = document.getElementById('npDictInput');
-  var raw = ta ? ta.value.trim() : (WKS.npTextInput||'').trim();
+  var raw = _npNormNumbers(ta ? ta.value.trim() : (WKS.npTextInput||'').trim());
   if(!raw) return;
 
   var cls      = WKS.activeClass;
@@ -784,7 +784,7 @@ function renderWeeklyAbsent(cls, students, week, absCols) {
 /* ── تسجيل الطالب غائباً من شريط الإدخال ── */
 function _absentSubmit() {
   var ta  = document.getElementById('npDictInput');
-  var raw = ta ? ta.value.trim() : (WKS.npTextInput||'').trim();
+  var raw = _npNormNumbers(ta ? ta.value.trim() : (WKS.npTextInput||'').trim());
   if(!raw) return;
 
   var cls      = WKS.activeClass;
@@ -1637,6 +1637,101 @@ async function _npWhisperRecord() {
   }
 }
 
+/* ══════════════════════════════════════════════════════════
+   تحويل الأرقام المكتوبة لغوياً (واحد، خمسة وعشرين، تسعة ونصف…)
+   والأرقام الهندية (٠-٩) إلى أرقام حسابية قبل تحليل نص الإملاء
+   ══════════════════════════════════════════════════════════ */
+var _NPW = (function(){
+  var m = {}, i;
+  function add(words, v, kind){ words.split(' ').forEach(function(w){ if(w) m[w] = {v:v, k:kind}; }); }
+  /* آحاد */
+  add('صفر', 0, 'u');
+  add('واحد واحده وحده', 1, 'u');
+  add('اثنين اثنان اثنتين اثنتان اتنين اثنتين', 2, 'u');
+  add('ثلاثه ثلاث تلاته تلات', 3, 'u');
+  add('اربعه اربع', 4, 'u');
+  add('خمسه خمس', 5, 'u');
+  add('سته ست', 6, 'u');
+  add('سبعه سبع', 7, 'u');
+  add('ثمانيه ثماني ثمان تمانيه تمنيه تمان', 8, 'u');
+  add('تسعه تسع', 9, 'u');
+  /* عشرة */
+  add('عشره عشر', 10, 't10');
+  /* 11–19 بصيغة اللهجة */
+  add('حداشر احداشر', 11, 'n'); add('اتناشر اثناشر', 12, 'n'); add('تلتاشر ثلاثتاشر تلاتاشر', 13, 'n');
+  add('اربعتاشر اربعطاشر', 14, 'n'); add('خمستاشر خمسطاشر', 15, 'n'); add('ستاشر سطاشر', 16, 'n');
+  add('سبعتاشر سبعطاشر', 17, 'n'); add('تمنتاشر ثمنتاشر ثمانطاشر', 18, 'n'); add('تسعتاشر تسعطاشر', 19, 'n');
+  /* العشرات */
+  add('عشرين عشرون', 20, 'n'); add('ثلاثين ثلاثون تلاتين', 30, 'n'); add('اربعين اربعون', 40, 'n');
+  add('خمسين خمسون', 50, 'n'); add('ستين ستون', 60, 'n'); add('سبعين سبعون', 70, 'n');
+  add('ثمانين ثمانون تمانين', 80, 'n'); add('تسعين تسعون', 90, 'n');
+  /* المئات */
+  add('مائه مئه ميه مايه مائة مئة', 100, 'h');
+  add('مائتين مئتين ميتين مئتان مائتان', 200, 'n');
+  return m;
+})();
+
+function _npNormTok(t){
+  return t.replace(/[ً-ٰٟـ]/g,'')   /* تشكيل وتطويل */
+          .replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي');
+}
+function _npLookupWord(tok){
+  /* يعيد {e:مدخل القاموس, conj:هل سبقته واو العطف} أو null */
+  var n = _npNormTok(tok);
+  if(_NPW[n]) return {e:_NPW[n], conj:false};
+  if(n.length>2 && n.charAt(0)==='و' && _NPW[n.slice(1)]) return {e:_NPW[n.slice(1)], conj:true};
+  return null;
+}
+
+function _npNormNumbers(text){
+  if(!text) return text;
+  /* الأرقام الهندية/الفارسية → لاتينية، والفاصلة العربية العشرية */
+  text = String(text)
+    .replace(/[٠-٩]/g, function(d){ return String(d.charCodeAt(0)-0x0660); })
+    .replace(/[۰-۹]/g, function(d){ return String(d.charCodeAt(0)-0x06F0); })
+    .replace(/(\d)[٫,،](\d)/g, '$1.$2');
+
+  var toks = text.split(/\s+/).filter(function(t){ return t!==''; });
+  var out = [], cur = null, lastKind = null;
+  function flush(){ if(cur!==null){ out.push(String(cur)); cur=null; lastKind=null; } }
+  var pendingConj = false;
+
+  for(var i=0;i<toks.length;i++){
+    var tok = toks[i], n = _npNormTok(tok);
+
+    /* "و" مفردة بين رقمين: عطف */
+    if(n==='و' && cur!==null && i+1<toks.length && (_npLookupWord(toks[i+1])||/^\d+$/.test(toks[i+1]))){ pendingConj = true; continue; }
+
+    /* "ونصف" → +0.5 */
+    if((n==='ونصف'||n==='ونص'||(pendingConj&&(n==='نصف'||n==='نص'))) && cur!==null){ cur += 0.5; pendingConj=false; lastKind='n'; continue; }
+
+    /* "احد/احدى/اثنا/اثني/اثنتي + عشر" → 11/12 */
+    var nx = i+1<toks.length ? _npNormTok(toks[i+1]) : '';
+    if((nx==='عشر'||nx==='عشره') && (n==='احد'||n==='احدي'||n==='احدى'||n==='اثنا'||n==='اثني'||n==='اثنتي'||n==='اثنتا')){
+      flush(); cur = (n.indexOf('احد')===0) ? 11 : 12; lastKind='n'; i++; pendingConj=false; continue;
+    }
+
+    var w = _npLookupWord(tok);
+    if(w){
+      var e = w.e, conj = w.conj || pendingConj;
+      pendingConj = false;
+      if(cur===null){ cur = e.v; lastKind = e.k; continue; }
+      if(conj){ cur += e.v; lastKind = e.k; continue; }                       /* خمسة وعشرين */
+      if(e.k==='t10' && lastKind==='u' && cur>=1 && cur<=9){ cur += 10; lastKind='n'; continue; }   /* ثلاثة عشر */
+      if(e.k==='h' && lastKind==='u' && cur>=1 && cur<=9){ cur *= 100; lastKind='n'; continue; }     /* ثلاث مائة */
+      flush(); cur = e.v; lastKind = e.k;                                    /* رقم جديد */
+      continue;
+    }
+
+    /* رقم لاتيني بعد "و" مفردة: اتركه كما هو */
+    pendingConj = false;
+    flush();
+    out.push(tok);
+  }
+  flush();
+  return out.join(' ');
+}
+
 /* ── الدالة الرئيسية: تختار Online أو Offline تلقائياً ── */
 /* الميكروفون الأونلاين مستمر: لا يتوقف بالصمت، ولا يتوقف إلا بضغطة ثانية على الزر */
 var _npMicActive = false;
@@ -1838,7 +1933,7 @@ function _npShowMobileKeyboard() {
 
 function _npSubmit() {
   var ta = document.getElementById('npDictInput');
-  var raw = ta ? ta.value.trim() : (WKS.npTextInput||'').trim();
+  var raw = _npNormNumbers(ta ? ta.value.trim() : (WKS.npTextInput||'').trim());
   if(!raw) return;
 
   var cls     = WKS.activeClass;
