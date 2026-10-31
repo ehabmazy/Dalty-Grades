@@ -1638,57 +1638,89 @@ async function _npWhisperRecord() {
 }
 
 /* ── الدالة الرئيسية: تختار Online أو Offline تلقائياً ── */
-function _npMicToggle() {
-  var btn = document.getElementById('npMicBtn');
+/* الميكروفون الأونلاين مستمر: لا يتوقف بالصمت، ولا يتوقف إلا بضغطة ثانية على الزر */
+var _npMicActive = false;
 
-  /* إيقاف السجلات الجارية */
-  if(_npMicRec && _npMicRec.state === 'recording') { _npMicRec.stop(); return; }
+function _npMicSetUI(on) {
+  var b = document.getElementById('npMicBtn');
+  if(!b) return;
+  if(on) { b.textContent='🔴'; b.style.background='rgba(239,68,68,.3)'; b.style.borderColor='#dc2626'; b.title='اضغط لإيقاف الإملاء'; }
+  else   { b.textContent='🎤'; b.style.background=''; b.style.borderColor=''; b.title='إملاء صوتي'; }
+}
+
+function _npStartSR() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) { _npMicActive = false; _npMicSetUI(false); return; }
+  var rec = new SR();
+  _npMicRec = rec;
+  rec.lang = 'ar-EG';
+  rec.interimResults = false;
+  rec.continuous = true;
+  rec.onstart = function() { _npMicSetUI(true); };
+  rec.onresult = function(e) {
+    var delay = 100;
+    for(var i = e.resultIndex; i < e.results.length; i++) {
+      if(!e.results[i].isFinal) continue;
+      var txt = (e.results[i][0].transcript || '').trim();
+      if(!txt) continue;
+      (function(t, d) {
+        setTimeout(function() {
+          var ta = document.getElementById('npDictInput');
+          if(ta) { ta.value = t; }
+          WKS.npTextInput = t;
+          (WKS.viewMode==='attend' ? _attendSubmit : (WKS.viewMode==='absent' ? _absentSubmit : _npSubmit))();
+        }, d);
+      })(txt, delay);
+      delay += 250;
+    }
+  };
+  rec.onerror = function(e) {
+    if(e.error === 'network' || e.error === 'service-not-allowed') {
+      /* انقطع النت — انتقل لـ Whisper المحلي */
+      _npMicActive = false; _npMicRec = null; _npMicSetUI(false);
+      showSnack('📶 انقطع النت — جارٍ التبديل للنموذج المحلي...');
+      _npWhisperReady ? _npWhisperRecord() : _npLoadWhisper();
+    } else if(e.error === 'not-allowed' || e.error === 'audio-capture') {
+      _npMicActive = false; _npMicSetUI(false);
+      WKS.npStatus = '❌ ' + (e.error === 'not-allowed' ? 'تم رفض إذن المايك من المتصفح' : 'لا يوجد مايك متاح');
+      WKS.npStatusType = 'err';
+      _npRenderStatus();
+    }
+    /* no-speech / aborted وغيرها: تجاهل — onend سيعيد التشغيل طالما الإملاء مفعّل */
+  };
+  rec.onend = function() {
+    if(_npMicRec === rec) _npMicRec = null;
+    if(_npMicActive) {
+      /* المتصفح أنهى الجلسة بعد صمت — أعد التشغيل تلقائياً */
+      setTimeout(function() {
+        if(!_npMicActive) return;
+        try { _npStartSR(); } catch(err) { _npMicActive = false; _npMicSetUI(false); }
+      }, 250);
+    } else {
+      _npMicSetUI(false);
+    }
+  };
+  rec.start();
+}
+
+function _npMicToggle() {
+  /* إيقاف الإملاء المستمر بضغطة ثانية */
+  if(_npMicActive) {
+    _npMicActive = false;
+    try { if(_npMicRec) _npMicRec.stop(); } catch(e) {}
+    _npMicRec = null;
+    _npMicSetUI(false);
+    return;
+  }
+  /* إيقاف تسجيل Whisper الجاري */
   if(_npMediaRecorder && _npMediaRecorder.state === 'recording') { _npMediaRecorder.stop(); return; }
 
   var isOnline = navigator.onLine;
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if(isOnline && SR) {
-    /* ══ وضع Online: SpeechRecognition العادية ══ */
-    _npMicRec = new SR();
-    _npMicRec.lang = 'ar-EG';
-    _npMicRec.interimResults = false;
-    _npMicRec.continuous = false;
-    _npMicRec.onstart = function() {
-      if(btn) { btn.textContent='🔴'; btn.style.background='rgba(239,68,68,.3)'; btn.style.borderColor='#dc2626'; }
-    };
-    _npMicRec.onresult = function(e) {
-      var txt = e.results[0][0].transcript || '';
-      var ta = document.getElementById('npDictInput');
-      if(ta) { ta.value = txt; WKS.npTextInput = txt; }
-      if(!txt) {
-        WKS.npStatus = '⚠️ لم يُسمع كلام واضح — حاول مرة أخرى';
-        WKS.npStatusType = 'warn';
-        _npRenderStatus();
-        return;
-      }
-      setTimeout(WKS.viewMode==='attend'?_attendSubmit:(WKS.viewMode==='absent'?_absentSubmit:_npSubmit), 100);
-    };
-    _npMicRec.onerror = function(e) {
-      /* لو انقطع النت أثناء التسجيل — انتقل لـ Whisper */
-      if(e.error === 'network' || e.error === 'service-not-allowed') {
-        showSnack('📶 انقطع النت — جارٍ التبديل للنموذج المحلي...');
-        _npMicRec = null;
-        if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
-        _npWhisperReady ? _npWhisperRecord() : _npLoadWhisper();
-      } else {
-        var _errMsgs={'no-speech':'لم يُسمع كلام — حاول مرة أخرى','audio-capture':'لا يوجد مايك متاح','not-allowed':'تم رفض إذن المايك من المتصفح','aborted':'تم إلغاء التسجيل'};
-        WKS.npStatus = '❌ ' + (_errMsgs[e.error] || ('خطأ في المايك: ' + (e.error||'')));
-        WKS.npStatusType = 'err';
-        _npRenderStatus();
-      }
-    };
-    _npMicRec.onend = function() {
-      _npMicRec = null;
-      if(btn) { btn.textContent='🎤'; btn.style.background=''; btn.style.borderColor=''; }
-    };
-    _npMicRec.start();
-
+    _npMicActive = true;
+    try { _npStartSR(); } catch(err) { _npMicActive = false; _npMicSetUI(false); }
   } else {
     /* ══ وضع Offline: Whisper محلي ══ */
     if(_npWhisperReady) {
@@ -2245,10 +2277,12 @@ function _initNumpadEvents() {
       el.style.transform = 'none';
       if (saved.w) el.style.width  = saved.w;
       if (saved.h) el.style.height = saved.h;
+      if (saved.w || saved.h) { el.style.minWidth = '0'; el.style.minHeight = '0'; }
     }
 
     _fnpBindDrag();
     _fnpBindResize();
+    _fnpBindPinch();
     _fnpApplyMin();
   }
 
@@ -2351,6 +2385,64 @@ function _initNumpadEvents() {
     document.addEventListener('touchmove',  onMove, {passive:false});
     document.addEventListener('mouseup',  onEnd);
     document.addEventListener('touchend', onEnd);
+  }
+
+  /* ── التصغير/التكبير بحركة الإصبعين (pinch) على اللوحة ── */
+  function _fnpBindPinch() {
+    var el = FNP.el;
+    if (!el) return;
+    var p0 = 0, w0 = 0, h0 = 0, active = false;
+
+    function dist(t) {
+      var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+      return Math.sqrt(dx*dx + dy*dy);
+    }
+    el.addEventListener('touchstart', function(e) {
+      if (e.touches.length !== 2) return;
+      /* ألغِ أي سحب أو تغيير حجم بإصبع واحد */
+      FNP.dragging = false; FNP.resizing = false;
+      var rect = el.getBoundingClientRect();
+      /* ثبّت الموضع بالبكسل ليعمل التحجيم من أي وضع */
+      el.style.left = rect.left + 'px';
+      el.style.top  = rect.top  + 'px';
+      el.style.bottom = 'auto';
+      el.style.transform = 'none';
+      /* اللوحة بحجم يدوي: ألغِ مستوى التصغير الجاهز (fnp-s1/s2) حتى لا يمنع !important التحجيم */
+      el.classList.remove('fnp-s1', 'fnp-s2');
+      try { localStorage.setItem('fnp_size', '0'); } catch(err) {}
+      var b = document.getElementById('fnpMinBtn');
+      if (b) { b.textContent = '🔍−'; b.title = 'تصغير الحجم'; }
+      p0 = dist(e.touches); w0 = rect.width; h0 = rect.height;
+      active = p0 > 0;
+      e.preventDefault();
+    }, {passive: false});
+
+    el.addEventListener('touchmove', function(e) {
+      if (!active || e.touches.length !== 2) return;
+      var ratio = dist(e.touches) / p0;
+      var nw = Math.max(150, Math.min(w0 * ratio, window.innerWidth  - 8));
+      var nh = Math.max(110, Math.min(h0 * ratio, window.innerHeight - 8));
+      el.style.minWidth  = '0';
+      el.style.minHeight = '0';
+      el.style.width  = nw + 'px';
+      el.style.height = nh + 'px';
+      /* أبقِ اللوحة داخل الشاشة */
+      var r = el.getBoundingClientRect();
+      var nx = Math.max(0, Math.min(r.left, window.innerWidth  - nw));
+      var ny = Math.max(0, Math.min(r.top,  window.innerHeight - nh));
+      el.style.left = nx + 'px';
+      el.style.top  = ny + 'px';
+      e.preventDefault();
+    }, {passive: false});
+
+    function end(e) {
+      if (!active) return;
+      if (e.touches && e.touches.length >= 2) return;
+      active = false;
+      _fnpSavePos();
+    }
+    el.addEventListener('touchend', end);
+    el.addEventListener('touchcancel', end);
   }
 
   /* ── حفظ واستعادة الموضع ── */
