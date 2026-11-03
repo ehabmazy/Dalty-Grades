@@ -1704,7 +1704,7 @@ function gradesExportCustom(){
       var students=(DB.data[cls]||[]).filter(function(s){return s.name&&s.name.trim();});
       if(!students.length)return null;
       var ws={};
-      var tmax=totalMax();
+      var tmax=recordedMax(cls);
       var activePage=GS.activePage||"pg_home";
       var _aw=Math.min(Math.max(1,Number((DB.meta||{}).activeWeeks)||14),ALL_WEEKS.length);
       var _awSet={};ALL_WEEKS.slice(0,_aw).forEach(function(w){_awSet[w]=true;});

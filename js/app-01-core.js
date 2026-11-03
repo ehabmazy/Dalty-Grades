@@ -891,27 +891,25 @@ function totalMax(){
   return 70;
 }
 
-// الدرجة العظمى للمجموع بحسب ما رُصد فعلاً في الفصل (تقييم 20 + واجب 10 + سلوك 10 + 15 لكل اختبار مرصود)
-// قبل رصد أي شيء يرجع 70 (الافتراضي)
+// الدرجة العظمى للمجموع على مراحل الفترة الدراسية:
+// الأسابيع (تقييم 20 + واجب 10 + سلوك 10) = 40 دائماً، +15 عند رصد الاختبار الأول (55)، +15 عند رصد الثاني (70)
 function recordedMax(cls){
-  var base=totalMax();
   var list=(DB&&DB.data&&DB.data[cls])||[];
-  var _aw=DB&&DB.meta?Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length):14;
-  var wl=ALL_WEEKS.slice(0,_aw);
-  function has(v){return v!==""&&v!==undefined&&v!==null&&v!=="م";}
-  var hasA=false,hasH=false,hasB=false,e1=false,e2=false;
+  var cols={};
+  allCols().forEach(function(c){cols[c.id]=c;});
+  function cmax(id,d){var c=cols[id];return c&&Number(c.max)>0?Number(c.max):d;}
+  // نفس منطق خلية الاختبار في calcStudent: فراغ / م = غير مرصود، غ أو رقم = مرصود
+  function has(v){
+    if(v===""||v===undefined||v===null||v==="م")return false;
+    return v==="غ"||!isNaN(Number(v));
+  }
+  var e1=false,e2=false;
   list.forEach(function(s){
-    if(!s||!s.name||s._totalAbsent)return;
-    wl.forEach(function(w){
-      if(has(s["a"+w]))hasA=true;
-      if(has(s["h"+w]))hasH=true;
-      if(has(s["bw"+w]))hasB=true;
-    });
+    if(!s||!s.name||!String(s.name).trim()||s._totalAbsent)return;
     if(has(s.ex1))e1=true;
     if(has(s.ex2))e2=true;
   });
-  var m=(hasA?20:0)+(hasH?10:0)+(hasB?10:0)+(e1?15:0)+(e2?15:0);
-  return m>0?m:base;
+  return cmax("a1",20)+cmax("h1",10)+cmax("bw1",10)+(e1?cmax("ex1",15):0)+(e2?cmax("ex2",15):0);
 }
 
 // حساب متوسط السلوك لكل نصف من الأسابيع المُرصدة (من 10)

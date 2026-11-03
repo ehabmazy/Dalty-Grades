@@ -79,7 +79,17 @@ function buildModel(cls, C) {
   function cvis(id) { var c = cols[id]; return !c || !!c.visible; }   // calcStudent يتجاهل الأعمدة المخفية
   var AM = cmax('a1', 20), HM = cmax('h1', 10), BM = cmax('bw1', 10), EM = [cmax('ex1', 15), cmax('ex2', 15)];
   var exMode = (DB.meta && DB.meta.examAbsenceMode) || 'zero';
-  var rm = recordedMax(cls);
+  /* المجموع الكلي لصفحة التقارير = مجموع متغيّر على مراحل الفترة الدراسية:
+     الأسابيع (تقييم + واجب + سلوك) = 40 دائماً، ثم +15 عند رصد الاختبار الأول (55)، ثم +15 عند رصد الثاني (70) */
+  var exUsed = [false, false];
+  (DB.data[cls] || []).forEach(function (s) {
+    if (!s || !s.name || !String(s.name).trim() || s._totalAbsent) return;
+    [s.ex1, s.ex2].forEach(function (v, i) {
+      var q = cell(v, EM[i]);
+      if (q.st === 'v' || q.st === 'abs') exUsed[i] = true;
+    });
+  });
+  var rm = AM + HM + BM + (exUsed[0] ? EM[0] : 0) + (exUsed[1] ? EM[1] : 0);
   var cw = {
     a: weeks.filter(function (w) { return cvis('a' + w); }),
     h: weeks.filter(function (w) { return cvis('h' + w); }),
