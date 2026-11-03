@@ -8,15 +8,28 @@ function _getActiveWeeks(){
 }
 
 // Auto-detect current week based on startDate and today's date
+// تحليل التاريخ (YYYY-MM-DD) كتاريخ محلي عند منتصف الليل — يمنع انحراف المنطقة الزمنية
+function _dgParseDate(v){
+  if(!v)return null;
+  var m=String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  var d=m?new Date(+m[1],+m[2]-1,+m[3]):new Date(v);
+  if(isNaN(d.getTime()))return null;
+  d.setHours(0,0,0,0);
+  return d;
+}
+// رقم الأسبوع الخام حسب تاريخ اليوم (قد يكون <1 قبل البداية أو أكبر من عدد الأسابيع)، أو null بلا تاريخ بداية
+function _dgRawWeek(){
+  var s=_dgParseDate(DB&&DB.meta&&DB.meta.startDate);
+  if(!s)return null;
+  var t=new Date();t.setHours(0,0,0,0);
+  var days=Math.round((t-s)/86400000);
+  return Math.floor(days/7)+1;
+}
 function _calcCurrentWeek(){
-  if(!DB.meta||!DB.meta.startDate)return 1;
-  var start=new Date(DB.meta.startDate);
-  var today=new Date();
-  today.setHours(0,0,0,0);start.setHours(0,0,0,0);
-  var diff=Math.floor((today-start)/(1000*60*60*24*7));
-  var w=diff+1;
+  var raw=_dgRawWeek();
+  if(raw==null)return 1;
   var maxW=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  return Math.min(Math.max(1,w),maxW);
+  return Math.min(Math.max(1,raw),maxW);
 }
 
 function renderWeekly(){

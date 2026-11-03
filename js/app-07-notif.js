@@ -1826,11 +1826,18 @@ function _homeRingHTML(r,prog,color,strokeW){
 }
 
 var _homeTickCount=0;
+// عند فتح التطبيق/العودة إليه أو بدء يوم جديد: حدّث رقم الأسبوع فوراً
+document.addEventListener('visibilitychange',function(){ if(!document.hidden)window._homeDayKey=null; });
+window.addEventListener('focus',function(){ window._homeDayKey=null; });
+window.addEventListener('pageshow',function(){ window._homeDayKey=null; });
 
 function _homeTick(){
   _homeTickCount++;
   var root=document.getElementById('homeRoot');
   if(!root||root.offsetParent===null){return;}
+
+  var _dk=new Date().toDateString();
+  if(window._homeDayKey!==_dk){window._homeDayKey=_dk;try{_homeRefreshCurricStrip();}catch(e){}}
 
   var now=new Date();
   var ourDay=_homeJsToOurDay(now.getDay());
@@ -2069,18 +2076,32 @@ function _homeTick(){
 // ── CURRIC WEEK WIDGET HELPERS ─────────────────────────
 
 function _curricCurrentWeek(){
-  // Compute current week number from startDate
-  if(!DB||!DB.meta||!DB.meta.startDate)return null;
+  // الأسبوع الحالي الفعلي (null إن لم يُحدَّد تاريخ البداية أو كان اليوم خارج أسابيع الفصل)
   try{
-    var start=new Date(DB.meta.startDate);
-    var now=new Date();
-    var diffMs=now-start;
-    if(diffMs<0)return null;
-    var weekNum=Math.floor(diffMs/(7*24*3600*1000))+1;
+    var raw=(typeof _dgRawWeek==='function')?_dgRawWeek():null;
+    if(raw==null)return null;
     var max=Number(DB.meta.activeWeeks)||14;
-    if(weekNum<1||weekNum>max)return null;
-    return weekNum;
+    if(raw<1||raw>max)return null;
+    return raw;
   }catch(e){return null;}
+}
+// أقرب أسبوع للتاريخ الحالي (يُقيَّد بحدود الفصل) — يُستعمل بدل آخر أسبوع تصفحه المستخدم
+function _curricCurrentWeekClamped(){
+  try{
+    var raw=(typeof _dgRawWeek==='function')?_dgRawWeek():null;
+    if(raw==null)return null;
+    var max=Number(DB.meta.activeWeeks)||14;
+    return Math.min(Math.max(1,raw),max);
+  }catch(e){return null;}
+}
+// استبدال شريط الأسبوع في الرئيسية بنسخة محدّثة
+function _homeRefreshCurricStrip(){
+  var el=document.querySelector('.home-curric-strip');
+  if(!el||!el.parentNode)return;
+  var tmp=document.createElement('div');
+  tmp.innerHTML=_buildCurricStrip();
+  var n=tmp.firstChild;
+  if(n)el.parentNode.replaceChild(n,el);
 }
 
 function _curricWeekInfo(w){
@@ -2097,7 +2118,7 @@ function _curricWeekInfo(w){
 
 function _buildCurricStrip(){
   var autoWeek=_curricCurrentWeek();
-  var w=autoWeek||window._curricPopupWeek||1; // دائماً الأسبوع الحالي (مزامنة)
+  var w=autoWeek||_curricCurrentWeekClamped()||window._curricPopupWeek||1; // دائماً الأسبوع الحالي (مزامنة)
   var info=_curricWeekInfo(w);
   if(!info)return '';
 
@@ -2162,7 +2183,7 @@ function _buildCurricStrip(){
 function showCurricPopup(){
   closeCurricPopup();
   var autoWeek=_curricCurrentWeek();
-  window._curricPopupWeek=autoWeek||window._curricPopupWeek||1;
+  window._curricPopupWeek=autoWeek||_curricCurrentWeekClamped()||window._curricPopupWeek||1;
   var ov=document.createElement('div');
   ov.className='curric-popup-overlay';
   ov.id='curricPopupOverlay';
