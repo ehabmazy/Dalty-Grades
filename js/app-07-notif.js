@@ -1837,7 +1837,8 @@ function _homeTick(){
   if(!root||root.offsetParent===null){return;}
 
   var _dk=new Date().toDateString();
-  if(window._homeDayKey!==_dk){window._homeDayKey=_dk;try{_homeRefreshCurricStrip();}catch(e){}}
+  var _dayChanged=(window._homeDayKey!==_dk); window._homeDayKey=_dk;
+  try{_homeRefreshCurricStrip(_dayChanged);}catch(e){}
 
   var now=new Date();
   var ourDay=_homeJsToOurDay(now.getDay());
@@ -2094,14 +2095,25 @@ function _curricCurrentWeekClamped(){
     return Math.min(Math.max(1,raw),max);
   }catch(e){return null;}
 }
-// استبدال شريط الأسبوع في الرئيسية بنسخة محدّثة
-function _homeRefreshCurricStrip(){
-  var el=document.querySelector('.home-curric-strip');
-  if(!el||!el.parentNode)return;
-  var tmp=document.createElement('div');
-  tmp.innerHTML=_buildCurricStrip();
-  var n=tmp.firstChild;
-  if(n)el.parentNode.replaceChild(n,el);
+// توقيع حالة شريط الأسبوع: أي تغيّر في البيانات (مثل وصولها بعد أول رسم للصفحة) يُحدِّث الشريط تلقائياً
+function _curricStripSig(){
+  try{
+    var m=(DB&&DB.meta)||{};
+    var w=_curricCurrentWeek()||_curricCurrentWeekClamped()||window._curricPopupWeek||1;
+    var i=(typeof _curricWeekInfo==='function')?_curricWeekInfo(w):null;
+    var c=(DB&&DB.curric)||{};
+    return [w,m.startDate||'',m.activeWeeks||'',(c.exams||[]).length,(c.holidays||[]).length,
+      i&&i.unit?i.unit.id+i.unit.name:'',i&&i.wd?(i.wd.lessons||''):'',i&&i.exam?i.exam.label:'',i&&i.holiday?i.holiday.label:''].join('|');
+  }catch(e){return '';}
+}
+// تحديث شريط الأسبوع + العد التنازلي في الرئيسية (force=true يتجاهل التوقيع)
+function _homeRefreshCurricStrip(force){
+  var slot=document.getElementById('homeCurricSlot');
+  if(!slot)return;
+  var sig=_curricStripSig();
+  if(!force&&slot.getAttribute('data-sig')===sig)return;
+  slot.setAttribute('data-sig',sig);
+  slot.innerHTML=_buildCurricStrip()+_buildCurricCountdown();
 }
 
 function _curricWeekInfo(w){
@@ -2575,9 +2587,7 @@ function renderHomePage(){
     +'</div>'
     +'</div></div>'
     // Curric week strip
-    +_buildCurricStrip()
-    // ── شريط العد التنازلي للاختبارات والإجازات
-    +_buildCurricCountdown()
+    +'<div id="homeCurricSlot" data-sig="'+esc(_curricStripSig())+'" style="display:contents;">'+_buildCurricStrip()+_buildCurricCountdown()+'</div>'
     // Alarm card
     +'<div id="homeAlarmCard" style="display:none;margin:0 16px 12px;background:#0f172a;border:1px solid #1e3a5f;border-radius:14px;padding:12px 16px;cursor:pointer;" onclick="switchPage(\'notifs\');bnSetActive(\'notifs\');">'
     +'<div style="display:flex;align-items:center;gap:12px;">'
