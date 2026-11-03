@@ -8,7 +8,7 @@
 (function () {
 'use strict';
 
-var RP = { cls: null, prev: null, view: 'dash', si: null, miss: 'a', fuF: 'all', sort: {}, last: null };
+var RP = { cls: null, prev: null, view: 'dash', si: null, miss: 'a', fuF: 'all', fuV: 'cards', sort: {}, last: null };
 
 /* ── الإعدادات الافتراضية ── */
 var DEF = { pass: 50, excel: 85, absWatch: 3, absAlert: 6, drop: 15 };
@@ -406,6 +406,7 @@ function blocksHtml(blocks, mode) {
       case 'bars':  return barsHtml(b);
       case 'line':  return lineHtml(b);
       case 'table': return tableHtml(b, mode);
+      case 'wcards': return wcardsHtml(b, mode);
       case 'h':     return '<div class="rp-h">' + E(b.t) + '</div>';
       case 'note':  return '<div class="rp-note ' + (b.kind || 'info') + '">' + (b.html != null ? b.html : E(b.t)) + '</div>';
       case 'list':
@@ -434,6 +435,11 @@ var PRINT_CSS = '@page{size:A4 portrait;margin:10mm}body{font-family:Cairo,Tahom
   '.rp-svg{width:100%;max-width:520px;height:auto}.rp-grid{stroke:#e2e8f0}.rp-ax{font-size:8px;fill:#64748b}.rp-tag{display:inline-block;border:1px solid currentColor;border-radius:9px;padding:0 6px;margin:1px;font-size:9.5px;font-weight:700}' +
   '.rp-sign{display:flex;gap:20px;margin-top:34px}.rp-sign div{flex:1;border-top:1px solid #0f172a;text-align:center;padding-top:4px;font-size:11px}.pg{page-break-after:always}.pg:last-child{page-break-after:auto}' +
   '.ftr{margin-top:12px;font-size:9px;color:#94a3b8;text-align:center}.noprint{text-align:center;margin-bottom:10px}.noprint button{background:#0f2a5e;color:#fff;border:none;border-radius:8px;padding:9px 22px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}' +
+  '.pc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.pc{border:1.5px solid #94a3b8;border-radius:8px;padding:7px;break-inside:avoid;font-size:10px}' +
+  '.pc-top{display:flex;gap:6px;align-items:center}.pc-ph{flex:0 0 auto;width:46px;height:54px;border:1px solid #94a3b8;border-radius:6px;overflow:hidden;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-weight:900;color:#475569}.pc-ph img{width:100%;height:100%;object-fit:cover}' +
+  '.pc-id{flex:1;min-width:0}.pc-id b{display:block;font-size:11.5px;color:#0f2a5e}.pc-id span{font-size:9.5px;color:#475569}.pc-fu{font-size:9.5px;font-weight:700;text-align:center;line-height:1.5}.pc-bx{font-size:17px;display:block}.pc-fu small{font-weight:400;color:#64748b}' +
+  '.pc-st{display:flex;flex-wrap:wrap;gap:3px 10px;margin:5px 0;padding:3px 0;border-top:1px dashed #cbd5e1;border-bottom:1px dashed #cbd5e1;font-size:9.5px}.pc-lb{font-weight:900;color:#0f2a5e;margin-top:4px}.pc-auto{font-size:9px;color:#64748b}' +
+  '.pc-tx{min-height:34px;border-bottom:1px solid #94a3b8;margin-top:2px;line-height:1.7;white-space:pre-wrap}' +
   '@media print{.noprint{display:none}body{padding:0}}';
 
 function today() { var d = new Date(); return d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear(); }
@@ -491,7 +497,8 @@ function xlsxBuild(res) {
   ws0['!cols'] = [{ wch: 34 }, { wch: 22 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, ws0, sname('ملخص'));
   res.blocks.forEach(function (b) {
-    if (b.type !== 'table' || !b.rows.length) return;
+    if (b.type === 'wcards') b = b.tbl;
+    if (!b || b.type !== 'table' || !b.rows.length) return;
     var aoa = [['م'].concat(b.cols.map(function (c) { return c.h; }))];
     b.rows.forEach(function (r, i) { aoa.push([i + 1].concat(r.map(val))); });
     (b.foot || []).forEach(function (r) { aoa.push([''].concat(r.map(val))); });
@@ -917,9 +924,59 @@ function R_miss(x) {
 /* ⑤-ب الطلبة المتعثرون (مع تأشير المتابعة وتدوين السبب) */
 var FU_REASONS = ['ضعف في المهارات الأساسية', 'غياب متكرر', 'عدم تسليم الواجبات', 'ظروف أسرية', 'ضعف التركيز', 'قلق الاختبار', 'صعوبات تعلّم', 'مشكلات سلوكية'];
 function fdate(ts) { var d = new Date(ts); return isNaN(d) ? '' : d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear(); }
+var FU_PLANS = ['تقوية فردية بعد الحصة', 'أوراق عمل علاجية', 'مجموعات تعاونية / مساندة الأقران', 'اختبارات قصيرة متكررة', 'تبسيط المهام وتغذية راجعة فورية', 'التواصل مع ولي الأمر', 'متابعة الحضور والانضباط', 'إحالة للموجّه الطلابي'];
+function fuHas(txt, q) { return String(txt || '').split('،').map(function (x) { return x.trim(); }).indexOf(q) >= 0; }
+function stuPhoto(s) { return (s && s.photo) || (DB.meta && DB.meta.defaultStudentPhoto) || ''; }
+function stuInit(n) { return String(n || '').trim().split(/\s+/).slice(0, 2).map(function (x) { return x.charAt(0); }).join(''); }
+
+/* ── كروت الطلبة المتعثرين: شاشة تفاعلية + نسخة للطباعة ── */
+function wchips(it, f, arr) {
+  return '<div class="rp-qcs">' + arr.map(function (q, i) {
+    return '<button type="button" class="rp-qc' + (fuHas(f === 'p' ? it.plan : it.note, q) ? ' on' : '') + '" onclick="RP2.fuTog(' + it.ci + ',' + it.si + ',\'' + f + '\',' + i + ')">' + E(q) + '</button>';
+  }).join('') + '</div>';
+}
+function wcardScreen(it) {
+  var a = it.ci + ',' + it.si;
+  var h = '<div class="rp-wc' + (it.on ? ' done' : '') + '" style="--wc:' + it.col + '">';
+  h += '<div class="rp-wc-top"><div class="rp-wc-ph">' + (it.photo ? '<img src="' + E(it.photo) + '" alt="">' : '<span>' + E(stuInit(it.name)) + '</span>') + '</div>' +
+    '<div class="rp-wc-id"><a class="rp-go rp-wc-nm" onclick="RP2.go(' + a + ')">' + E(it.name) + '</a>' +
+    '<div class="rp-wc-meta"><b>رقم ' + it.num + '</b><span>' + E(it.cls) + '</span></div></div>' +
+    '<span class="rp-wc-st">' + (it.on ? '✅ متابَع' : '⏳ لم يُتابَع') + '</span></div>';
+  h += '<div class="rp-wc-stats">' +
+    '<div><i style="color:' + it.col + '">' + (it.all ? 'غائب كلي' : E(it.pctT)) + '</i><small>' + (it.all ? 'الحالة' : E(it.lbl)) + '</small></div>' +
+    '<div><i>' + (it.all ? '—' : it.total + '/' + it.max) + '</i><small>المجموع</small></div>' +
+    '<div><i style="color:' + it.absCol + '">' + it.abs + '</i><small>غياب</small></div>' +
+    '<div><i>' + it.sick + '</i><small>مرض</small></div>' +
+    '<div><i>' + (it.rank || '—') + '</i><small>الترتيب</small></div></div>';
+  h += '<label class="rp-wc-fu"><input type="checkbox" class="rp-ck"' + (it.on ? ' checked' : '') + ' onchange="RP2.fu(' + a + ',this.checked)"> <b>تمت المتابعة</b>' +
+    (it.on ? '<small>' + E(fdate(it.d)) + '</small>' : '') + '</label>';
+  h += '<div class="rp-wc-sec"><div class="rp-wc-lb">🔎 أسباب التعثر</div>' +
+    (it.tags ? '<div class="rp-wc-tags" title="أسباب مستنتجة تلقائياً">' + it.tags + '</div>' : '') +
+    wchips(it, 'n', FU_REASONS) +
+    '<textarea class="rp-wc-ta" rows="2" placeholder="اكتب أسباب التعثر من تقديرك…" onchange="RP2.fuSet(' + a + ',\'n\',this.value)">' + E(it.note) + '</textarea></div>';
+  h += '<div class="rp-wc-sec"><div class="rp-wc-lb">🩺 خطة العلاج</div>' +
+    wchips(it, 'p', FU_PLANS) +
+    '<textarea class="rp-wc-ta" rows="2" placeholder="اكتب خطة العلاج…" onchange="RP2.fuSet(' + a + ',\'p\',this.value)">' + E(it.plan) + '</textarea></div>';
+  return h + '</div>';
+}
+function wcardPrint(it) {
+  var h = '<div class="pc">';
+  h += '<div class="pc-top"><div class="pc-ph">' + (it.photo ? '<img src="' + E(it.photo) + '" alt="">' : '<span>' + E(stuInit(it.name)) + '</span>') + '</div>' +
+    '<div class="pc-id"><b>' + E(it.name) + '</b><span>رقم ' + it.num + ' — ' + E(it.cls) + '</span></div>' +
+    '<div class="pc-fu"><span class="pc-bx">' + (it.on ? '☑' : '☐') + '</span> تمت المتابعة' + (it.on ? '<br><small>' + E(fdate(it.d)) + '</small>' : '') + '</div></div>';
+  h += '<div class="pc-st"><span>النسبة: <b style="color:' + it.col + '">' + (it.all ? 'غائب كلي' : E(it.pctT)) + '</b></span><span>المجموع: <b>' + (it.all ? '—' : it.total + '/' + it.max) + '</b></span><span>غياب: <b>' + it.abs + '</b></span><span>مرض: <b>' + it.sick + '</b></span></div>';
+  h += '<div class="pc-lb">أسباب التعثر</div>' + (it.flagTxt ? '<div class="pc-auto">آلياً: ' + E(it.flagTxt) + '</div>' : '') + '<div class="pc-tx">' + E(it.note) + '</div>';
+  h += '<div class="pc-lb">خطة العلاج</div><div class="pc-tx">' + E(it.plan) + '</div>';
+  return h + '</div>';
+}
+function wcardsHtml(b, mode) {
+  if (!b.items.length) return '<div class="rp-empty">' + E(b.empty || '') + '</div>';
+  var scr = mode === 'screen';
+  return '<div class="' + (scr ? 'rp-wgrid' : 'pc-grid') + '">' + b.items.map(scr ? wcardScreen : wcardPrint).join('') + '</div>';
+}
 function R_weak(x) {
   var ms = x.models(), C0 = x.cfg, t = 'الطلبة المتعثرون', all = x.all;
-  var rows = flat(ms).filter(function (r) { return r.all || r.pct < C0.pass || r.pri === 3 || (r.fu && (r.fu.d || r.fu.n)); });
+  var rows = flat(ms).filter(function (r) { return r.all || r.pct < C0.pass || r.pri === 3 || (r.fu && (r.fu.d || r.fu.n || r.fu.p)); });
   var B = [];
   var done = rows.filter(function (r) { return r.fu && r.fu.d; }).length;
   B.push({ type: 'kpis', items: [
@@ -933,7 +990,9 @@ function R_weak(x) {
   var F = RP.fuF;
   var chips = '<div class="rp-sub">' + [['all', 'الكل (' + rows.length + ')'], ['todo', 'لم يُتابَع (' + (rows.length - done) + ')'], ['done', 'تمت متابعته (' + done + ')']].map(function (q) {
     return '<button class="rp-chip' + (q[0] === F ? ' on' : '') + '" onclick="RP2.fuFilter(\'' + q[0] + '\')">' + q[1] + '</button>';
-  }).join('') + '</div><datalist id="rpReasons">' + FU_REASONS.map(function (q) { return '<option value="' + E(q) + '">'; }).join('') + '</datalist>';
+  }).join('') + '<span class="rp-sep"></span>' + [['cards', '🗂 كروت'], ['table', '📋 جدول']].map(function (q) {
+    return '<button class="rp-chip' + (q[0] === RP.fuV ? ' on' : '') + '" onclick="RP2.fuView(\'' + q[0] + '\')">' + q[1] + '</button>';
+  }).join('') + '</div><datalist id="rpReasons">' + FU_REASONS.map(function (q) { return '<option value="' + E(q) + '">'; }).join('') + '</datalist><datalist id="rpPlans">' + FU_PLANS.map(function (q) { return '<option value="' + E(q) + '">'; }).join('') + '</datalist>';
   B.push({ type: 'html', html: chips });
   var list = rows.filter(function (r) { var d = !!(r.fu && r.fu.d); return F === 'all' || (F === 'done' ? d : !d); })
     .sort(function (a, b) {
@@ -941,11 +1000,11 @@ function R_weak(x) {
       return da - db || b.score - a.score || (a.pct == null ? -1 : b.pct == null ? 1 : a.pct - b.pct);
     });
   var cols = []; if (all) cols.push({ h: 'الفصل' });
-  cols.push({ h: 'الاسم', nm: 1, a: 'r' }, { h: 'تمت المتابعة' }, { h: '%' }, { h: 'الغياب' }, { h: 'أسباب التعثر', a: 'r', s: false }, { h: 'سبب / ملاحظتي', a: 'r' }, { h: 'تاريخ المتابعة' });
-  B.push({ type: 'table', id: 'weak' + (all ? '_all' : ''), title: 'قائمة المتعثرين (' + list.length + ')', cols: cols, empty: 'لا يوجد طلاب في هذه القائمة.',
+  cols.push({ h: 'الاسم', nm: 1, a: 'r' }, { h: 'تمت المتابعة' }, { h: '%' }, { h: 'الغياب' }, { h: 'أسباب التعثر', a: 'r', s: false }, { h: 'سبب / ملاحظتي', a: 'r' }, { h: 'خطة العلاج', a: 'r' }, { h: 'تاريخ المتابعة' });
+  var tbl = { type: 'table', id: 'weak' + (all ? '_all' : ''), title: 'قائمة المتعثرين (' + list.length + ')', cols: cols, empty: 'لا يوجد طلاب في هذه القائمة.',
     rows: list.map(function (r) {
       var m = ms.filter(function (q) { return q.cls === r.cls; })[0], ci = DB.classes.indexOf(r.cls);
-      var on = !!(r.fu && r.fu.d), note = (r.fu && r.fu.n) || '';
+      var on = !!(r.fu && r.fu.d), note = (r.fu && r.fu.n) || '', plan = (r.fu && r.fu.p) || '';
       var ck = C(on ? '☑' : '☐', { v: on ? 1 : 0, p: on ? '☑' : '☐', nowr: 1,
         h: '<input type="checkbox" class="rp-ck"' + (on ? ' checked' : '') + ' onchange="RP2.fu(' + ci + ',' + r.si + ',this.checked)">' });
       var o = [];
@@ -955,10 +1014,20 @@ function R_weak(x) {
         C(flagText(m, r.flags) || 'لا أسباب حالية', { h: why }),
         C(note, { p: note || '—',
           h: '<input type="text" class="rp-fi" list="rpReasons" placeholder="اكتب سبب التعثر…" value="' + E(note) + '" onchange="RP2.fuNote(' + ci + ',' + r.si + ',this.value)">' }),
+        C(plan, { p: plan || '—',
+          h: '<input type="text" class="rp-fi" list="rpPlans" placeholder="اكتب خطة العلاج…" value="' + E(plan) + '" onchange="RP2.fuSet(' + ci + ',' + r.si + ',\'p\',this.value)">' }),
         C(on ? fdate(r.fu.d) : '—', { v: on ? r.fu.d : null }));
       return o;
     }),
-    note: 'المتعثر = دون حد النجاح (' + C0.pass + '%) أو غائب كلياً أو أولويته «عاجل». يبقى الطالب في القائمة بعد تجاوزه إن سبق تأشير متابعته أو تدوين سببه. «أسباب التعثر» تُستنتج تلقائياً، وخانة «سبب / ملاحظتي» لتدوين تقديرك.' });
+    note: 'المتعثر = دون حد النجاح (' + C0.pass + '%) أو غائب كلياً أو أولويته «عاجل». يبقى الطالب في القائمة بعد تجاوزه إن سبق تأشير متابعته أو تدوين سببه. «أسباب التعثر» تُستنتج تلقائياً، وخانة «سبب / ملاحظتي» لتدوين تقديرك، و«خطة العلاج» لتدوين إجراءات الدعم.' };
+  if (RP.fuV === 'table') B.push(tbl);
+  else B.push({ type: 'wcards', tbl: tbl, empty: 'لا يوجد طلاب في هذه القائمة.', items: list.map(function (r) {
+    var m = ms.filter(function (q) { return q.cls === r.cls; })[0], ci = DB.classes.indexOf(r.cls), l = lvl(r.pct, C0);
+    return { ci: ci, si: r.si, cls: r.cls, name: r.name, num: r.si + 1, photo: stuPhoto(r.s), all: r.all, pctT: pcs(r.pct), lbl: l.label, col: r.all ? FAIL : l.color,
+      total: r.total, max: m.rm, abs: r.abs, sick: r.sick, absCol: r.abs >= C0.absAlert ? FAIL : r.abs >= C0.absWatch ? '#f59e0b' : '',
+      rank: (!r.all && r.rank != null) ? r.rank + ' من ' + m.nAct : '', tags: tagHtml(m, r.flags), flagTxt: flagText(m, r.flags),
+      on: !!(r.fu && r.fu.d), d: r.fu && r.fu.d, note: (r.fu && r.fu.n) || '', plan: (r.fu && r.fu.p) || '' };
+  }) });
   return { title: t, sub: (all ? 'كل الفصول' : x.cls) + ' — حد النجاح ' + C0.pass + '%', blocks: B, land: true };
 }
 
@@ -1165,7 +1234,7 @@ function cfgSave() {
 function cfgReset() { delete DB.meta.repCfg; saveDB(); cfgClose(); render(true); showSnack('تمت إعادة القيم الافتراضية'); }
 function cfgClose() { var m = $('rpModal'); if (m) m.remove(); }
 
-/* سجل المتابعة: DB.follow[الفصل][معرّف الطالب] = { d: وقت التأشير, n: السبب/الملاحظة } */
+/* سجل المتابعة: DB.follow[الفصل][معرّف الطالب] = { d: وقت التأشير, n: أسباب التعثر/ملاحظة, p: خطة العلاج } */
 function fuRec(ci, si, create) {
   var cls = DB.classes[ci], s = cls && DB.data[cls] && DB.data[cls][si];
   if (!s) return null;
@@ -1175,7 +1244,7 @@ function fuRec(ci, si, create) {
   if (!o && create) o = DB.follow[cls][s.id] = {};
   return { cls: cls, id: s.id, o: o };
 }
-function fuTidy(g) { var o = DB.follow[g.cls][g.id]; if (o && !o.d && !o.n) delete DB.follow[g.cls][g.id]; }
+function fuTidy(g) { var o = DB.follow[g.cls][g.id]; if (o && !o.d && !o.n && !o.p) delete DB.follow[g.cls][g.id]; }
 
 /* ═══════════════ واجهة الأحداث العامة ═══════════════ */
 window.RP2 = {
@@ -1206,6 +1275,22 @@ window.RP2 = {
   fu: function (ci, si, on) {
     var g = fuRec(ci, si, true); if (!g) return;
     if (on) g.o.d = Date.now(); else delete g.o.d;
+    fuTidy(g); saveDB(); render(true);
+  },
+  fuView: function (v) { RP.fuV = v; render(true); },
+  fuSet: function (ci, si, f, v) {
+    var g = fuRec(ci, si, true); if (!g) return;
+    v = String(v || '').trim();
+    if (v) g.o[f] = v; else delete g.o[f];
+    fuTidy(g); saveDB();
+    if (RP.fuV !== 'cards') render(true);
+  },
+  fuTog: function (ci, si, f, i) {
+    var q = (f === 'p' ? FU_PLANS : FU_REASONS)[i]; if (!q) return;
+    var g = fuRec(ci, si, true); if (!g) return;
+    var arr = String(g.o[f] || '').split('،').map(function (z) { return z.trim(); }).filter(Boolean), k = arr.indexOf(q);
+    if (k >= 0) arr.splice(k, 1); else arr.push(q);
+    if (arr.length) g.o[f] = arr.join('، '); else delete g.o[f];
     fuTidy(g); saveDB(); render(true);
   },
   fuNote: function (ci, si, v) {
