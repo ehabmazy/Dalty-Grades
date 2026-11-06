@@ -598,8 +598,30 @@ function gradesSetColAll(colId,val){
 // ── Grades Modals ─────────────────────────────────────
 function openSmartDistModal(){
   var _aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
-  GS.modal={type:"smartDist",data:{srcCols:[],weeksCount:_aw,targets:{assess:true,hw:false,beh:false,ex1:false,ex2:false},scope:"all"}};
+  // weeks: الأسابيع المستهدفة (افتراضياً كل الأسابيع المفعّلة) — classSel: الفصل المستهدف ('__all__' = كل الفصول)
+  GS.modal={type:"smartDist",data:{srcCols:[],weeks:ALL_WEEKS.slice(0,_aw),targets:{assess:true,hw:false,beh:false,ex1:false,ex2:false},scope:"all",classSel:GS.activeClass||''}};
   renderGrades();
+}
+function sdToggleWeek(w){
+  if(!GS.modal||GS.modal.type!=="smartDist")return;
+  var arr=GS.modal.data.weeks||(GS.modal.data.weeks=[]);
+  var i=arr.indexOf(w);
+  if(i>=0)arr.splice(i,1); else arr.push(w);
+  arr.sort(function(a,b){return a-b;});
+  keepScrollRender(renderGrades);
+}
+function sdWeeksPreset(kind){
+  if(!GS.modal||GS.modal.type!=="smartDist")return;
+  var aw=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
+  var all=ALL_WEEKS.slice(0,aw);
+  if(kind==='all')GS.modal.data.weeks=all;
+  else if(kind==='none')GS.modal.data.weeks=[];
+  else if(kind==='shown')GS.modal.data.weeks=(typeof shownWeeks==='function'?shownWeeks():all).slice();
+  keepScrollRender(renderGrades);
+}
+function sdSetClass(v){
+  if(!GS.modal||GS.modal.type!=="smartDist")return;
+  GS.modal.data.classSel=v;
 }
 function sdToggleSrc(colId){
   if(!GS.modal||GS.modal.type!=="smartDist")return;
@@ -621,10 +643,14 @@ function gradesApplySmartDist(){
   var tg=d.targets||{};
   if(!tg.assess&&!tg.hw&&!tg.beh&&!tg.ex1&&!tg.ex2){showSnack("⚠️ اختر هدفاً واحداً على الأقل");return;}
 
-  var cls=GS.activeClass;
-  var students=DB.data[cls]||[];
-  var wCount=Math.max(1,Math.min(d.weeksCount||ALL_WEEKS.length,ALL_WEEKS.length));
-  var weeksList=ALL_WEEKS.slice(0,wCount);
+  // الأسابيع المستهدفة: أي مجموعة أسابيع (ليس بالضرورة تبدأ من 1) ضمن الأسابيع المفعّلة
+  var _awA=Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length);
+  var weeksList=(d.weeks||[]).filter(function(w){return ALL_WEEKS.indexOf(w)>=0&&ALL_WEEKS.indexOf(w)<_awA;}).sort(function(a,b){return a-b;});
+  if((tg.assess||tg.hw||tg.beh)&&!weeksList.length&&!tg.ex1&&!tg.ex2){showSnack("⚠️ اختر أسبوعاً واحداً على الأقل");return;}
+  // الفصول المستهدفة: فصل معين أو كل الفصول
+  var clsList=(d.classSel==='__all__')?(DB.classes||[]).slice():[(d.classSel&&DB.data[d.classSel])?d.classSel:GS.activeClass];
+  var students=[];
+  clsList.forEach(function(c){(DB.data[c]||[]).forEach(function(st){students.push(st);});});
   var scopeEmpty=d.scope==='empty';
 
   var colMap={};
@@ -706,7 +732,7 @@ function gradesApplySmartDist(){
   });
 
   saveDB(); GS.modal=null;
-  showSnack('✅ تم التوزيع الذكي — '+changed+' خلية');
+  showSnack('✅ تم التوزيع الذكي — '+changed+' خلية'+(clsList.length>1?' في '+clsList.length+' فصول':''));
   renderGrades();
 }
 
@@ -897,7 +923,7 @@ function renderGradesModals(students,tmax,rmax){
     html+='<div class="mb" style="display:flex;flex-direction:column;gap:11px;">';
 
     // Info
-    html+='<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;padding:8px 11px;font-size:10px;color:#0369a1;">يأخذ متوسط الأعمدة المرجعية لكل طالب ويوزّعه عشوائياً على الأعمدة المستهدفة مع الحفاظ على المتوسط.</div>';
+    html+='<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:7px;padding:8px 11px;font-size:10px;color:#0369a1;">يأخذ متوسط الأعمدة المرجعية لكل طالب ويوزّعه عشوائياً على الأعمدة والأسابيع المستهدفة (أسبوع واحد أو أكثر) مع الحفاظ على المتوسط، لفصل معين أو لجميع الفصول.</div>';
 
     // ── SOURCE ──
     html+='<div style="border:1.5px solid #e2e8f0;border-radius:8px;overflow:hidden;">';
@@ -934,22 +960,41 @@ function renderGradesModals(students,tmax,rmax){
     html+=_sdChk('ex2','📋 اختبار 2 /15','#b91c1c');
     html+='</div>';
 
-    // ── WEEKS SLIDER (embedded, active when assess/hw/beh ticked) ──
+    // ── WEEKS PICKER (أي أسبوع أو أكثر — active when assess/hw/beh ticked) ──
     var showWeeks=tg.assess||tg.hw||tg.beh;
+    if(!_sdData.weeks)_sdData.weeks=ALL_WEEKS.slice(0,_aw2);
+    var _selW=_sdData.weeks;
     html+='<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;padding:8px 11px;'+(showWeeks?'':'opacity:.4;pointer-events:none;')+'">';
-    html+='<div style="font-size:9px;font-weight:700;color:#475569;margin-bottom:6px;">📅 نطاق الأسابيع</div>';
-    html+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
-    html+='<input type="range" min="1" max="'+_aw2+'" value="'+(_sdData.weeksCount||_aw2)+'" style="flex:1;min-width:80px;accent-color:#c2410c;" oninput="GS.modal.data.weeksCount=Number(this.value);document.getElementById(\'sdWkNum\').textContent=this.value"/>';
-    html+='<span id="sdWkNum" style="font-size:13px;font-weight:900;color:#c2410c;min-width:22px;">'+(_sdData.weeksCount||_aw2)+'</span>';
-    html+='<span style="font-size:9px;color:#94a3b8;">أسبوع 1 → '+(_sdData.weeksCount||_aw2)+'</span>';
+    html+='<div style="font-size:9px;font-weight:700;color:#475569;margin-bottom:6px;">📅 الأسابيع المستهدفة <span style="color:#c2410c;">('+_selW.length+' محدد)</span></div>';
+    html+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px;">';
+    ALL_WEEKS.slice(0,_aw2).forEach(function(w){
+      var on=_selW.indexOf(w)>=0;
+      html+='<button type="button" onclick="sdToggleWeek('+w+')" style="width:30px;height:30px;border-radius:50%;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;border:1.5px solid '+(on?'#c2410c':'#cbd5e1')+';background:'+(on?'#c2410c':'white')+';color:'+(on?'white':'#64748b')+';">'+w+'</button>';
+    });
+    html+='</div>';
+    var _qb='border-radius:6px;padding:3px 9px;font-size:9px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid #cbd5e1;background:white;color:#475569;';
+    html+='<div style="display:flex;gap:5px;flex-wrap:wrap;">';
+    html+='<button type="button" style="'+_qb+'" onclick="sdWeeksPreset(\'all\')">الكل</button>';
+    html+='<button type="button" style="'+_qb+'" onclick="sdWeeksPreset(\'shown\')">المعروضة حالياً</button>';
+    html+='<button type="button" style="'+_qb+'" onclick="sdWeeksPreset(\'none\')">مسح</button>';
     html+='</div>';
     if(!showWeeks)html+='<div style="font-size:9px;color:#94a3b8;margin-top:3px;">فعّل تقييمات أو واجبات أو سلوك لاستخدام هذا الخيار</div>';
     html+='</div>';
 
+    // ── CLASS (فصل معين أو كل الفصول) ──
+    html+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
+    html+='<label style="font-size:10px;color:#475569;white-space:nowrap;">🏫 الفصل:</label>';
+    html+='<select onchange="sdSetClass(this.value)" style="flex:1;min-width:120px;padding:4px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-family:inherit;font-size:10px;">';
+    (DB.classes||[]).forEach(function(c){
+      html+='<option value="'+esc(c)+'"'+(_sdData.classSel===c?' selected':'')+'>'+esc(c)+' ('+((DB.data[c]||[]).length)+' طالب)</option>';
+    });
+    html+='<option value="__all__"'+(_sdData.classSel==='__all__'?' selected':'')+'>👥 جميع الفصول</option>';
+    html+='</select></div>';
+
     // ── SCOPE (embedded) ──
     html+='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
-    html+='<label style="font-size:10px;color:#475569;white-space:nowrap;">👥 الطلاب:</label>';
-    html+='<label style="display:flex;align-items:center;gap:4px;font-size:10px;cursor:pointer;"><input type="radio" name="sdScope" value="all" '+(_sdData.scope!=='empty'?'checked':'')+' onchange="GS.modal.data.scope=\'all\'" style="accent-color:#c2410c;"/>جميع الطلاب</label>';
+    html+='<label style="font-size:10px;color:#475569;white-space:nowrap;">🧮 الخلايا:</label>';
+    html+='<label style="display:flex;align-items:center;gap:4px;font-size:10px;cursor:pointer;"><input type="radio" name="sdScope" value="all" '+(_sdData.scope!=='empty'?'checked':'')+' onchange="GS.modal.data.scope=\'all\'" style="accent-color:#c2410c;"/>كل الخلايا</label>';
     html+='<label style="display:flex;align-items:center;gap:4px;font-size:10px;cursor:pointer;"><input type="radio" name="sdScope" value="empty" '+(_sdData.scope==='empty'?'checked':'')+' onchange="GS.modal.data.scope=\'empty\'" style="accent-color:#c2410c;"/>الخلايا الفارغة فقط</label>';
     html+='</div>';
 
@@ -2447,11 +2492,10 @@ function distributeComponent(comp,target,s){
     }
     p._totalAbsent=false;return p;
   }
-  var aw=DB&&DB.meta?Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length):14;
-  var weeks=ALL_WEEKS.slice(0,aw),free=[],counted=0;
+  var weeks=shownWeeks(),free=[],counted=0; // الأسابيع المعروضة فقط (حسب أيقونة الأسابيع)
   weeks.forEach(function(w){
     var f=info.pre+w,cur=s[f];
-    if(comp!=='beh'){var cc=allCols().filter(function(c){return c.field===f;})[0];if(cc&&!cc.visible)return;} // عمود مخفي لا يدخل في المتوسط
+    var cc=allCols().filter(function(c){return c.field===f;})[0];if(cc&&!cc.visible)return; // عمود مخفي لا يدخل في المتوسط
     if(cur==='م')return;           // مستثنى: لا يدخل في المتوسط
     counted++;
     if(cur==='غ')return;            // غائب: صفر ثابت
