@@ -886,6 +886,17 @@ function allCols(){
 }
 function allVisibleCols(){return allCols().filter(function(c){return c.visible;});}
 
+// الأسابيع المعروضة فعلياً (من أيقونة 📅 الأسابيع): الأسابيع المفعّلة في الإعدادات ∩ الظاهرة حالياً
+// تغطي: أسابيع محددة يدوياً / كل الأسابيع / المتزامن مع الأسبوع الحالي / مسح الكل (قائمة فارغة)
+function shownWeeks(){
+  var aw=Math.min(Math.max(1,Number(DB&&DB.meta&&DB.meta.activeWeeks)||14),ALL_WEEKS.length);
+  var pg=(DB&&DB.colPages||[]).find(function(p){return p.id==='pg_assess';});
+  return ALL_WEEKS.slice(0,aw).filter(function(w){
+    var col=pg&&(pg.cols||[]).find(function(c){return c.id==='a'+w;});
+    return col?col.visible!==false:true;
+  });
+}
+
 function totalMax(){
   // مجموع ثابت: متوسط تقييم(20) + متوسط واجب(10) + سلوك(10) + اختبارات(30) = 70
   return 70;
@@ -937,8 +948,10 @@ function calcStudent(s,cls){
   var aSum=0,aC=0,hSum=0,hC=0,bSum=0,bC=0,exSum=0;
   var _aw=DB&&DB.meta?Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length):14;
   var _awList=ALL_WEEKS.slice(0,_aw);
-  // حساب السلوك من الأسابيع المُرصدة (bw fields)
+  // حساب السلوك من الأسابيع المُرصدة (bw fields) — الأسابيع المعروضة فقط، مثل التقييم والواجب
+  var _shownList=shownWeeks();
   _awList.forEach(function(w){
+    if(_shownList.indexOf(w)<0)return;
     var bwv=s["bw"+w];
     if(bwv===""||bwv===undefined||bwv===null)return;
     if(bwv==="م")return;
@@ -1047,8 +1060,8 @@ function distributeTotal(target,s){
   var diff=target-(avgA+avgH+beh+ex);
   avgA=clamp(avgA+diff,0,20);
   // توزيع على الأسابيع
-  var _daw=DB&&DB.meta?Math.min(Math.max(1,Number(DB.meta.activeWeeks)||14),ALL_WEEKS.length):14;
-  var _dawList=ALL_WEEKS.slice(0,_daw);
+  // التوزيع على الأسابيع المعروضة فقط (حسب أيقونة الأسابيع)
+  var _dawList=shownWeeks();
   _dawList.forEach(function(w){
     var locked=s["a"+w]==="غ"||s["a"+w]==="م";
     if(!locked)p["a"+w]=clamp(avgA+Math.floor(Math.random()*7)-3,0,20);

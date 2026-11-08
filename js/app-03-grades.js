@@ -2437,7 +2437,7 @@ function _cmpSel(comp,idx){var c=GS._gsCell;return !!(c&&c.cellId==='gs_cmp_'+co
 function _cmpShow(comp,idx,val){return _cmpSel(comp,idx)?(GS._gsInput!==''?esc(GS._gsInput):val):val;}
 function _cmpTd(comp,idx,val,cls,extra){
   var on=_cmpSel(comp,idx);
-  return '<td class="'+cls+'" onclick="_gsSelectCompCell(\''+comp+'\','+idx+')" style="cursor:pointer;'+(on?'background:#fbbf24!important;color:#1c1400!important;':'')+extra+'" title="اضغط لتوزيع '+CMP_INFO[comp].label+' تلقائياً">'+_cmpShow(comp,idx,val)+'</td>';
+  return '<td class="'+cls+(on?' cmp-sel':'')+'" onclick="_gsSelectCompCell(\''+comp+'\','+idx+')" style="cursor:pointer;'+(on?'background:#fbbf24!important;color:#1c1400!important;':'')+extra+'" title="اضغط لتوزيع '+CMP_INFO[comp].label+' تلقائياً">'+_cmpShow(comp,idx,val)+'</td>';
 }
 function _gsSelectCompCell(comp,stuIdx){
   var cid='gs_cmp_'+comp+'_'+stuIdx;

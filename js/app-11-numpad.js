@@ -3845,7 +3845,10 @@ function _npDirectTrackBegin(fld, curField) {
    - أفقي: الخلية التالية في نفس صف الطالب، ثم أول خلية للطالب التالي
    ══════════════════════════════════════════════════════════════ */
 (function(){
-  function navH(){ try{ return localStorage.getItem('fnp_nav')==='h'; }catch(e){ return false; } }
+  /* اتجاه التنقل: v = عمودي (نفس العمود) | h = أفقي داخل الأسبوع | f = أفقي كامل لصف الطالب */
+  function navMode(){ try{ var m=localStorage.getItem('fnp_nav'); return (m==='h'||m==='f')?m:'v'; }catch(e){ return 'v'; } }
+  function navH(){ return navMode()!=='v'; }      /* أي اتجاه أفقي */
+  function navFull(){ return navMode()==='f'; }   /* أفقي كامل */
   function curPage(){ return (typeof _currentPage!=='undefined')?_currentPage:''; }
 
   /* ── CSS ── */
@@ -3996,10 +3999,15 @@ function _npDirectTrackBegin(fld, curField) {
 
   function updateNavBtn(){
     var b=document.getElementById('fnpNavBtn'); if(!b) return;
-    var h=navH();
-    b.classList.toggle('on',h);
-    b.innerHTML=h?'<span>↔</span><span class="nv-tx">أفقي</span>':'<span>↕</span><span class="nv-tx">عمودي</span>';
-    b.title=h?'التنقل أفقياً (نفس صف الطالب) — اضغط للتبديل إلى العمودي':'التنقل عمودياً (نفس العمود) — اضغط للتبديل إلى الأفقي';
+    var m=navMode();
+    b.classList.toggle('on',m!=='v');
+    var lab={v:['↕','عمودي'],h:['↔','أسبوع'],f:['⇄','كامل']}[m];
+    b.innerHTML='<span>'+lab[0]+'</span><span class="nv-tx">'+lab[1]+'</span>';
+    b.title={
+      v:'التنقل عمودياً (نفس العمود ← الطالب التالي) — اضغط للتبديل إلى الأفقي داخل الأسبوع',
+      h:'التنقل أفقياً داخل الأسبوع (واجب ← تقييم ← سلوك) ثم الطالب التالي — اضغط للتبديل إلى الأفقي الكامل',
+      f:'التنقل أفقياً كاملاً: كل خلايا صف الطالب (كل الأسابيع ثم المتوسطات) ثم الطالب التالي — اضغط للتبديل إلى العمودي'
+    }[m];
   }
 
   /* ── تجهيز اللوحة بتنسيق الكرت: الصورة في النصف العلوي، والاسم والقيمة والمفاتيح في السفلي ── */
@@ -4043,16 +4051,29 @@ function _npDirectTrackBegin(fld, curField) {
   /* ── قوائم التنقل الأفقي ── */
   /* صفحة الدرجات (جدول): كل الخلايا بترتيب الصفوف ثم الأعمدة كما تظهر في الصفحة */
   function domGradeCells(curField){
-    var cls=GS.activeClass, students=DB.data[cls]||[], out=[];
-    /* أعمدة الأسابيع: يبقى التنقل داخل نفس الأسبوع (واجب ← تقييم ← سلوك) ثم الطالب التالي في نفس الأسبوع */
-    var wm=/^(?:a|h|bw)(\d+)$/.exec(curField||''), wk=wm?wm[1]:null;
-    var re=/^_gsSelectCell\((\d+),'([^']*)',([^,]*),'([^']*)','([^']*)'\)/;
-    document.querySelectorAll('.gs-tbl-cell[onclick^="_gsSelectCell("]').forEach(function(el){
-      var m=re.exec(el.getAttribute('onclick')); if(!m) return;
-      var idx=+m[1], f=m[2], v=(students[idx]||{})[f];
-      if(v==='غ'||v==='م') return; /* نفس تخطي الغائب/المعذور في التنقل العمودي */
-      if(wk){ var fm=/^(?:a|h|bw)(\d+)$/.exec(f); if(!fm||fm[1]!==wk) return; }
-      out.push({stuIdx:idx,field:f,maxVal:Number(m[3]),cellId:m[4],colKey:m[5]});
+    var cls=GS.activeClass, students=DB.data[cls]||[], out=[], full=navFull();
+    /* وضع «أسبوع»: يبقى التنقل داخل نفس الأسبوع (واجب ← تقييم ← سلوك) ثم الطالب التالي في نفس الأسبوع.
+       وضع «كامل»: كل خلايا صف الطالب بترتيبها في الصفحة (الأسابيع ثم المتوسطات ثم المجموع) ثم الطالب التالي */
+    var wm=/^(?:a|h|bw)(\d+)$/.exec(curField||''), wk=(!full&&wm)?wm[1]:null;
+    var reCell=/^_gsSelectCell\((\d+),'([^']*)',([^,]*),'([^']*)','([^']*)'\)/;
+    var reComp=/^_gsSelectCompCell\('([^']*)',(\d+)\)/;
+    var reDist=/^_gsSelectDistCell\((\d+),'([^']*)',([^,]*),'([^']*)'\)/;
+    var q='.gs-tbl-cell[onclick^="_gsSelectCell("]';
+    if(full) q+=',td[onclick^="_gsSelectCompCell("],.gs-tbl-cell[onclick^="_gsSelectDistCell("]';
+    document.querySelectorAll(q).forEach(function(el){
+      var oc=el.getAttribute('onclick')||'', m;
+      if((m=reCell.exec(oc))){
+        var idx=+m[1], f=m[2], v=(students[idx]||{})[f];
+        if(v==='غ'||v==='م') return; /* نفس تخطي الغائب/المعذور في التنقل العمودي */
+        if(wk){ var fm=/^(?:a|h|bw)(\d+)$/.exec(f); if(!fm||fm[1]!==wk) return; }
+        out.push({stuIdx:idx,field:f,maxVal:Number(m[3]),cellId:m[4],colKey:m[5]});
+      }else if(full&&(m=reComp.exec(oc))){
+        var cp=m[1], ci=+m[2];
+        if(typeof CMP_INFO==='undefined'||!CMP_INFO[cp]) return;
+        out.push({stuIdx:ci,field:'__dist__',maxVal:CMP_INFO[cp].max,cellId:'gs_cmp_'+cp+'_'+ci,colKey:'__dist__',inputId:'',comp:cp});
+      }else if(full&&(m=reDist.exec(oc))){
+        out.push({stuIdx:+m[1],field:'__dist__',maxVal:Number(m[3]),cellId:m[4],colKey:'__dist__',inputId:m[2]});
+      }
     });
     return out;
   }
@@ -4093,6 +4114,13 @@ function _npDirectTrackBegin(fld, curField) {
     var i=GS._gsCellList.findIndex(function(x){return x.cellId===c.cellId;});
     GS._gsCellListIdx=i<0?0:i;
   }
+  /* قائمة «أفقي كامل» داخل الجدول للخلية المحددة — تُستبدل القائمة فقط إذا وُجدت الخلية فيها */
+  function setFullRowList(){
+    var l=domGradeCells(''), id=GS._gsCell&&GS._gsCell.cellId;
+    var i=l.findIndex(function(x){return x.cellId===id;});
+    if(i<0) return false;
+    GS._gsCellList=l; GS._gsCellListIdx=i; return true;
+  }
   /* يعيد بناء قائمة التنقل للخلية المحددة حالياً (عند تبديل الاتجاه أثناء الرصد) */
   function rebuildNavList(){
     try{
@@ -4100,6 +4128,8 @@ function _npDirectTrackBegin(fld, curField) {
       var c=GS._gsCell;
       if(c.field==='__dist__'){
         if(cardsShown()){ GS._gsCellList=buildCardList(c,navH()); reindex(); }
+        else if(navFull()){ setFullRowList(); }
+        else{ GS._gsCellList=buildCardList(c,false); reindex(); }
       }else{
         GS._gsCellList=window._gsBuildColList(c.stuIdx,c.field,c.maxVal,c.colKey); reindex();
       }
@@ -4120,8 +4150,9 @@ function _npDirectTrackBegin(fld, curField) {
     window[n]=function(){
       var r=o.apply(this,arguments);
       try{
-        if(navH()&&GS._gsCell&&GS._gsCell.field==='__dist__'&&cardsShown()){
-          GS._gsCellList=buildCardList(GS._gsCell,true); reindex();
+        if(navH()&&GS._gsCell&&GS._gsCell.field==='__dist__'){
+          if(cardsShown()){ GS._gsCellList=buildCardList(GS._gsCell,true); reindex(); }
+          else if(navFull()){ setFullRowList(); }
         }
       }catch(e){}
       return r;
@@ -4153,13 +4184,25 @@ function _npDirectTrackBegin(fld, curField) {
     if(sp) sp.scrollBy(0,d); else window.scrollBy(0,d);
   }
 
+  /* عنوان اللوحة حسب نوع الخلية الحالية (درجة عادية ↔ متوسط/توزيع) — مهم عند التنقل الأفقي الكامل */
+  function syncHdr(){
+    try{
+      if(typeof GS==='undefined'||!GS._gsCell) return;
+      var c=GS._gsCell, st=(DB.data[GS.activeClass]||[])[c.stuIdx], hdr=$id('fnpHeaderLabel');
+      if(!hdr) return;
+      if(c.field==='__dist__'){ if(typeof _gsDistHdr==='function') hdr.textContent=_gsDistHdr(st); }
+      else if(typeof _gsFnpUpdateHeader==='function') _gsFnpUpdateHeader();
+    }catch(e){}
+  }
   var _origGsSubmit=window._gsFnpSubmit;
   if(typeof _origGsSubmit==='function'){
     window._gsFnpSubmit=function(){
       var r=_origGsSubmit.apply(this,arguments);
-      if(typeof GS!=='undefined'&&GS._gsCell&&GS._gsCell.field!=='__dist__'){
-        setTimeout(function(){ ensureSelVisible('.gs-tbl-sel'); },130);
-        setTimeout(function(){ ensureSelVisible('.gs-tbl-sel'); },330);
+      syncHdr();
+      if(typeof GS!=='undefined'&&GS._gsCell&&(GS._gsCell.field!=='__dist__'||navFull())){
+        var sl=(GS._gsCell.field==='__dist__')?'.cmp-sel,.gs-tbl-sel':'.gs-tbl-sel';
+        setTimeout(function(){ ensureSelVisible(sl); },130);
+        setTimeout(function(){ ensureSelVisible(sl); },330);
       }
       return r;
     };
@@ -4250,11 +4293,15 @@ function _npDirectTrackBegin(fld, curField) {
   });
 
   window.FNP_toggleNav=function(){
-    var h=!navH();
-    try{ localStorage.setItem('fnp_nav',h?'h':'v'); }catch(e){}
+    var m=navMode(), n=(m==='v')?'h':(m==='h'?'f':'v');
+    try{ localStorage.setItem('fnp_nav',n); }catch(e){}
     updateNavBtn();
     rebuildNavList();
-    if(typeof showSnack==='function') showSnack(h?'↔ التنقل أفقياً: الخلية التالية في صف الطالب':'↕ التنقل عمودياً: نفس العمود للطالب التالي');
+    if(typeof showSnack==='function') showSnack({
+      v:'↕ التنقل عمودياً: نفس العمود للطالب التالي',
+      h:'↔ التنقل أفقياً داخل الأسبوع: واجب ← تقييم ← سلوك ثم الطالب التالي',
+      f:'⇄ التنقل أفقياً كاملاً: كل خلايا صف الطالب (الأسابيع ثم المتوسطات) ثم الطالب التالي'
+    }[n]);
   };
 
   /* تجهيز الترويسة عند فتح اللوحة + مزامنة الصورة وإظهار الزر عند الحاجة */
