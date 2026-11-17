@@ -33,7 +33,7 @@
   .link-btn.copied { border-color: var(--green); color: #6ee7b7; }
 
   /* بطاقة الطالب الفردية */
-  .student-card { max-width: 700px; margin: 30px auto; background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .student-card { max-width: 700px; width: calc(100% - 24px); margin: 20px auto; background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
   .student-card-header { background: linear-gradient(135deg,#0f2a50,#1d4ed8); padding: 24px 28px; }
   .student-card-name { font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 4px; }
   .student-card-meta { font-size: 12px; color: #93c5fd; }
@@ -42,7 +42,7 @@
   .scard-stat-item { text-align: center; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; flex: 1; min-width: 100px; }
   .scard-stat-val { font-size: 22px; font-weight: 900; }
   .scard-stat-lbl { font-size: 11px; color: var(--text2); margin-top: 3px; }
-  .scard-weeks { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .scard-weeks { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
   .scard-weeks th { background: var(--bg3); border: 1px solid var(--border); padding: 8px 10px; color: var(--text2); font-weight: 600; text-align: center; }
   .scard-weeks td { border: 1px solid var(--border); padding: 8px 10px; text-align: center; }
   .back-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--bg2); border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius); padding: 8px 16px; font-family: 'Cairo', sans-serif; font-size: 13px; cursor: pointer; margin: 16px 20px; text-decoration: none; }
@@ -59,7 +59,8 @@
   .stat-val { font-size: 20px; font-weight: 900; color: #60a5fa; }
   .stat-lbl { font-size: 10px; color: var(--text2); margin-top: 2px; }
 
-  .table-wrap { overflow-x: auto; padding: 0 20px 20px; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0 20px 20px; }
+  .table-wrap.student-mode { padding: 0 0 20px; overflow-x: hidden; }
 
   table { width: 100%; border-collapse: collapse; font-size: 11px; min-width: 700px; }
 
@@ -117,6 +118,15 @@
   @media (max-width: 600px) {
     .header, .controls, .info-bar, .stats-row { padding: 10px 12px; }
     .table-wrap { padding: 0 10px 16px; }
+    .student-card-header { padding: 16px 16px; }
+    .student-card-name { font-size: 18px; }
+    .student-card-body { padding: 14px 12px; }
+    .scard-stat { gap: 8px; }
+    .scard-stat-item { min-width: calc(50% - 8px); padding: 10px 8px; }
+    .scard-stat-val { font-size: 19px; }
+    .scard-weeks { font-size: 12px; }
+    .scard-weeks th, .scard-weeks td { padding: 7px 4px; }
+    .back-btn { margin: 12px; }
   }
 </style>
 </head>
@@ -561,6 +571,7 @@ function renderStudentCard(name) {
 
   h += '</div></div>';
   document.getElementById("tableWrap").innerHTML = h;
+  document.getElementById("tableWrap").classList.add("student-mode");
   document.getElementById("statsRow").style.display = "none";
   document.getElementById("infoBar").style.display = "none";
   document.title = "درجات " + (found.name||'') + " — Dalty Grades";
