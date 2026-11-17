@@ -300,6 +300,38 @@ function avg(arr) {
   return Math.round((vals.reduce(function(a,b){return a+b;},0) / vals.length) * 10) / 10;
 }
 
+/* حساب مطابق للتطبيق: (متوسط تقييم/20) + (متوسط واجب/10) + (سلوك/10) + (مجموع الاختبارات، كل اختبار/15) */
+function calcStd(st, WL) {
+  function pick(raw, max) {
+    if (raw === "" || raw === undefined || raw === null || raw === "م") return undefined;
+    if (raw === "غ" || raw === "ع") return 0;
+    var n = Number(raw); if (isNaN(n)) return undefined;
+    return Math.min(n, max);
+  }
+  var aS=0,aC=0,hS=0,hC=0,bS=0,bC=0;
+  WL.forEach(function(w) {
+    var a = pick(st["a"+w], 20);  if (a !== undefined) { aS += a; aC++; }
+    var h = pick(st["h"+w], 10);  if (h !== undefined) { hS += h; hC++; }
+    var b = pick(st["bw"+w], 10); if (b !== undefined) { bS += b; bC++; }
+  });
+  var exS = 0, exCnt = 0;
+  ["ex1","ex2"].forEach(function(k) {
+    var raw = st[k];
+    if (raw === "" || raw === undefined || raw === null || raw === "م") return;
+    if (raw === "غ" || raw === "ع") { exCnt++; return; }
+    var n = Number(raw); if (isNaN(n)) return;
+    exS += Math.min(n, 15); exCnt++;
+  });
+  var avgA = aC ? Math.round(aS/aC) : 0;
+  var avgH = hC ? Math.round(hS/hC) : 0;
+  var beh  = bC ? Math.round(bS/bC) : 0;
+  var ex   = Math.min(exS, 30);
+  var any  = aC || hC || bC || exCnt;
+  return { avgA: avgA, avgH: avgH, beh: beh, ex: ex, aC: aC, hC: hC, bC: bC, exCnt: exCnt,
+           total: (st._totalAbsent || !any) ? null : (avgA + avgH + beh + ex),
+           max: 40 + 15 * exCnt };
+}
+
 function renderTable() {
   var wrap = document.getElementById("tableWrap");
   if (!DB) { showMsg("جاري التحميل..."); return; }
@@ -329,19 +361,9 @@ function renderTable() {
         bw: safeNum(st["bw" + w])
       };
     });
-    var allA  = WL.map(function(w){ return weeksData[w].a; });
-    var allH  = WL.map(function(w){ return weeksData[w].h; });
-    var allBW = WL.map(function(w){ return weeksData[w].bw; });
+    var c = calcStd(st, WL);
     var ex1 = safeNum(st.ex1), ex2 = safeNum(st.ex2);
-    var avgA  = avg(allA);
-    var avgH  = avg(allH);
-    var avgBW = avg(allBW);
-    var avgEx = avg([ex1, ex2]);
-    var total = null;
-    if (!st._totalAbsent) {
-      var parts = [avgA, avgH, avgBW, avgEx].filter(function(x){return x!==null;});
-      if (parts.length) total = Math.round(parts.reduce(function(a,b){return a+b;},0));
-    }
+    var avgA = c.aC?c.avgA:null, avgH = c.hC?c.avgH:null, avgBW = c.bC?c.beh:null, avgEx = c.exCnt?c.ex:null, total = c.total;
     return { st: st, weeksData: weeksData, avgA: avgA, avgH: avgH, avgBW: avgBW, ex1: ex1, ex2: ex2, avgEx: avgEx, total: total };
   });
 
@@ -526,14 +548,12 @@ function renderStudentCard(name) {
     weeks.push({ w: w, a: safeNum(found["a"+w]), h: safeNum(found["h"+w]), bw: safeNum(found["bw"+w]) });
   }
   var ex1 = safeNum(found.ex1), ex2 = safeNum(found.ex2);
-  var avgA  = avg(weeks.map(function(x){return x.a;}));
-  var avgH  = avg(weeks.map(function(x){return x.h;}));
-  var avgBW = avg(weeks.map(function(x){return x.bw;}));
-  var avgEx = avg([ex1, ex2]);
-  var parts = [avgA, avgH, avgBW, avgEx].filter(function(x){return x!==null;});
-  var total = parts.length ? Math.round(parts.reduce(function(a,b){return a+b;},0)) : null;
+  var c = calcStd(found, weeks.map(function(x){return x.w;}));
+  var avgA = c.aC?c.avgA:null, avgH = c.hC?c.avgH:null, avgEx = c.exCnt?c.ex:null;
+  var total = c.total, maxTot = c.max;
 
-  var totalColor = total === null ? '' : total >= 80 ? 'grade-high' : total >= 60 ? 'grade-mid' : 'grade-low';
+  var _pct = total === null ? 0 : total / maxTot * 100;
+  var totalColor = total === null ? '' : _pct >= 75 ? 'grade-high' : _pct >= 50 ? 'grade-mid' : 'grade-low';
 
   var h = '<a class="back-btn" href="' + location.href.split('?')[0] + '">← عودة للجدول الكامل</a>';
   h += '<div class="student-card">';
@@ -545,15 +565,15 @@ function renderStudentCard(name) {
 
   /* إحصاءات سريعة */
   h += '<div class="scard-stat">';
-  h += '<div class="scard-stat-item"><div class="scard-stat-val ' + totalColor + '">' + (found._totalAbsent ? '<span class="grade-abs">غائب</span>' : (total !== null ? total : '—')) + '</div><div class="scard-stat-lbl">المجموع الكلي</div></div>';
+  h += '<div class="scard-stat-item"><div class="scard-stat-val ' + totalColor + '">' + (found._totalAbsent ? '<span class="grade-abs">غائب</span>' : (total !== null ? total : '—')) + '</div><div class="scard-stat-lbl">المجموع الكلي' + (total !== null ? ' (من ' + maxTot + ')' : '') + '</div></div>';
   h += '<div class="scard-stat-item"><div class="scard-stat-val">' + (avgA !== null ? avgA.toFixed(1) : '—') + '</div><div class="scard-stat-lbl">متوسط التقييم</div></div>';
   h += '<div class="scard-stat-item"><div class="scard-stat-val">' + (avgH !== null ? avgH.toFixed(1) : '—') + '</div><div class="scard-stat-lbl">متوسط الواجب</div></div>';
-  h += '<div class="scard-stat-item"><div class="scard-stat-val">' + (avgEx !== null ? avgEx.toFixed(1) : '—') + '</div><div class="scard-stat-lbl">متوسط الاختبارات</div></div>';
+  h += '<div class="scard-stat-item"><div class="scard-stat-val">' + (avgEx !== null ? avgEx.toFixed(1) : '—') + '</div><div class="scard-stat-lbl">مجموع الاختبارات</div></div>';
   h += '</div>';
 
   /* جدول الأسابيع */
   if (W > 0) {
-    h += '<table class="scard-weeks"><thead><tr>';
+    h += '<table class="scard-weeks" style="min-width:0;width:100%;table-layout:fixed;"><thead><tr>';
     h += '<th>الأسبوع</th><th>تقييم</th><th>واجب</th><th>سلوك</th>';
     h += '</tr></thead><tbody>';
     weeks.forEach(function(wk) {
