@@ -1055,7 +1055,14 @@ function distributeTotal(target,s){
   var avgA=clamp(Math.round(20*base+Math.floor(Math.random()*5)-2),0,20);
   var avgH=clamp(Math.round(10*base+Math.floor(Math.random()*3)-1),0,10);
   var beh =clamp(Math.round(10*base+Math.floor(Math.random()*3)-1),0,10);
-  var ex  =clamp(target-(avgA+avgH+beh),0,30);
+  // الاختبارات المستهدفة: تُستثنى المقفلة (غ/م)، وإن كان الطالب مرصوداً له اختبار واحد فقط فالدرجة كلها له
+  function _exHas(v){return v!==""&&v!==undefined&&v!==null&&v!=="غ"&&v!=="م"&&!isNaN(Number(v));}
+  var _exF=["ex1","ex2"].filter(function(f){return s[f]!=="غ"&&s[f]!=="م";});
+  if(_exF.length===2){
+    var _held=_exF.filter(function(f){return _exHas(s[f]);});
+    if(_held.length===1)_exF=_held;
+  }
+  var ex  =clamp(target-(avgA+avgH+beh),0,15*_exF.length);
   // تصحيح لضمان المجموع = target بالضبط
   var diff=target-(avgA+avgH+beh+ex);
   avgA=clamp(avgA+diff,0,20);
@@ -1075,8 +1082,12 @@ function distributeTotal(target,s){
   _dawList.forEach(function(w){
     p["bw"+w]=clamp(beh+Math.floor(Math.random()*3)-1,0,10);
   });
-  p.ex1=clamp(Math.floor(ex/2),0,15);
-  p.ex2=clamp(ex-p.ex1,0,15);
+  if(_exF.length===2){
+    p.ex1=clamp(Math.floor(ex/2),0,15);
+    p.ex2=clamp(ex-p.ex1,0,15);
+  }else if(_exF.length===1){
+    p[_exF[0]]=clamp(ex,0,15);
+  }
   p._totalAbsent=false;
   return p;
 }
